@@ -1,0 +1,924 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>仪表盘</title>
+    <link rel="stylesheet" href="./style.css?v=20260620-qzone-tab-lift" />
+  </head>
+  <body>
+    <div id="sakuraLayer" class="sakura-layer" aria-hidden="true"></div>
+    <div id="cursorTrailLayer" class="cursor-trail-layer" aria-hidden="true"></div>
+
+    <main class="shell">
+      <section id="dashboardView" class="page-view dashboard-view">
+      <header class="topbar">
+        <div class="topbar-title">
+          <p class="eyebrow">愿此见闻温柔你的日常</p>
+          <h1>仪表盘</h1>
+        </div>
+        <div class="hanging-controls" aria-label="页面挂件">
+          <button
+            id="sakuraToggle"
+            class="sakura-toggle"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            aria-label="开启或关闭樱花飘落"
+            data-sakura-toggle
+          >
+            <span class="sakura-toggle-pull" aria-hidden="true">
+              <span class="sakura-toggle-flower">🌸</span>
+              <span class="sakura-toggle-state"></span>
+            </span>
+          </button>
+          <button
+            id="settingsPageButton"
+            class="sakura-toggle settings-toggle"
+            type="button"
+            aria-label="打开设置页"
+          >
+            <span class="sakura-toggle-pull" aria-hidden="true">
+              <span class="sakura-toggle-flower settings-toggle-icon">⚙️</span>
+              <span class="sakura-toggle-state"></span>
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="primary-column">
+          <div class="control-grid">
+            <section class="panel action-panel" aria-label="手动分享">
+              <div class="panel-head">
+                <h2>手动分享</h2>
+              </div>
+              <form id="runForm" class="run-form">
+                <div class="run-field run-target-field">
+                  <span class="run-field-label">目标</span>
+                  <div class="run-target-row">
+                    <select id="runTarget">
+                      <option value="broadcast">群聊 / 私聊</option>
+                      <option value="broadcast_groups">仅群聊</option>
+                      <option value="broadcast_users">仅私聊</option>
+                      <option value="qzone">QQ 空间</option>
+                      <option value="briefing">早报</option>
+                    </select>
+                  </div>
+                  <label id="runSpecificTargetField" class="run-specific-target" hidden>
+                    <span id="runSpecificTargetLabel">指定目标</span>
+                    <input id="runSpecificTarget" type="text" placeholder="指定目标，可留空" autocomplete="off" />
+                  </label>
+                </div>
+                <label>
+                  <span>类型</span>
+                  <select id="shareType">
+                    <option value="自动">自动</option>
+                    <option value="问候">问候</option>
+                    <option value="新闻">新闻</option>
+                    <option value="心情">心情</option>
+                    <option value="知识">知识</option>
+                    <option value="推荐">推荐</option>
+                  </select>
+                </label>
+                <label>
+                  <span>新闻源</span>
+                  <select id="newsSource">
+                    <option value="">自动</option>
+                  </select>
+                </label>
+                <button id="runButton" class="primary" type="submit">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>
+                  分享
+                </button>
+              </form>
+              <section class="recent-actions" aria-label="今日分享">
+                <div class="recent-actions-head">
+                  <span>今日分享</span>
+                </div>
+                <div id="recentActionsList" class="recent-actions-list"></div>
+              </section>
+            </section>
+
+            <section class="panel config-panel" aria-label="状态概览">
+              <div class="panel-head">
+                <h2>状态</h2>
+              </div>
+              <section id="targetCarousel" class="target-carousel-card" aria-label="目标状态轮播">
+                <div class="target-carousel-head">
+                  <span class="target-carousel-label">目标状态</span>
+                </div>
+                <div class="target-carousel-name-row">
+                  <span id="targetCarouselKind" class="target-carousel-kind">--</span>
+                  <strong id="targetCarouselName" class="target-carousel-name">--</strong>
+                </div>
+                <div id="targetCarouselStats" class="target-stats target-carousel-stats"></div>
+              </section>
+              <dl class="config-list" id="configList"></dl>
+              <div id="settingsSummary" class="settings-summary" aria-label="设置摘要"></div>
+              <div id="nextShareLine" class="next-share-line" aria-label="下次分享"></div>
+              <div id="shareProgressLine" class="share-progress-line" aria-label="分享进度"></div>
+              <div id="configInsightList" class="config-insights"></div>
+            </section>
+          </div>
+
+        </div>
+
+        <aside class="side-column">
+          <section class="panel calendar-panel" aria-label="下一次任务日历">
+            <div class="panel-head">
+              <h2>日历</h2>
+            </div>
+            <div id="calendarList" class="calendar-list"></div>
+          </section>
+        </aside>
+
+      </section>
+
+      <section class="panel wide media-panel" aria-label="媒体预览">
+        <div class="panel-head media-filterbar" aria-label="动态过滤">
+          <div id="mediaStats" class="media-stats" aria-label="动态统计"></div>
+          <div class="media-filter-controls">
+            <select id="mediaTypeFilter" class="compact-select media-type-filter" aria-label="动态类型">
+              <option value="all">全部类型</option>
+              <option value="auto">自动</option>
+              <option value="greeting">问候</option>
+              <option value="news">新闻</option>
+              <option value="briefing">早报</option>
+              <option value="mood">心情</option>
+              <option value="knowledge">知识</option>
+              <option value="recommendation">推荐</option>
+            </select>
+          </div>
+        </div>
+        <section id="qzonePanel" class="qzone-panel qzone-embedded" aria-label="QQ 空间面板" hidden>
+          <div class="qzone-shell">
+            <aside class="qzone-rail">
+              <div class="qzone-account-card">
+                <span id="qzoneAccountAvatar" class="qzone-account-avatar">🌸</span>
+                <div>
+                  <strong id="qzoneAccountName">QQ 空间</strong>
+                  <span id="qzoneAccountLine" class="qzone-account">登录态检测中</span>
+                </div>
+              </div>
+              <nav class="qzone-tabs" aria-label="空间范围">
+                <button class="qzone-tab active" type="button" data-qzone-scope="friends" aria-pressed="true">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3ZM8 12c2.2 0 4-1.8 4-4S10.2 4 8 4 4 5.8 4 8s1.8 4 4 4Zm0 2c-3 0-6 1.5-6 4v1h12v-1c0-2.5-3-4-6-4Zm8-1c-.5 0-1 .1-1.5.2 1 .7 1.8 1.6 1.8 3V19H22v-1c0-2.8-3-5-6-5Z"/></svg>
+                  <span class="qzone-tab-label">好友动态</span>
+                </button>
+                <button class="qzone-tab" type="button" data-qzone-scope="self" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5Z"/></svg>
+                  <span class="qzone-tab-label">我的说说</span>
+                </button>
+                <button class="qzone-tab" type="button" data-qzone-entry="about" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a4 4 0 0 1 4 4c0 .9-.3 1.8-.8 2.5h1.3A3.5 3.5 0 0 1 20 14v2h-5v4H4v-2c0-2.8 3.6-5 8-5 .7 0 1.4.1 2.1.2-.9-.8-1.6-1.9-1.6-3.2A4 4 0 0 1 12 4Zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm4.5 6.5h-2.1c.4.4.8.9 1 1.5H18v-.1c0-.8-.7-1.4-1.5-1.4ZM12 15c-3.5 0-6 1.5-6 3v.1h7.1V18c0-1.1.3-2.2.9-3-.6-.1-1.2-.1-2-.1Z"/></svg>
+                  <span class="qzone-tab-label">与我相关</span>
+                </button>
+                <button class="qzone-tab" type="button" data-qzone-entry="today" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3V2Zm13 8H4v10h16V10ZM4 6v2h16V6H4Zm8 6 1.3 2.7 3 .4-2.2 2.1.5 3-2.6-1.4-2.6 1.4.5-3-2.2-2.1 3-.4L12 12Z"/></svg>
+                  <span class="qzone-tab-label">那年今日</span>
+                </button>
+                <button class="qzone-tab" type="button" data-qzone-entry="board" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm0 2v9h4v1l1.3-1H19V7H5Zm3 3h8v2H8v-2Zm0 3h6v2H8v-2Z"/></svg>
+                  <span class="qzone-tab-label">留言板</span>
+                </button>
+                <button class="qzone-tab" type="button" data-qzone-scope="target" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 5.3-2.2l4.2 4.2-1.4 1.4-4.2-4.2A7.47 7.47 0 0 1 10.5 18Zm0-2a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11Z"/></svg>
+                  <span class="qzone-tab-label">指定 QQ</span>
+                </button>
+              </nav>
+              <label id="qzoneTargetField" class="qzone-target-field" hidden>
+                <span>QQ 号</span>
+                <input id="qzoneTargetInput" type="text" inputmode="numeric" autocomplete="off" placeholder="输入 QQ 号" />
+              </label>
+            </aside>
+
+            <section class="qzone-timeline">
+              <form id="qzonePublishForm" class="qzone-composer">
+                <textarea id="qzonePublishText" rows="4" placeholder="写一点温柔日常，发到 QQ 空间..."></textarea>
+                <div id="qzoneMediaStrip" class="qzone-media-strip"></div>
+                <div class="qzone-composer-actions">
+                  <label class="qzone-upload-button">
+                    <input id="qzoneMediaInput" type="file" accept="image/*,video/*" multiple />
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Zm2 0v10.6l3.4-3.4a1 1 0 0 1 1.4 0l2.2 2.2 3.2-3.2a1 1 0 0 1 1.4 0L18 11.6V5H6Zm0 14h12v-4.6l-1.1-1.1-3.2 3.2a1 1 0 0 1-1.4 0l-2.2-2.2L6 18.4V19Zm3-9a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z"/></svg>
+                    <span>添加媒体</span>
+                  </label>
+                  <button id="qzonePublishButton" class="primary qzone-publish-button" type="submit">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-4 16-4-6-6-2Z"/></svg>
+                    发布说说
+                  </button>
+                </div>
+              </form>
+              <div id="qzoneFeedToolbar" class="qzone-toolbar">
+                <div>
+                  <strong id="qzoneFeedTitle">好友动态</strong>
+                  <span id="qzoneFeedMeta">准备加载</span>
+                </div>
+                <button id="qzoneRefreshButton" class="icon-button" type="button" aria-label="刷新 QQ 空间说说">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.3L13 11h8V3z"/></svg>
+                </button>
+              </div>
+              <div id="qzoneFeed" class="qzone-feed" aria-live="polite"></div>
+              <button id="qzoneMoreButton" class="text-button qzone-load-more" type="button" hidden>加载更多</button>
+              <section id="qzoneEntryPanel" class="qzone-entry-panel" hidden>
+                <div class="qzone-toolbar qzone-entry-toolbar">
+                  <div>
+                    <strong id="qzoneEntryTitle">空间入口</strong>
+                    <span id="qzoneEntryMeta">准备加载</span>
+                  </div>
+                  <button id="qzoneEntryClose" class="icon-button" type="button" aria-label="关闭空间入口">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z"/></svg>
+                  </button>
+                </div>
+                <div id="qzoneEntryList" class="qzone-entry-list" aria-live="polite"></div>
+                <button id="qzoneEntryMore" class="text-button qzone-load-more" type="button" hidden>加载更多</button>
+              </section>
+            </section>
+
+            <aside class="qzone-aside">
+              <section id="qzoneRelationCard" class="qzone-relation-card" aria-label="QQ 空间在意好友">
+                <div class="qzone-relation-tabs" role="tablist" aria-label="在意好友">
+                  <button class="active" type="button" data-qzone-relation="care" aria-pressed="true">我在意谁</button>
+                  <button type="button" data-qzone-relation="care_by" aria-pressed="false">谁在意我</button>
+                </div>
+                <div id="qzoneRelationGrid" class="qzone-relation-grid" aria-live="polite"></div>
+                <div class="qzone-relation-pager" aria-label="在意好友翻页">
+                  <button id="qzoneRelationPrev" type="button" aria-label="上一页">‹</button>
+                  <button id="qzoneRelationNext" type="button" aria-label="下一页">›</button>
+                  <span id="qzoneRelationMeta">…</span>
+                </div>
+                <div id="qzoneRelationStats" class="qzone-relation-stats"></div>
+              </section>
+            </aside>
+
+          </div>
+        </section>
+        <div id="mediaList" class="media-grid"></div>
+        <div class="media-actions">
+          <button id="mediaButton" class="text-button media-load-more" type="button">加载更多</button>
+        </div>
+      </section>
+      </section>
+
+      <section id="settingsView" class="page-view settings-view" hidden>
+        <header class="topbar settings-topbar">
+          <div class="topbar-title">
+            <p class="eyebrow">愿此见闻温柔你的日常</p>
+            <h1>设置</h1>
+          </div>
+          <div class="hanging-controls settings-hanging-controls" aria-label="设置页挂件">
+            <button
+              id="settingsSakuraToggle"
+              class="sakura-toggle"
+              type="button"
+              role="switch"
+              aria-checked="true"
+              aria-label="开启或关闭樱花飘落"
+              data-sakura-toggle
+            >
+              <span class="sakura-toggle-pull" aria-hidden="true">
+                <span class="sakura-toggle-flower">🌸</span>
+                <span class="sakura-toggle-state"></span>
+              </span>
+            </button>
+            <button
+              id="settingsBackButton"
+              class="sakura-toggle settings-toggle dashboard-toggle"
+              type="button"
+              aria-label="返回仪表盘"
+            >
+              <span class="sakura-toggle-pull" aria-hidden="true">
+                <span class="sakura-toggle-flower settings-toggle-icon">📊</span>
+                <span class="sakura-toggle-state"></span>
+              </span>
+            </button>
+          </div>
+        </header>
+
+        <section class="panel settings-panel" aria-label="设置">
+          <form id="configForm" class="settings-form">
+            <section class="settings-section active" data-settings-section="target" aria-label="目标设置">
+              <h2 class="settings-section-title">目标</h2>
+              <div class="target-schema-guide" aria-label="目标独立配置说明">
+                <article>
+                  <strong id="targetGroupsGuideTitle">群聊独立配置</strong>
+                  <p id="targetGroupsGuideHint"></p>
+                </article>
+                <article>
+                  <strong id="targetUsersGuideTitle">私聊独立配置</strong>
+                  <p id="targetUsersGuideHint"></p>
+                </article>
+              </div>
+              <div class="settings-target-editor" aria-label="目标管理">
+                <div class="settings-target-head">
+                  <h3>目标独立配置</h3>
+                  <div class="target-actions">
+                    <div class="segments" role="tablist" aria-label="目标类型">
+                      <button class="segment active" type="button" data-target-tab="share">分享</button>
+                      <button class="segment" type="button" data-target-tab="briefing">早报</button>
+                    </div>
+                    <select id="targetKindSelect" class="compact-select" aria-label="新增目标类型">
+                      <option value="group">群聊</option>
+                      <option value="user">私聊</option>
+                    </select>
+                    <button id="addTargetButton" class="text-button" type="button">新增</button>
+                  </div>
+                </div>
+                <div id="targetList" class="target-list"></div>
+              </div>
+              <label class="setting-field setting-field-wide setting-field-tall">
+                <span>用户称呼映射</span>
+                <textarea id="cfgContactAliases" rows="5" placeholder="UID/Session ID:昵称"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="basic" aria-label="基础设置">
+              <h2 class="settings-section-title">基础</h2>
+              <label class="setting-switch">
+                <input id="cfgEnabled" type="checkbox" />
+                <span>自动分享</span>
+              </label>
+              <label class="setting-field">
+                <span>触发模式</span>
+                <select id="cfgBasicTriggerMode">
+                  <option value="fixed_time">固定时间</option>
+                  <option value="random_period">随机时段</option>
+                  <option value="llm_smart">智能定时</option>
+                  <option value="cron">高级定时表达式</option>
+                </select>
+              </label>
+              <label class="setting-field" data-schedule="basic-fixed">
+                <span>固定时间</span>
+                <textarea id="cfgBasicFixedTimes" rows="2" placeholder="08:00&#10;20:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="basic-random">
+                <span>随机时段</span>
+                <textarea id="cfgBasicRandomPeriods" rows="3" placeholder="08:00-10:00&#10;19:00-21:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="basic-cron">
+                <span>高级定时表达式</span>
+                <input id="cfgBasicShareCron" type="text" placeholder="0 8,20 * * *" />
+              </label>
+              <label class="setting-field" data-schedule="basic-smart">
+                <span>智能次数</span>
+                <input id="cfgBasicSmartMaxCount" type="number" min="1" max="6" step="1" />
+              </label>
+              <label class="setting-field" data-schedule="basic-smart">
+                <span>勿扰时间</span>
+                <textarea id="cfgBasicSmartQuietHours" rows="2" placeholder="23:30-07:30"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="basic-smart">
+                <span>智能偏好</span>
+                <textarea id="cfgBasicSmartPrompt" rows="3" placeholder="比如：工作日早上轻量问候，晚上适合知识或推荐"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="basic-delay">
+                <span>随机延迟</span>
+                <input id="cfgBasicCronDelay" type="number" min="0" max="60" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>默认类型</span>
+                <select id="cfgBasicShareType">
+                  <option value="自动">自动</option>
+                  <option value="问候">问候</option>
+                  <option value="新闻">新闻</option>
+                  <option value="心情">心情</option>
+                  <option value="知识">知识</option>
+                  <option value="推荐">推荐</option>
+                </select>
+              </label>
+              <label class="setting-field">
+                <span>去重天数</span>
+                <input id="cfgBasicRetentionDays" type="number" min="7" max="365" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>动态天数</span>
+                <input id="cfgBasicDynamicDays" type="number" min="0" max="365" step="1" />
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="sequence" aria-label="全局序列">
+              <h2 class="settings-section-title">序列</h2>
+              <label class="setting-field">
+                <span>凌晨</span>
+                <textarea id="cfgDawnSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>早晨</span>
+                <textarea id="cfgMorningSequence" rows="3" placeholder="问候"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>上午</span>
+                <textarea id="cfgForenoonSequence" rows="3" placeholder="新闻&#10;知识"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>中午</span>
+                <textarea id="cfgNoonSequence" rows="3" placeholder="新闻&#10;心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>下午</span>
+                <textarea id="cfgAfternoonSequence" rows="3" placeholder="新闻&#10;知识"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>傍晚</span>
+                <textarea id="cfgEveningSequence" rows="3" placeholder="推荐&#10;新闻"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>夜晚</span>
+                <textarea id="cfgNightSequence" rows="3" placeholder="推荐&#10;心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>深夜</span>
+                <textarea id="cfgLateNightSequence" rows="3" placeholder="心情&#10;问候"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="context" aria-label="上下文设置">
+              <h2 class="settings-section-title">上下文</h2>
+              <label class="setting-field">
+                <span>参考历史数</span>
+                <input id="cfgReferenceHistoryCount" type="number" min="0" max="10" step="1" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgLifeContext" type="checkbox" />
+                <span>生活上下文</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgLifeContextGroup" type="checkbox" />
+                <span>群聊人设</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgGroupSchedule" type="checkbox" />
+                <span>群聊日程</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgChatHistory" type="checkbox" />
+                <span>聊天历史</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgDeepHistory" type="checkbox" />
+                <span>深度回溯</span>
+              </label>
+              <label class="setting-field">
+                <span>回溯小时</span>
+                <input id="cfgDeepHistoryHours" type="number" min="1" max="168" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>群聊回溯数</span>
+                <input id="cfgDeepHistoryMaxCount" type="number" min="20" max="200" step="10" />
+              </label>
+              <label class="setting-field">
+                <span>私聊回溯数</span>
+                <input id="cfgPrivateHistoryCount" type="number" min="5" max="100" step="5" />
+              </label>
+              <label class="setting-field">
+                <span>群聊热度范围</span>
+                <input id="cfgGroupIntensityCount" type="number" min="10" max="100" step="5" />
+              </label>
+              <label class="setting-field">
+                <span>群聊策略</span>
+                <select id="cfgGroupShareStrategy">
+                  <option value="cautious">谨慎模式</option>
+                  <option value="active">主动模式</option>
+                  <option value="minimal">最小模式</option>
+                </select>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgRecordMemory" type="checkbox" />
+                <span>写入记忆</span>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="briefing" aria-label="早报设置">
+              <h2 class="settings-section-title">早报</h2>
+              <label class="setting-switch">
+                <input id="cfgBriefing60s" type="checkbox" />
+                <span>60s 早报</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgBriefingAi" type="checkbox" />
+                <span>AI 资讯</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgBriefingQzoneSync" type="checkbox" />
+                <span>早报空间</span>
+              </label>
+              <label class="setting-field">
+                <span>早报模式</span>
+                <select id="cfgBriefingScheduleMode">
+                  <option value="fixed_time">固定时间</option>
+                  <option value="random_period">随机时段</option>
+                  <option value="llm_smart">智能定时</option>
+                  <option value="cron">高级定时表达式</option>
+                </select>
+              </label>
+              <label class="setting-field" data-schedule="briefing-fixed">
+                <span>早报固定时间</span>
+                <textarea id="cfgBriefingFixedTimes" rows="2" placeholder="08:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="briefing-random">
+                <span>早报随机时段</span>
+                <textarea id="cfgBriefingRandomPeriods" rows="2" placeholder="08:00-09:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="briefing-cron">
+                <span>早报高级定时表达式</span>
+                <input id="cfgBriefingCron" type="text" placeholder="0 8 * * *" />
+              </label>
+              <label class="setting-field" data-schedule="briefing-smart">
+                <span>智能次数</span>
+                <input id="cfgBriefingSmartMaxCount" type="number" min="1" max="6" step="1" />
+              </label>
+              <label class="setting-field" data-schedule="briefing-smart">
+                <span>勿扰时间</span>
+                <textarea id="cfgBriefingSmartQuietHours" rows="2" placeholder="23:30-07:30"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="briefing-smart">
+                <span>智能偏好</span>
+                <textarea id="cfgBriefingSmartPrompt" rows="3" placeholder="比如：早报尽量安排在上班前，不要太早"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="briefing-delay">
+                <span>随机延迟</span>
+                <input id="cfgBriefingDelay" type="number" min="0" max="60" step="1" />
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="qzone" aria-label="空间设置">
+              <h2 class="settings-section-title">空间</h2>
+              <label class="setting-switch">
+                <input id="cfgQzoneEnabled" type="checkbox" />
+                <span>定时说说</span>
+              </label>
+              <label class="setting-field">
+                <span>请求超时秒数</span>
+                <input id="cfgQzoneTimeout" type="number" min="10" max="300" step="10" placeholder="120" />
+              </label>
+              <label class="setting-field">
+                <span>触发模式</span>
+                <select id="cfgQzoneTriggerMode">
+                  <option value="fixed_time">固定时间</option>
+                  <option value="random_period">随机时段</option>
+                  <option value="llm_smart">智能定时</option>
+                  <option value="cron">高级定时表达式</option>
+                </select>
+              </label>
+              <label class="setting-field" data-schedule="qzone-fixed">
+                <span>空间固定时间</span>
+                <textarea id="cfgQzoneFixedTimes" rows="2" placeholder="20:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="qzone-random">
+                <span>空间随机时段</span>
+                <textarea id="cfgQzoneRandomPeriods" rows="3" placeholder="19:00-21:00"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="qzone-cron">
+                <span>空间高级定时表达式</span>
+                <input id="cfgQzoneCron" type="text" placeholder="0 20 * * *" />
+              </label>
+              <label class="setting-field" data-schedule="qzone-smart">
+                <span>智能次数</span>
+                <input id="cfgQzoneSmartMaxCount" type="number" min="1" max="6" step="1" />
+              </label>
+              <label class="setting-field" data-schedule="qzone-smart">
+                <span>勿扰时间</span>
+                <textarea id="cfgQzoneSmartQuietHours" rows="2" placeholder="23:30-07:30"></textarea>
+              </label>
+              <label class="setting-field" data-schedule="qzone-smart">
+                <span>智能偏好</span>
+                <textarea id="cfgQzoneSmartPrompt" rows="3" placeholder="比如：晚上更适合发空间日常，新闻类不要太晚"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>说说类型</span>
+                <select id="cfgQzoneShareType">
+                  <option value="自动">自动</option>
+                  <option value="问候">问候</option>
+                  <option value="新闻">新闻</option>
+                  <option value="心情">心情</option>
+                  <option value="知识">知识</option>
+                  <option value="推荐">推荐</option>
+                </select>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneImage" type="checkbox" />
+                <span>说说配图</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneHotImage" type="checkbox" />
+                <span>热搜长图</span>
+              </label>
+              <label class="setting-field">
+                <span>配图类型</span>
+                <textarea id="cfgQzoneImageTypes" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneVideo" type="checkbox" />
+                <span>说说视频</span>
+              </label>
+              <label class="setting-field">
+                <span>视频类型</span>
+                <textarea id="cfgQzoneVideoTypes" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneAutoInteraction" type="checkbox" />
+                <span>自动互动</span>
+              </label>
+              <label class="setting-field">
+                <span>互动间隔分钟</span>
+                <input id="cfgQzoneAutoInteractionInterval" type="number" min="0" max="1440" step="5" placeholder="45" />
+              </label>
+              <label class="setting-field">
+                <span>互动高级定时表达式</span>
+                <input id="cfgQzoneAutoInteractionCron" type="text" placeholder="0 */2 * * *" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneAutoLike" type="checkbox" />
+                <span>点赞好友动态</span>
+              </label>
+              <label class="setting-field">
+                <span>点赞数量</span>
+                <input id="cfgQzoneAutoLikeLimit" type="number" min="1" max="10" step="1" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneAutoComment" type="checkbox" />
+                <span>评论好友动态</span>
+              </label>
+              <label class="setting-field">
+                <span>评论数量</span>
+                <input id="cfgQzoneAutoCommentLimit" type="number" min="1" max="10" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>评论风格</span>
+                <textarea id="cfgQzoneAutoCommentPrompt" rows="3" placeholder="比如：轻松一点，像熟人随口一句"></textarea>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgQzoneAutoReply" type="checkbox" />
+                <span>回复评论</span>
+              </label>
+              <label class="setting-field">
+                <span>回评数量</span>
+                <input id="cfgQzoneAutoReplyLimit" type="number" min="1" max="10" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>回评风格</span>
+                <textarea id="cfgQzoneAutoReplyPrompt" rows="3" placeholder="比如：亲近一点，像本人随手回一句"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="qzoneSequence" aria-label="空间序列">
+              <h2 class="settings-section-title">空间序列</h2>
+              <label class="setting-field">
+                <span>凌晨</span>
+                <textarea id="cfgQzoneDawnSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>早晨</span>
+                <textarea id="cfgQzoneMorningSequence" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>上午</span>
+                <textarea id="cfgQzoneForenoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>中午</span>
+                <textarea id="cfgQzoneNoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>下午</span>
+                <textarea id="cfgQzoneAfternoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>傍晚</span>
+                <textarea id="cfgQzoneEveningSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>夜晚</span>
+                <textarea id="cfgQzoneNightSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>深夜</span>
+                <textarea id="cfgQzoneLateNightSequence" rows="3" placeholder="心情&#10;问候"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="content" aria-label="内容设置">
+              <h2 class="settings-section-title">内容</h2>
+              <label class="setting-switch">
+                <input id="cfgKnowledgePrefix" type="checkbox" />
+                <span>知识前缀</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgRecPrefix" type="checkbox" />
+                <span>推荐前缀</span>
+              </label>
+              <label class="setting-field setting-field-wide setting-field-tall">
+                <span>知识分类</span>
+                <textarea id="cfgKnowledgeCats" rows="8"></textarea>
+              </label>
+              <label class="setting-field setting-field-wide setting-field-tall">
+                <span>推荐分类</span>
+                <textarea id="cfgRecCats" rows="8"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="media" aria-label="媒体设置">
+              <h2 class="settings-section-title">媒体</h2>
+              <label class="setting-switch">
+                <input id="cfgAiImage" type="checkbox" />
+                <span>生成配图</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgHotImage" type="checkbox" />
+                <span>新闻长图</span>
+              </label>
+              <label class="setting-field">
+                <span>新闻图保留</span>
+                <input id="cfgNewsImageCleanupMax" type="number" min="0" max="1000" step="10" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgPriorityText" type="checkbox" />
+                <span>文案主导</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgAiVideo" type="checkbox" />
+                <span>生成视频</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgSeparateMedia" type="checkbox" />
+                <span>图文分开</span>
+              </label>
+              <label class="setting-field">
+                <span>发送延迟</span>
+                <input id="cfgSeparateDelay" type="text" placeholder="1.0-2.0" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgRecordImageDesc" type="checkbox" />
+                <span>记录描述</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgAlwaysSelf" type="checkbox" />
+                <span>始终含人物</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgNeverSelf" type="checkbox" />
+                <span>从不含人物</span>
+              </label>
+              <label class="setting-field">
+                <span>配图类型</span>
+                <textarea id="cfgImageTypes" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-field">
+                <span>视频类型</span>
+                <textarea id="cfgVideoTypes" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-field setting-field-wide setting-field-tall">
+                <span>外貌提示词</span>
+                <textarea id="cfgAppearancePrompt" rows="5"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="tts" aria-label="语音设置">
+              <h2 class="settings-section-title">语音</h2>
+              <label class="setting-switch">
+                <input id="cfgTtsEnabled" type="checkbox" />
+                <span>语音转换</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgAudioOnly" type="checkbox" />
+                <span>仅发语音</span>
+              </label>
+              <label class="setting-field setting-field-wide">
+                <span>语音类型</span>
+                <textarea id="cfgTtsTypes" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="weixin" aria-label="微信设置">
+              <h2 class="settings-section-title">微信</h2>
+              <label class="setting-switch">
+                <input id="cfgWeixinCompress" type="checkbox" />
+                <span>压缩图片</span>
+              </label>
+              <label class="setting-field">
+                <span>最大分辨率</span>
+                <input id="cfgWeixinMaxSide" type="number" min="1600" max="8192" step="128" />
+              </label>
+              <label class="setting-field">
+                <span>目标大小 KB</span>
+                <input id="cfgWeixinMaxSize" type="number" min="512" max="40960" step="512" />
+              </label>
+              <label class="setting-field">
+                <span>发送超时</span>
+                <input id="cfgWeixinTimeout" type="number" min="1" max="180" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>临时图保留</span>
+                <input id="cfgWeixinCleanupMax" type="number" min="0" max="100" step="1" />
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="news" aria-label="新闻设置">
+              <h2 class="settings-section-title">新闻</h2>
+              <label class="setting-switch">
+                <input id="cfgNewsApiEnabled" type="checkbox" />
+                <span>新闻 API</span>
+              </label>
+              <label class="setting-field">
+                <span>柠柚接口密钥</span>
+                <input id="cfgNewsApiKey" type="text" autocomplete="off" />
+              </label>
+              <label class="setting-field">
+                <span>新闻模式</span>
+                <select id="cfgNewsMode">
+                  <option value="fixed">固定新闻源</option>
+                  <option value="random">全量随机</option>
+                  <option value="config">配置列表随机</option>
+                  <option value="time_based">按时段智能选择</option>
+                </select>
+              </label>
+              <label class="setting-field">
+                <span>固定新闻源</span>
+                <select id="cfgNewsFixedSource"></select>
+              </label>
+              <label class="setting-field">
+                <span>获取条数</span>
+                <input id="cfgNewsItemsCount" type="number" min="1" max="20" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>分享条数</span>
+                <input id="cfgNewsShareCount" type="text" placeholder="1-2" />
+              </label>
+              <label class="setting-field">
+                <span>API 超时</span>
+                <input id="cfgNewsApiTimeout" type="number" min="1" max="60" step="1" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgNewsWebSearch" type="checkbox" />
+                <span>联网补充</span>
+              </label>
+              <label class="setting-field setting-field-wide">
+                <span>随机新闻源</span>
+                <textarea id="cfgNewsRandomSources" rows="5" placeholder="zhihu&#10;weibo&#10;bili"></textarea>
+              </label>
+            </section>
+
+            <section class="settings-section" data-settings-section="llm" aria-label="模型设置">
+              <h2 class="settings-section-title">模型</h2>
+              <label class="setting-field">
+                <span>模型服务商</span>
+                <input id="cfgLlmProviderId" type="text" autocomplete="off" placeholder="跟随默认" data-empty-label="跟随默认" />
+                <datalist id="cfgLlmProviderOptions"></datalist>
+              </label>
+              <label class="setting-field">
+                <span>生成超时</span>
+                <input id="cfgLlmTimeout" type="number" min="1" max="180" step="1" />
+              </label>
+              <label class="setting-switch">
+                <input id="cfgUsePersona" type="checkbox" />
+                <span>融合人设</span>
+              </label>
+              <label class="setting-field">
+                <span>人设 ID</span>
+                <input id="cfgPersonaId" type="text" autocomplete="off" placeholder="不指定人设" data-empty-label="不指定人设" />
+                <datalist id="cfgPersonaOptions"></datalist>
+              </label>
+            </section>
+          </form>
+        </section>
+      </section>
+    </main>
+
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+    <div id="mediaLightbox" class="media-lightbox" tabindex="-1" hidden>
+      <figure class="media-lightbox-content">
+        <img id="mediaLightboxImage" alt="媒体大图" />
+        <video id="mediaLightboxVideo" playsinline webkit-playsinline></video>
+        <button id="mediaLightboxCloseSurface" class="media-lightbox-close-surface" type="button" aria-label="关闭视频"></button>
+        <div id="mediaLightboxControls" class="media-lightbox-controls" hidden>
+          <span id="mediaLightboxCurrentTime" class="media-lightbox-time">0:00</span>
+          <button id="mediaLightboxPlayButton" class="media-lightbox-play-button" type="button" aria-label="播放视频" aria-pressed="false">
+            <svg class="media-lightbox-play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 7 5-7 5z"/></svg>
+            <svg class="media-lightbox-pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h3v12H8zM13 6h3v12h-3z"/></svg>
+          </button>
+          <label class="media-lightbox-progress">
+            <span class="sr-only">视频进度</span>
+            <input id="mediaLightboxProgress" type="range" min="0" max="1000" step="1" value="0" aria-label="视频进度">
+          </label>
+          <span id="mediaLightboxDuration" class="media-lightbox-time">0:00</span>
+          <button id="mediaLightboxMuteButton" class="media-lightbox-mute-button" type="button" aria-label="静音" aria-pressed="false">
+            <svg class="media-lightbox-volume-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zM16.4 8.6a5 5 0 0 1 0 6.8l1.5 1.4a7 7 0 0 0 0-9.6z"/></svg>
+            <svg class="media-lightbox-muted-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zM17.2 12l2.3-2.3-1.2-1.2-2.3 2.3-2.3-2.3-1.2 1.2 2.3 2.3-2.3 2.3 1.2 1.2 2.3-2.3 2.3 2.3 1.2-1.2z"/></svg>
+          </button>
+        </div>
+      </figure>
+    </div>
+
+    <div id="textLightbox" class="text-lightbox" hidden>
+      <section class="text-lightbox-panel" aria-label="全文">
+        <div class="text-lightbox-head">
+          <h2 id="textLightboxTitle">全文</h2>
+        </div>
+        <div id="textLightboxBody" class="text-lightbox-body"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./app.js?v=20260619-qzone-relation"></script>
+  </body>
+</html>

@@ -1,0 +1,444 @@
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #181019;
+  --page-bg:
+    radial-gradient(circle at 14% 8%, rgba(244, 116, 174, 0.16), transparent 30%),
+    radial-gradient(circle at 88% 10%, rgba(111, 185, 216, 0.14), transparent 32%),
+    linear-gradient(135deg, rgba(40, 24, 39, 0.98), rgba(24, 16, 25, 0.98) 54%, rgba(35, 25, 31, 0.98)),
+    var(--bg);
+  --surface: rgba(43, 28, 42, 0.9);
+  --surface-soft: rgba(86, 48, 75, 0.72);
+  --surface-warm: rgba(80, 52, 42, 0.72);
+  --text: #f8eaf2;
+  --muted: #c8aebd;
+  --line: rgba(239, 177, 205, 0.24);
+  --accent: #ff8fbe;
+  --accent-strong: #ffacd0;
+  --accent-soft: rgba(255, 143, 190, 0.2);
+  --blue: #9cc8ff;
+  --blue-soft: rgba(89, 139, 204, 0.2);
+  --mint: #8de0c9;
+  --mint-soft: rgba(91, 182, 154, 0.18);
+  --amber: #ffc28a;
+  --amber-soft: rgba(214, 137, 67, 0.18);
+  --danger: #ff9cad;
+  --danger-soft: rgba(221, 98, 118, 0.2);
+  --shadow: 0 18px 42px rgba(7, 4, 9, 0.36);
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] body::before {
+  background: var(--page-bg);
+}
+
+html[data-theme="dark"] body {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .media-filterbar {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, rgba(58, 37, 56, 0.9), rgba(39, 25, 39, 0.88)),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .topbar {
+  background:
+    linear-gradient(120deg, rgba(58, 37, 56, 0.94), rgba(47, 30, 47, 0.9) 58%, rgba(35, 43, 61, 0.82)),
+    var(--surface);
+}
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] .config-row dd,
+html[data-theme="dark"] .config-row.is-runtime dd,
+html[data-theme="dark"] .recent-action-body strong,
+html[data-theme="dark"] .calendar-day strong,
+html[data-theme="dark"] .target-carousel-name,
+html[data-theme="dark"] .share-progress-title,
+html[data-theme="dark"] .next-share-time,
+html[data-theme="dark"] .next-share-title,
+html[data-theme="dark"] .next-share-empty,
+html[data-theme="dark"] .settings-section-title,
+html[data-theme="dark"] .settings-target-head h3,
+html[data-theme="dark"] .target-schema-guide strong,
+html[data-theme="dark"] .media-stat-chip strong,
+html[data-theme="dark"] .media-meta strong {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .eyebrow,
+html[data-theme="dark"] .recent-actions-head,
+html[data-theme="dark"] .text-button.strong,
+html[data-theme="dark"] .settings-section .setting-field:focus-within > span,
+html[data-theme="dark"] .settings-section .setting-switch:focus-within > span {
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] select,
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .sweet-select-trigger,
+html[data-theme="dark"] .settings-section .setting-field input,
+html[data-theme="dark"] .settings-section .setting-field select,
+html[data-theme="dark"] .settings-section .setting-field textarea,
+html[data-theme="dark"] .settings-section .setting-field .sweet-select-trigger,
+html[data-theme="dark"] .run-specific-target input {
+  border-color: rgba(239, 177, 205, 0.28);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 194, 220, 0.12) 0 13%, transparent 15%),
+    linear-gradient(180deg, rgba(54, 34, 53, 0.96), rgba(43, 28, 42, 0.92));
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 224, 238, 0.08),
+    0 8px 18px rgba(7, 4, 9, 0.16);
+}
+
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] .sweet-select-trigger:focus-visible {
+  outline-color: rgba(255, 143, 190, 0.32);
+  border-color: rgba(255, 143, 190, 0.72);
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder,
+html[data-theme="dark"] .sweet-select-option:disabled,
+html[data-theme="dark"] .sweet-combo-empty {
+  color: #a98d9d;
+}
+
+html[data-theme="dark"] .segments {
+  border-color: var(--line);
+  background: rgba(49, 30, 48, 0.82);
+}
+
+html[data-theme="dark"] .segment,
+html[data-theme="dark"] .icon-button,
+html[data-theme="dark"] .text-button {
+  border-color: var(--line);
+  background: rgba(43, 28, 42, 0.82);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .segment:hover,
+html[data-theme="dark"] .icon-button:hover,
+html[data-theme="dark"] .text-button:hover {
+  border-color: rgba(255, 143, 190, 0.52);
+  background: rgba(70, 42, 65, 0.88);
+}
+
+html[data-theme="dark"] .segment.active {
+  background:
+    linear-gradient(135deg, rgba(92, 51, 81, 0.96), rgba(68, 41, 68, 0.92));
+  color: var(--accent-strong);
+  box-shadow: 0 8px 18px rgba(7, 4, 9, 0.24);
+}
+
+html[data-theme="dark"] .sweet-select-menu,
+html[data-theme="dark"] .sweet-combo-menu {
+  border-color: rgba(239, 177, 205, 0.34);
+  background:
+    linear-gradient(135deg, rgba(58, 37, 56, 0.98), rgba(45, 29, 45, 0.98)),
+    var(--surface);
+  box-shadow:
+    0 18px 38px rgba(7, 4, 9, 0.44),
+    inset 0 1px 0 rgba(255, 224, 238, 0.08);
+}
+
+html[data-theme="dark"] .sweet-select-option,
+html[data-theme="dark"] .sweet-combo-option {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .sweet-combo-option span {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .sweet-select-option:hover,
+html[data-theme="dark"] .sweet-select-option.is-active,
+html[data-theme="dark"] .sweet-combo-option:hover,
+html[data-theme="dark"] .sweet-combo-option.is-active {
+  background: rgba(255, 143, 190, 0.16);
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .sweet-select-option.is-selected,
+html[data-theme="dark"] .sweet-combo-option.is-selected,
+html[data-theme="dark"] .text-button.strong {
+  background: linear-gradient(135deg, rgba(255, 143, 190, 0.22), rgba(255, 172, 208, 0.1));
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .sweet-select-arrow,
+html[data-theme="dark"] .sweet-combo::after {
+  border-color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .recent-action,
+html[data-theme="dark"] .target-item,
+html[data-theme="dark"] .calendar-day,
+html[data-theme="dark"] .media-item,
+html[data-theme="dark"] .empty,
+html[data-theme="dark"] .next-share-line,
+html[data-theme="dark"] .share-progress,
+html[data-theme="dark"] .target-carousel-card,
+html[data-theme="dark"] .settings-summary-item,
+html[data-theme="dark"] .config-insight,
+html[data-theme="dark"] .target-stats span,
+html[data-theme="dark"] .share-progress-step {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, rgba(55, 35, 54, 0.88), rgba(42, 27, 42, 0.86)),
+    var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 224, 238, 0.06);
+}
+
+html[data-theme="dark"] .recent-action.is-running,
+html[data-theme="dark"] .share-progress-step.is-running {
+  border-color: rgba(255, 194, 138, 0.42);
+  background: linear-gradient(135deg, rgba(100, 66, 42, 0.7), rgba(62, 39, 39, 0.82));
+}
+
+html[data-theme="dark"] .recent-action.is-success,
+html[data-theme="dark"] .share-progress-step.is-done {
+  border-color: rgba(141, 224, 201, 0.36);
+}
+
+html[data-theme="dark"] .recent-action.is-error,
+html[data-theme="dark"] .share-progress-step.is-error {
+  border-color: rgba(255, 156, 173, 0.42);
+}
+
+html[data-theme="dark"] .recent-action-status,
+html[data-theme="dark"] .badge {
+  background: rgba(255, 143, 190, 0.14);
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .badge.ok,
+html[data-theme="dark"] .recent-action.is-success .recent-action-status,
+html[data-theme="dark"] .share-progress.is-idle .share-progress-stage,
+html[data-theme="dark"] .config-insight.is-idle strong,
+html[data-theme="dark"] .share-progress-step.is-done {
+  color: var(--mint);
+}
+
+html[data-theme="dark"] .badge.warn,
+html[data-theme="dark"] .recent-action.is-running .recent-action-status,
+html[data-theme="dark"] .config-insight.is-busy strong,
+html[data-theme="dark"] .share-progress-step.is-running {
+  color: var(--amber);
+}
+
+html[data-theme="dark"] .badge.error,
+html[data-theme="dark"] .recent-action.is-error .recent-action-status,
+html[data-theme="dark"] .share-progress.is-error .share-progress-stage,
+html[data-theme="dark"] .share-progress-step.is-error {
+  color: var(--danger);
+}
+
+html[data-theme="dark"] .media-stat-chip {
+  --stat-ink: var(--text);
+  background:
+    radial-gradient(circle at 18% 16%, rgba(255, 210, 231, 0.18) 0 12%, transparent 13%),
+    linear-gradient(135deg, rgba(50, 31, 49, 0.94), rgba(70, 42, 65, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 224, 238, 0.08),
+    0 8px 18px rgba(7, 4, 9, 0.2);
+}
+
+html[data-theme="dark"] .media-stat-chip span {
+  color: var(--stat-accent);
+}
+
+html[data-theme="dark"] .settings-section {
+  border-color: rgba(239, 177, 205, 0.22);
+  background:
+    linear-gradient(180deg, rgba(54, 34, 53, 0.86), rgba(40, 26, 41, 0.82)),
+    rgba(43, 28, 42, 0.88);
+  box-shadow:
+    0 12px 24px rgba(7, 4, 9, 0.24),
+    inset 0 1px 0 rgba(255, 224, 238, 0.06);
+}
+
+html[data-theme="dark"] .settings-section::before {
+  background: linear-gradient(90deg, var(--section-accent), rgba(255, 255, 255, 0));
+  opacity: 0.78;
+}
+
+html[data-theme="dark"] .settings-section.active {
+  border-color: var(--section-ring);
+  box-shadow:
+    0 14px 28px rgba(7, 4, 9, 0.28),
+    0 0 0 1px rgba(255, 224, 238, 0.08) inset;
+}
+
+html[data-theme="dark"] .settings-section-title {
+  border-bottom-color: rgba(239, 177, 205, 0.22);
+}
+
+html[data-theme="dark"] .settings-section-note,
+html[data-theme="dark"] .setting-field > span,
+html[data-theme="dark"] .setting-switch > span,
+html[data-theme="dark"] .setting-hint,
+html[data-theme="dark"] .target-schema-guide p,
+html[data-theme="dark"] .media-meta .item-meta,
+html[data-theme="dark"] .content-preview-button {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .settings-target-editor,
+html[data-theme="dark"] .target-schema-guide article,
+html[data-theme="dark"] .settings-target-editor .target-item,
+html[data-theme="dark"] .settings-target-editor .empty,
+html[data-theme="dark"] .setting-slider-control {
+  border-color: rgba(239, 177, 205, 0.22);
+  background:
+    radial-gradient(circle at 18% 6%, rgba(255, 194, 220, 0.12) 0 16%, transparent 18%),
+    linear-gradient(180deg, rgba(52, 33, 51, 0.84), rgba(42, 27, 42, 0.74));
+  box-shadow: inset 0 1px 0 rgba(255, 224, 238, 0.06);
+}
+
+html[data-theme="dark"] .settings-target-head {
+  border-bottom-color: rgba(239, 177, 205, 0.2);
+  background: linear-gradient(135deg, rgba(255, 143, 190, 0.08), rgba(156, 200, 255, 0.06));
+}
+
+html[data-theme="dark"] .setting-switch input {
+  border-color: rgba(239, 177, 205, 0.34);
+  background:
+    radial-gradient(circle at 28% 50%, rgba(255, 255, 255, 0.92) 0 24%, transparent 26%),
+    linear-gradient(135deg, rgba(74, 47, 71, 0.92), rgba(51, 32, 50, 0.92));
+}
+
+html[data-theme="dark"] .setting-switch input::after {
+  background: #3c263a;
+  box-shadow: 0 3px 8px rgba(7, 4, 9, 0.34);
+}
+
+html[data-theme="dark"] .setting-switch input:checked {
+  background:
+    radial-gradient(circle at 72% 50%, rgba(255, 255, 255, 0.9) 0 24%, transparent 26%),
+    linear-gradient(135deg, rgba(255, 143, 190, 0.8), rgba(196, 92, 153, 0.92));
+}
+
+html[data-theme="dark"] .settings-section .setting-slider-control .setting-number-input {
+  border-color: rgba(239, 177, 205, 0.28);
+  background: rgba(48, 30, 47, 0.94);
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .setting-slider-control input[type="range"]::-webkit-slider-runnable-track,
+html[data-theme="dark"] .setting-slider-control input[type="range"]::-moz-range-track {
+  background: linear-gradient(90deg, rgba(255, 143, 190, 0.78), rgba(156, 200, 255, 0.64));
+  box-shadow: inset 0 1px 2px rgba(7, 4, 9, 0.28);
+}
+
+html[data-theme="dark"] .setting-slider-control input[type="range"]::-webkit-slider-thumb,
+html[data-theme="dark"] .setting-slider-control input[type="range"]::-moz-range-thumb {
+  border-color: rgba(255, 226, 239, 0.86);
+  background:
+    var(--setting-slider-thumb-flower) center / contain no-repeat,
+    linear-gradient(135deg, #40283e, #643352);
+}
+
+html[data-theme="dark"] .calendar-continued,
+html[data-theme="dark"] .target-kind,
+html[data-theme="dark"] .target-carousel-kind {
+  border-color: rgba(255, 143, 190, 0.36);
+  background: linear-gradient(135deg, rgba(255, 143, 190, 0.18), rgba(255, 172, 208, 0.1));
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .media-load-more {
+  border-color: rgba(255, 143, 190, 0.28);
+  background:
+    linear-gradient(135deg, rgba(57, 36, 55, 0.92), rgba(55, 34, 52, 0.9), rgba(33, 43, 61, 0.78));
+  color: var(--accent-strong);
+  box-shadow: 0 10px 22px rgba(7, 4, 9, 0.22);
+}
+
+html[data-theme="dark"] .media-load-more:hover {
+  border-color: rgba(255, 143, 190, 0.46);
+  background:
+    linear-gradient(135deg, rgba(68, 41, 65, 0.96), rgba(65, 39, 61, 0.94), rgba(39, 51, 72, 0.84));
+}
+
+html[data-theme="dark"] .media-preview {
+  border-color: rgba(239, 177, 205, 0.22);
+  background: linear-gradient(135deg, rgba(86, 48, 75, 0.7), rgba(89, 139, 204, 0.18));
+}
+
+html[data-theme="dark"] .media-item.has-media-underlay {
+  background:
+    linear-gradient(180deg, rgba(47, 30, 46, 0.96), rgba(37, 25, 38, 0.94)),
+    var(--surface);
+}
+
+html[data-theme="dark"] .media-item.has-media-underlay .media-meta {
+  background:
+    linear-gradient(180deg, rgba(37, 24, 36, 0.2), rgba(37, 24, 36, 0.44) 58%, rgba(37, 24, 36, 0.62)),
+    rgba(37, 24, 36, 0.24);
+}
+
+html[data-theme="dark"] .media-item.has-media-underlay .media-meta strong,
+html[data-theme="dark"] .media-item.has-media-underlay .media-meta .item-meta,
+html[data-theme="dark"] .media-item.has-media-underlay .content-preview-button {
+  color: #fff7fb;
+  text-shadow:
+    0 1px 2px rgba(18, 10, 18, 0.86),
+    0 0 12px rgba(18, 10, 18, 0.7);
+}
+
+html[data-theme="dark"] .media-lightbox,
+html[data-theme="dark"] .text-lightbox {
+  background: rgba(16, 10, 17, 0.78);
+}
+
+html[data-theme="dark"] .text-lightbox-panel,
+html[data-theme="dark"] .text-lightbox-head {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, rgba(55, 35, 54, 0.98), rgba(42, 27, 42, 0.96)),
+    var(--surface);
+  box-shadow: 0 18px 50px rgba(7, 4, 9, 0.48);
+}
+
+html[data-theme="dark"] .text-lightbox-head {
+  background: linear-gradient(135deg, rgba(58, 37, 56, 0.98), rgba(70, 42, 65, 0.92));
+}
+
+html[data-theme="dark"] .text-lightbox-panel::before {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 143, 190, 0.22) 0 14%, transparent 26%),
+    radial-gradient(circle at 88% 18%, rgba(156, 200, 255, 0.18) 0 12%, transparent 26%);
+  opacity: 0.28;
+}
+
+html[data-theme="dark"] .notice {
+  border-color: rgba(156, 200, 255, 0.36);
+  background:
+    linear-gradient(135deg, rgba(41, 45, 64, 0.96), rgba(37, 29, 45, 0.96)),
+    var(--blue-soft);
+  color: var(--blue);
+  box-shadow: 0 18px 38px rgba(7, 4, 9, 0.38);
+}
+
+html[data-theme="dark"] .notice.success {
+  border-color: rgba(141, 224, 201, 0.36);
+  background: linear-gradient(135deg, rgba(35, 57, 51, 0.96), rgba(37, 32, 45, 0.96));
+  color: var(--mint);
+}
+
+html[data-theme="dark"] .notice.error {
+  border-color: rgba(255, 156, 173, 0.4);
+  background: linear-gradient(135deg, rgba(67, 36, 46, 0.96), rgba(42, 27, 42, 0.96));
+  color: var(--danger);
+}

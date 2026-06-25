@@ -1,0 +1,5 @@
+aiohttp
+httpx[http2]
+apscheduler
+aiofiles
+json5
