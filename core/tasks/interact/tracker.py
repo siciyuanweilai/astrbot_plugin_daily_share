@@ -21,7 +21,6 @@ QZONE_AUTO_REPLY_DEFAULT_CRON = "30 */2 * * *"
 QZONE_AUTO_REPLY_DEFAULT_INTERVAL_MINUTES = 30
 QZONE_AUTO_REPLY_DEFAULT_LIMIT = 3
 QZONE_AUTO_REPLY_DEFAULT_COOLDOWN_HOURS = 168
-QZONE_AUTO_INTERACTION_RATE_LIMIT_COOLDOWN_SECONDS = 600
 QZONE_ACTION_SKIPPED = "skipped"
 QZONE_ACTION_COMMENTED = "commented"
 QZONE_ACTION_THREAD_COMMENTED = "thread_commented"
@@ -46,6 +45,18 @@ def _post_key(post) -> str:
     return str(getattr(post, "key", "") or "").strip()
 
 
+def _post_alias_keys(post) -> list[str]:
+    keys = [_post_key(post)]
+    uin = str(getattr(post, "uin", "") or "").strip()
+    appid = str(getattr(post, "appid", "") or "").strip()
+    for name in ("unikey", "curkey", "feed_key", "tid"):
+        value = str(getattr(post, name, "") or "").strip()
+        if not value:
+            continue
+        keys.append(f"post:{uin}:{appid}:{name}:{value}")
+    return list(dict.fromkeys(key for key in keys if key))
+
+
 def _mark_qzone_processed(processed: dict, key: Any, action: str, **fields: Any) -> None:
     item_key = str(key or "").strip()
     if not item_key:
@@ -57,23 +68,31 @@ def _mark_qzone_processed(processed: dict, key: Any, action: str, **fields: Any)
     }
 
 
-def _mark_qzone_rate_limited(
-    state: dict,
-    *,
-    reason: str,
-    now: int,
-    cooldown_seconds: int = QZONE_AUTO_INTERACTION_RATE_LIMIT_COOLDOWN_SECONDS,
-) -> None:
-    if not isinstance(state, dict):
+def _mark_qzone_post_processed(processed: dict, post, action: str, **fields: Any) -> None:
+    keys = _post_alias_keys(post)
+    if not keys:
         return
-    cooldown = max(60, int(cooldown_seconds or QZONE_AUTO_INTERACTION_RATE_LIMIT_COOLDOWN_SECONDS))
-    state["rate_limited_until"] = int(now or time.time()) + cooldown
-    state["rate_limited_reason"] = str(reason or "").strip()
+    primary_key = keys[0]
+    alias_keys = keys[1:]
+    payload_fields = {"post_alias_keys": alias_keys, **fields}
+    _mark_qzone_processed(processed, primary_key, action, **payload_fields)
+    for key in alias_keys:
+        _mark_qzone_processed(processed, key, action, **fields)
 
 
 def _qzone_processed_action(processed: dict, key: Any) -> str:
     item = processed.get(str(key or "").strip()) if isinstance(processed, dict) else None
     return str(item.get("action") or "") if isinstance(item, dict) else ""
+
+
+def _qzone_post_processed_action(processed: dict, post) -> str:
+    if not isinstance(processed, dict):
+        return ""
+    for key in _post_alias_keys(post):
+        action = _qzone_processed_action(processed, key)
+        if action:
+            return action
+    return ""
 
 
 def _qzone_pending_reply(processed: dict, key: Any) -> str:
@@ -93,6 +112,16 @@ def _qzone_like_processed_action(processed: dict, key: Any) -> str:
         processed.pop(item_key, None)
         return ""
     return action
+
+
+def _qzone_like_post_processed_action(processed: dict, post) -> str:
+    if not isinstance(processed, dict):
+        return ""
+    for key in _post_alias_keys(post):
+        action = _qzone_like_processed_action(processed, key)
+        if action:
+            return action
+    return ""
 
 
 def _qzone_processed_thread_has_self_reply(post, parent_comment, processed: dict) -> bool:

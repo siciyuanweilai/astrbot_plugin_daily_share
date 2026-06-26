@@ -16,3 +16,4 @@ class DashboardApplyPayloadMixin:
         self._page_apply_context_section(sections)
         self._page_apply_news_section(sections)
         self._page_apply_llm_section(sections)
+        self._page_apply_schema_extra(body)

@@ -12,7 +12,8 @@ from .tracker import (
     QZONE_ACTION_RETRY_LATER,
     _comment_key,
     _post_key,
-    _qzone_like_processed_action,
+    _qzone_like_post_processed_action,
+    _qzone_post_processed_action,
     _qzone_processed_thread_has_self_reply,
 )
 
@@ -32,7 +33,8 @@ class QzoneAutoPolicyMixin:
         index: QzoneCommentIndex = None,
     ) -> bool:
         post_key = str(getattr(post, "key", "") or "").strip()
-        if not post_key or post_key in processed:
+        processed_action = _qzone_post_processed_action(processed, post)
+        if not post_key or (processed_action and processed_action != QZONE_ACTION_RETRY_LATER):
             return False
         if self._qzone_is_official_qzone_post(post):
             return False
@@ -54,7 +56,7 @@ class QzoneAutoPolicyMixin:
         processed: dict,
     ) -> bool:
         post_key = _post_key(post)
-        if not post_key or _qzone_like_processed_action(processed, post_key):
+        if not post_key or _qzone_like_post_processed_action(processed, post):
             return False
         if self._qzone_is_official_qzone_post(post):
             return False

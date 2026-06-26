@@ -968,6 +968,60 @@ class QzoneParserTests(unittest.TestCase):
 
 
 class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_get_bot_prefers_configured_qzone_adapter(self):
+        service_module = _load_qzone_service()
+        first = object()
+        selected = object()
+
+        class CtxService:
+            bot_map = {"V": first, "Swan": selected}
+
+            def _get_bot_instance(self, adapter_id):
+                return self.bot_map.get(adapter_id)
+
+            def _is_onebot_platform(self, _key):
+                return False
+
+            def _get_onebot_bot(self, *args, **kwargs):
+                return None
+
+        plugin = types.SimpleNamespace(
+            _cached_qq_adapter_id="V",
+            qzone_conf={"qzone_adapter_id": "Swan"},
+            ctx_service=CtxService(),
+        )
+        service = service_module.QzoneService(plugin)
+
+        self.assertIs(service._get_bot(), selected)
+
+    async def test_get_bot_uses_first_instance_when_qzone_adapter_empty(self):
+        service_module = _load_qzone_service()
+        first = object()
+        second = object()
+
+        class CtxService:
+            bot_map = {"V": first, "Swan": second}
+
+            def _get_bot_instance(self, adapter_id):
+                if adapter_id:
+                    return self.bot_map.get(adapter_id)
+                return next(iter(self.bot_map.values()))
+
+            def _is_onebot_platform(self, _key):
+                return False
+
+            def _get_onebot_bot(self, *args, **kwargs):
+                return None
+
+        plugin = types.SimpleNamespace(
+            _cached_qq_adapter_id="",
+            qzone_conf={"qzone_adapter_id": ""},
+            ctx_service=CtxService(),
+        )
+        service = service_module.QzoneService(plugin)
+
+        self.assertIs(service._get_bot(), first)
+
     async def test_query_recent_posts_uses_feeds3_basic_params(self):
         service_module = _load_qzone_service()
 
@@ -1036,6 +1090,95 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.last_friend_feeds_meta["parsed_count"], 1)
         self.assertTrue(service.last_friend_feeds_meta["has_more"])
         self.assertEqual(service.last_friend_feeds_meta["next_cursor"], "pagenum=2&basetime=1773990000")
+
+    async def test_query_mention_posts_uses_about_me_notification_feed(self):
+        service_module = _load_qzone_service()
+        bot_uin = 10001
+        friend_uin = 20002
+
+        class Service(_ConfirmedThreadVerificationMixin, service_module.QzoneService):
+            def __init__(self):
+                super().__init__(types.SimpleNamespace(qzone_conf={}))
+                self.call = None
+
+            async def context(self):
+                return service_module.QzoneContext(
+                    uin=bot_uin,
+                    skey="skey",
+                    p_skey="p_skey",
+                    nickname="BOT_NICK",
+                )
+
+            async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
+                self.call = {
+                    "method": method,
+                    "url": url,
+                    "params": dict(params or {}),
+                    "headers": dict(headers or {}),
+                }
+                return {
+                    "code": 0,
+                    "data": {
+                        "main": {"total_number": 1},
+                        "data": [
+                            {
+                                "appid": "311",
+                                "key": "mention-fkey",
+                                "uin": str(friend_uin),
+                                "nickname": "FRIEND_NICK",
+                                "abstime": "1782452784",
+                                "html": """
+                                    <li class="f-single">
+                                      <div class="f-nick">
+                                        <a class="f-name q_namecard" link="nameCard_20002">FRIEND_NICK</a>
+                                        <span class="state">提到我</span>
+                                      </div>
+                                      <div id="feed_20002_311_4_1782452784_1_1">
+                                        <i class="none" name="feed_data"
+                                           data-fkey="mention-fkey"
+                                           data-tid="mention-fkey"
+                                           data-uin="20002"
+                                           data-abstime="1782452784"></i>
+                                        <p class="txt-box-title">
+                                          <a class="nickname q_namecard" link="nameCard_20002">FRIEND_NICK</a>
+                                          <span class="state">：</span>
+                                          周末去旧书店吗？
+                                          <a class="nickname q_namecard" link="nameCard_10001">@BOT_NICK</a>
+                                        </p>
+                                      </div>
+                                    </li>
+                                """,
+                            },
+                            {
+                                "appid": "311",
+                                "key": "normal-fkey",
+                                "uin": str(friend_uin),
+                                "nickname": "FRIEND_NICK",
+                                "html": """
+                                    <li class="f-single">
+                                      <div id="feed_20002_311_4_1782450000_1_1">
+                                        <i class="none" name="feed_data" data-fkey="normal-fkey" data-uin="20002"></i>
+                                        <div class="f-info">普通动态</div>
+                                      </div>
+                                    </li>
+                                """,
+                            },
+                        ],
+                    },
+                }
+
+        service = Service()
+        posts = await service.query_mention_posts(count=3, with_detail=False)
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].key, "20002:mention-fkey")
+        self.assertIn("周末去旧书店吗", posts[0].text)
+        self.assertEqual(service.call["url"], service.ABOUT_ME_URL)
+        self.assertEqual(service.call["params"]["uin"], bot_uin)
+        self.assertEqual(service.call["params"]["getappnotification"], 1)
+        self.assertEqual(service.call["params"]["getnotifi"], 1)
+        self.assertEqual(service.call["params"]["outputhtmlfeed"], 1)
+        self.assertEqual(service.call["params"]["scope"], 1)
 
     async def test_query_relations_uses_friend_ship_manager_do_type(self):
         service_module = _load_qzone_service()

@@ -3,11 +3,77 @@ from typing import Optional
 
 from astrbot.api import logger
 
-from ..toolkit import format_exception, log_exception
+from ..toolkit import log_exception
 
 
 class PluginLlmMixin:
     """主插件的大语言模型调用包装能力。"""
+
+    def _llm_system_default_provider(self) -> str:
+        try:
+            cfg = self.context.get_config()
+            if cfg:
+                pid = cfg.get("provider_settings", {}).get("default_provider_id", "")
+                if pid:
+                    return str(pid)
+                for provider in cfg.get("provider", []):
+                    if provider.get("enable", False) and "chat" in provider.get("provider_type", "chat"):
+                        return str(provider.get("id") or "")
+        except Exception as e:
+            log_exception("[每日分享] 读取默认大语言模型服务提供商失败", e, level="debug", with_traceback=False)
+        return ""
+
+    async def _llm_session_provider(self, umo: str | None) -> str:
+        if not umo:
+            return ""
+        try:
+            getter = getattr(self.context, "get_current_chat_provider_id", None)
+            if callable(getter):
+                return str(await getter(umo) or "")
+        except Exception as e:
+            log_exception("[每日分享] 读取会话大语言模型服务提供商失败", e, level="debug", with_traceback=False)
+        return ""
+
+    async def _llm_primary_provider(self, umo: str | None) -> tuple[str, str]:
+        configured = str(self.llm_conf.get("llm_provider_id", "") or "").strip()
+        session = "" if configured else await self._llm_session_provider(umo)
+        return configured or session or self._llm_system_default_provider(), configured
+
+    def _llm_active_provider(self, primary_provider_id: str, configured_provider_id: str) -> str:
+        if not configured_provider_id or not self._temp_fallback_provider:
+            return primary_provider_id
+
+        now = asyncio.get_running_loop().time()
+        if now < self._temp_fallback_until:
+            return str(self._temp_fallback_provider or "")
+
+        logger.info("[每日分享] 大语言模型临时降级已过期，恢复尝试指定模型。")
+        self._temp_fallback_provider = None
+        self._temp_fallback_until = 0.0
+        return primary_provider_id
+
+    def _llm_config_timeout(self, timeout: int | None) -> int:
+        try:
+            config_timeout = int(self.llm_conf.get("llm_timeout", 60))
+        except Exception:
+            config_timeout = 60
+        return max(int(timeout or 60), config_timeout)
+
+    def _llm_switch_to_default(
+        self,
+        current_provider_id: str,
+        configured_provider_id: str,
+        *,
+        reason: str,
+    ) -> str:
+        default_pid = self._llm_system_default_provider()
+        if not default_pid or default_pid == current_provider_id:
+            return current_provider_id
+        logger.info(f"[每日分享] {reason}，降级使用默认的第一个模型({default_pid})...")
+        if configured_provider_id:
+            self._temp_fallback_provider = default_pid
+            self._temp_fallback_until = asyncio.get_running_loop().time() + self._fallback_ttl_seconds
+        return default_pid
 
     async def _call_llm_wrapper(
         self,
@@ -22,55 +88,9 @@ class PluginLlmMixin:
         if self._is_terminated:
             return None
 
-        def _get_system_default_provider() -> str:
-            # 如果没指定，默认使用第一个模型
-            try:
-                cfg = self.context.get_config()
-                if cfg:
-                    pid = cfg.get("provider_settings", {}).get("default_provider_id", "")
-                    if pid:
-                        return pid
-                    for p in cfg.get("provider", []):
-                        if p.get("enable", False) and "chat" in p.get("provider_type", "chat"):
-                            return p.get("id")
-            except Exception as e:
-                log_exception("[每日分享] 读取默认大语言模型服务提供商失败", e, level="debug", with_traceback=False)
-            return ""
-
-        async def _get_session_provider(umo_value: str) -> str:
-            if not umo_value:
-                return ""
-            try:
-                getter = getattr(self.context, "get_current_chat_provider_id", None)
-                if callable(getter):
-                    return await getter(umo_value)
-            except Exception as e:
-                log_exception("[每日分享] 读取会话大语言模型服务提供商失败", e, level="debug", with_traceback=False)
-            return ""
-
-        configured_provider_id = str(self.llm_conf.get("llm_provider_id", "") or "").strip()
-        session_provider_id = ""
-        if not configured_provider_id:
-            session_provider_id = await _get_session_provider(umo)
-        primary_provider_id = configured_provider_id or session_provider_id or _get_system_default_provider()
-        current_provider_id = primary_provider_id
-
-        # 临时降级只保留一段时间，避免指定模型恢复后仍长期被跳过。
-        now = asyncio.get_running_loop().time()
-        if configured_provider_id and self._temp_fallback_provider:
-            if now < self._temp_fallback_until:
-                current_provider_id = self._temp_fallback_provider
-            else:
-                logger.info("[每日分享] 大语言模型临时降级已过期，恢复尝试指定模型。")
-                self._temp_fallback_provider = None
-                self._temp_fallback_until = 0.0
-                current_provider_id = primary_provider_id
-
-        try:
-            config_timeout = int(self.llm_conf.get("llm_timeout", 60))
-        except Exception:
-            config_timeout = 60
-        actual_timeout = max(int(timeout or 60), config_timeout)
+        primary_provider_id, configured_provider_id = await self._llm_primary_provider(umo)
+        current_provider_id = self._llm_active_provider(primary_provider_id, configured_provider_id)
+        actual_timeout = self._llm_config_timeout(timeout)
         if tools:
             logger.debug("[每日分享] 当前 AstrBot 文本生成接口不支持工具名列表，已忽略工具参数。")
         if not current_provider_id:
@@ -81,16 +101,13 @@ class PluginLlmMixin:
             if self._is_terminated:
                 return None
 
-            # 降级逻辑 1
             is_last_attempt = attempt == max_retries
             if is_last_attempt and attempt > 0 and primary_provider_id and current_provider_id == primary_provider_id:
-                default_pid = _get_system_default_provider()
-                if default_pid and default_pid != current_provider_id:
-                    logger.info(f"[每日分享] 指定大语言模型已达到重试次数，降级使用默认的第一个模型({default_pid})...")
-                    current_provider_id = default_pid
-                    if configured_provider_id:
-                        self._temp_fallback_provider = default_pid
-                        self._temp_fallback_until = asyncio.get_running_loop().time() + self._fallback_ttl_seconds
+                current_provider_id = self._llm_switch_to_default(
+                    current_provider_id,
+                    configured_provider_id,
+                    reason="指定大语言模型已达到重试次数",
+                )
 
             try:
                 kwargs = {"prompt": prompt}
@@ -122,15 +139,14 @@ class PluginLlmMixin:
 
                 if "401" in err_str:
                     logger.error("[每日分享] 大语言模型调用失败，请检查密钥配置。")
-                    # 降级逻辑 2
                     if attempt < max_retries and primary_provider_id and current_provider_id == primary_provider_id:
-                        default_pid = _get_system_default_provider()
-                        if default_pid and default_pid != current_provider_id:
-                            logger.info(f"[每日分享] 遇到 401 错误，降级使用默认的第一个模型({default_pid})...")
-                            current_provider_id = default_pid
-                            if configured_provider_id:
-                                self._temp_fallback_provider = default_pid
-                                self._temp_fallback_until = asyncio.get_running_loop().time() + self._fallback_ttl_seconds
+                        next_provider_id = self._llm_switch_to_default(
+                            current_provider_id,
+                            configured_provider_id,
+                            reason="遇到 401 错误",
+                        )
+                        if next_provider_id != current_provider_id:
+                            current_provider_id = next_provider_id
                             await asyncio.sleep(2)
                             continue
                         return None

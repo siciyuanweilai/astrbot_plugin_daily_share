@@ -1,5 +1,4 @@
 from .shared import (
-    DAILY_SHARE_INTERNAL_TRIGGER,
     DAILY_SHARE_SOURCE,
     Any,
     Dict,
@@ -29,8 +28,6 @@ class ContextHistoryNormalizeMixin:
             return None
 
         role, content = role_content
-        if self._is_internal_share_trigger(role, content):
-            return None
 
         created_at = getattr(record, "created_at", None)
         try:
@@ -114,8 +111,6 @@ class ContextHistoryNormalizeMixin:
             return None
 
         role, content = role_content
-        if self._is_internal_share_trigger(role, content):
-            return None
 
         ts = item.get("timestamp") or item.get("time")
         try:
@@ -128,12 +123,13 @@ class ContextHistoryNormalizeMixin:
         except Exception:
             ts_str = ""
 
+        source = DAILY_SHARE_SOURCE if item.get("source") == DAILY_SHARE_SOURCE else "chat"
         return {
             "role": role,
             "content": content,
             "timestamp": ts_str,
             "user_id": str(item.get("user_id") or item.get("name") or role),
-            "source": "chat",
+            "source": source,
         }
 
     def _extract_conversation_item_role_content(self, item: Any) -> Optional[tuple[str, str]]:
@@ -156,9 +152,6 @@ class ContextHistoryNormalizeMixin:
         if not content:
             return None
         return role, content
-
-    def _is_internal_share_trigger(self, role: str, content: str) -> bool:
-        return role == "user" and content.startswith(DAILY_SHARE_INTERNAL_TRIGGER)
 
     def _extract_text_from_parts(self, parts: List[Any]) -> str:
         texts = []

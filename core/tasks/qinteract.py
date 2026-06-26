@@ -30,6 +30,7 @@ from .interact.response import (
     _qzone_reply_success_payload,
     _qzone_submitted_reply_fields,
 )
+from .interact.task import _qzone_result_rate_limited
 from .interact.totals import (
     _qzone_empty_interaction_result,
     _qzone_log_interaction_summary,
@@ -250,9 +251,12 @@ class TaskQzoneAutoCommentMixin(QzoneAutoPromptMixin, QzoneAutoPolicyMixin):
         result["enabled"] = True
         if cfg.enable_like:
             result["like"] = await self.execute_qzone_auto_like(emit_summary=False)
-        if cfg.enable_comment:
+        if cfg.enable_comment and not _qzone_result_rate_limited(result["like"]):
             result["comment"] = await self.execute_qzone_auto_comment(emit_summary=False)
-        if cfg.enable_reply:
+        if cfg.enable_reply and not (
+            _qzone_result_rate_limited(result["like"])
+            or _qzone_result_rate_limited(result["comment"])
+        ):
             result["reply"] = await self.execute_qzone_auto_reply(emit_summary=False)
 
         _qzone_merge_interaction_result(result, result["like"], result["comment"], result["reply"])

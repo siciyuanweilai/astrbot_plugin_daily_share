@@ -1,8 +1,8 @@
 @import url("./styles/foundation.css?v=20260610-text-stat");
 @import url("./styles/animation.css?v=20260618-dashboard-default");
 @import url("./styles/shell.css?v=20260610-text-stat");
-@import url("./styles/widgets.css?v=20260610-text-stat");
-@import url("./styles/settings.css?v=20260614-qzone-wide");
+@import url("./styles/widgets.css?v=20260626-provider-combo");
+@import url("./styles/settings.css?v=20260626-provider-combo");
 @import url("./styles/mosaic.css?v=20260613-delete-linked");
 @import url("./styles/zoneview.css?v=20260620-qzone-tab-lift");
 @import url("./styles/phone.css?v=20260619-media-delete-confirm");

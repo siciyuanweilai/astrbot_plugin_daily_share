@@ -175,7 +175,7 @@
         "default": 1,
         "slider": {
           "min": 1,
-          "max": 3,
+          "max": 9,
           "step": 1
         },
         "hint": "仅在智能定时模式下生效。最多只能安排这么多次。"
@@ -879,6 +879,13 @@
         "default": false,
         "hint": "开启后，将按照下方的规则和序列自动分享QQ空间说说。"
       },
+      "qzone_adapter_id": {
+        "description": "QQ 空间机器人实例",
+        "type": "string",
+        "default": "",
+        "_special": "select_adapter",
+        "hint": "指定 QQ 空间使用的机器人实例；留空时默认使用当前缓存的第一个实例。只影响 QQ 空间。"
+      },
       "qzone_api_timeout_seconds": {
         "description": "QQ 空间请求超时秒数",
         "type": "int",
@@ -1023,27 +1030,6 @@
         },
         "hint": "自动互动每隔多少分钟统一查询一次好友动态和自己的说说评论。默认 45 分钟；设为 0 时改用高级 cron。"
       },
-      "qzone_auto_interaction_rate_limit_policy": {
-        "description": "自动互动限流处理",
-        "type": "string",
-        "default": "record_only",
-        "options": [
-          "record_only",
-          "cooldown"
-        ],
-        "hint": "record_only=仅记录待重试内容，下次触发继续尝试；cooldown=遇到“使用人数过多/操作频繁”等提示后，在冷却时间内跳过提交。默认不阻断，保持旧行为。"
-      },
-      "qzone_auto_interaction_rate_limit_cooldown_seconds": {
-        "description": "自动互动限流冷却秒数",
-        "type": "int",
-        "default": 600,
-        "slider": {
-          "min": 60,
-          "max": 86400,
-          "step": 60
-        },
-        "hint": "仅当限流处理选择 cooldown 时生效。默认 600 秒。"
-      },
       "qzone_enable_auto_like": {
         "description": "启用好友动态自动点赞",
         "type": "bool",
@@ -1083,6 +1069,30 @@
         "type": "text",
         "default": "",
         "hint": "可选。用于补充评论风格，比如“轻松一点”“像熟人随口一句”“少用感叹号”。不要填写固定评论模板，否则容易显得重复。"
+      },
+      "qzone_enable_auto_comment_image_vision": {
+        "description": "启用好友动态配图识别",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后，好友说说带图时会用视觉模型生成简短图片摘要，再辅助自动评论。识别失败会自动降级为文字评论。"
+      },
+      "qzone_auto_comment_image_vision_limit": {
+        "description": "单条动态最多识别图片数",
+        "type": "int",
+        "default": 1,
+        "slider": {
+          "min": 1,
+          "max": 9,
+          "step": 1
+        },
+        "hint": "默认识别 1 张，最多 9 张。识别越多，自动互动越慢且视觉模型调用越多。"
+      },
+      "qzone_auto_comment_image_vision_provider": {
+        "description": "配图识别模型",
+        "type": "string",
+        "default": "",
+        "hint": "使用视觉模型识别，不选择或者指定视觉模型识别失败后自动降级使用默认的第一个聊天模型，仍不可用时跳过识别并按纯文字评论。",
+        "_special": "select_provider"
       },
       "qzone_enable_auto_reply": {
         "description": "启用说说评论自动回评",
@@ -1222,7 +1232,7 @@
         "description": "LLM提供商",
         "type": "string",
         "default": "",
-        "hint": "使用LLM生成内容，不选择或者指定LLM失败后自动降级使用默认的第一个模型",
+        "hint": "使用LLM生成内容，不选择或者指定LLM失败后自动降级使用默认的第一个聊天模型",
         "_special": "select_provider"
       },
       "llm_timeout": {

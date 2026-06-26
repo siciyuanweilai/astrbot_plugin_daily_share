@@ -6,9 +6,10 @@ from typing import Any
 from astrbot.api import logger
 
 from ..models import QzoneComment, QzoneContext, QzonePost
+from .identity import QzoneReplyIdentityMixin
 
 
-class QzoneReplyVerifyMixin:
+class QzoneReplyVerifyMixin(QzoneReplyIdentityMixin):
     async def _verify_thread_reply_submission(
         self,
         post: QzonePost,
@@ -174,19 +175,6 @@ class QzoneReplyVerifyMixin:
             "parent_ids": sorted(parent_ids),
             "candidates": candidates,
             "detail_comment_count": len(comments),
-        }
-
-    @staticmethod
-    def _comment_id_aliases(comment: QzoneComment | None) -> set[str]:
-        if comment is None:
-            return set()
-        return {
-            text
-            for text in (
-                str(getattr(comment, "tid", "") or "").strip(),
-                str(getattr(comment, "submit_tid", "") or "").strip(),
-            )
-            if text
         }
 
     @classmethod

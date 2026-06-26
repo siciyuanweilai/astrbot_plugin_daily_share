@@ -97,6 +97,11 @@
     0 0 0 1px rgba(255, 255, 255, 0.72) inset;
 }
 
+.settings-section.has-open-select {
+  z-index: 60;
+  overflow: visible;
+}
+
 .settings-section[data-settings-section="target"],
 .settings-section[data-settings-section="context"],
 .settings-section[data-settings-section="media"],
@@ -221,6 +226,15 @@
   font-size: 13.5px;
   font-weight: 650;
   line-height: 1.62;
+}
+
+.settings-extra-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
 }
 
 .settings-target-editor {

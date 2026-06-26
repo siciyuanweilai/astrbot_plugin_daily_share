@@ -94,6 +94,8 @@ class DailySharePlugin(PluginRuntimeMixin, PluginLlmMixin, PluginSupportMixin, D
         self.command_handler = CommandHandler(self)
         self._page_action_seq = 0
         self._page_action_runs = {}
+        self._page_config_schema_raw_cache = None
+        self._page_config_schema_raw_version = None
         self._page_config_schema_meta_cache = None
         self._page_config_schema_meta_version = None
         self._register_page_web_apis()

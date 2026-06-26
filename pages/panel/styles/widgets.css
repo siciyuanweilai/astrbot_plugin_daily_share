@@ -432,7 +432,7 @@ textarea::placeholder {
   min-width: 0;
 }
 
-.sweet-combo[data-combo-for="cfgLlmProviderId"] .sweet-combo-menu {
+.sweet-combo[data-combo-kind="provider"] .sweet-combo-menu {
   width: min(360px, calc(100vw - 32px));
 }
 

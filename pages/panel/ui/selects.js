@@ -4,6 +4,7 @@ const menuGap = 6;
 const viewportPadding = 12;
 const menuMaxHeight = 268;
 const menuMinHeight = 96;
+const providerMenuMaxWidth = 360;
 
 export function createSweetControls({ selects = [], combos = [] } = {}) {
   const sweetSelectControllers = new Map();
@@ -28,11 +29,31 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     controller.wrapper.classList.toggle("is-drop-up", dropUp);
     controller.wrapper.classList.toggle("is-drop-down", !dropUp);
     controller.wrapper.style.setProperty("--sweet-select-menu-max-height", `${available}px`);
+    if (controller.wrapper.dataset.comboKind === "provider") {
+      const rect = anchor.getBoundingClientRect();
+      const boundary = controller.overlayHost?.getBoundingClientRect?.();
+      const boundaryLeft = boundary?.left ?? viewportPadding;
+      const boundaryRight = boundary?.right ?? window.innerWidth - viewportPadding;
+      const width = Math.min(
+        providerMenuMaxWidth,
+        Math.max(rect.width, boundaryRight - boundaryLeft),
+        Math.max(0, window.innerWidth - viewportPadding * 2),
+      );
+      const minLeft = boundaryLeft - rect.left;
+      const maxLeft = boundaryRight - rect.left - width;
+      const left = Math.max(minLeft, Math.min(0, maxLeft));
+      controller.menu.style.left = `${left}px`;
+      controller.menu.style.right = "auto";
+      controller.menu.style.width = `${width}px`;
+    }
   }
 
   function clearSweetMenuPlacement(controller) {
     controller.wrapper.classList.remove("is-drop-up", "is-drop-down");
     controller.wrapper.style.removeProperty("--sweet-select-menu-max-height");
+    controller.menu.style.removeProperty("left");
+    controller.menu.style.removeProperty("right");
+    controller.menu.style.removeProperty("width");
   }
 
   function closeSweetControlSet(controllers, closeControl, except = null) {
@@ -393,6 +414,7 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     const controller = sweetComboControllers.get(input);
     const item = document.createElement("button");
     const title = document.createElement("strong");
+    const label = comboDisplayLabel(option);
     const subtitle = comboOptionSubtitle(option);
     item.type = "button";
     item.id = `${controller.id}-option-${index}`;
@@ -401,9 +423,10 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     item.dataset.value = option.value;
     item.role = "option";
     item.setAttribute("aria-selected", option.value === input.value ? "true" : "false");
+    item.title = subtitle ? `${label}\n${subtitle}` : label;
     item.classList.toggle("is-selected", option.value === input.value);
     item.classList.toggle("is-clear", !option.value);
-    title.textContent = comboDisplayLabel(option);
+    title.textContent = label;
     item.append(title);
     if (subtitle) {
       const detail = document.createElement("span");
@@ -453,6 +476,8 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     if (!controller || !controller.wrapper.classList.contains("is-open")) return;
     controller.wrapper.classList.remove("is-open");
     clearSweetMenuPlacement(controller);
+    controller.panel?.classList.remove("has-open-select");
+    controller.overlayHost?.classList.remove("has-open-select");
     controller.menu.hidden = true;
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
@@ -478,6 +503,8 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     closeSweetCombos(input);
     renderSweetCombo(input);
     controller.wrapper.classList.add("is-open");
+    controller.panel?.classList.add("has-open-select");
+    controller.overlayHost?.classList.add("has-open-select");
     controller.menu.hidden = false;
     input.setAttribute("aria-expanded", "true");
     updateSweetComboPlacement(input);
@@ -537,13 +564,30 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     }
   }
 
+  function pruneDisconnectedSweetCombos() {
+    for (const [input, controller] of sweetComboControllers.entries()) {
+      if (!controller.wrapper.isConnected) sweetComboControllers.delete(input);
+    }
+  }
+
   function initSweetCombo(input, list) {
-    if (!input || !list || sweetComboControllers.has(input)) return;
+    if (!input || !list) return null;
+    pruneDisconnectedSweetCombos();
+    const current = sweetComboControllers.get(input);
+    if (current) {
+      current.list = list;
+      syncSweetCombo(input);
+      return current;
+    }
     const id = `sweet-combo-${input.id || sweetComboControllers.size}`;
     const wrapper = document.createElement("div");
     const menu = document.createElement("div");
+    const panel = input.closest(".panel, .settings-section");
+    const overlayHost = input.closest(".control-grid, .panel-head, .settings-section");
     wrapper.className = "sweet-combo";
     wrapper.dataset.comboFor = input.id || "";
+    const comboKind = text(input.dataset.comboKind || (input.id === "cfgLlmProviderId" ? "provider" : "")).trim();
+    if (comboKind) wrapper.dataset.comboKind = comboKind;
     menu.id = `${id}-listbox`;
     menu.className = "sweet-combo-menu";
     menu.role = "listbox";
@@ -564,6 +608,8 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
       list,
       wrapper,
       menu,
+      panel,
+      overlayHost,
       options: [],
       activeIndex: -1,
       pointerDownOpen: false,
@@ -593,11 +639,17 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     });
     input.addEventListener("input", () => syncSweetCombo(input));
     input.addEventListener("keydown", (event) => handleSweetComboKeydown(input, event));
+    return sweetComboControllers.get(input);
+  }
+
+  function registerSweetCombo(input, list) {
+    return initSweetCombo(input, list);
   }
 
   function initSweetCombos() {
-    for (const combo of combos) initSweetCombo(combo?.input, combo?.list);
+    for (const combo of combos) registerSweetCombo(combo?.input, combo?.list);
     document.addEventListener("click", (event) => {
+      pruneDisconnectedSweetCombos();
       for (const controller of sweetComboControllers.values()) {
         if (controller.wrapper.contains(event.target)) return;
       }
@@ -611,6 +663,7 @@ export function createSweetControls({ selects = [], combos = [] } = {}) {
     closeSweetSelects,
     initSweetCombos,
     initSweetSelects,
+    registerSweetCombo,
     syncSweetCombo,
     syncSweetSelect,
     syncSweetSelects,

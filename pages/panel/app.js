@@ -1,14 +1,14 @@
 import { createDashboardApi, withTimeout } from "./api/bridge.js?v=20260609-api";
 import { createDashboardEffects } from "./ui/trails.js?v=20260609-effects";
 import { createCalendarUi } from "./ui/calendar.js?v=20260609-calendar";
-import { getDashboardElements } from "./ui/elements.js?v=20260619-qzone-entry-api";
+import { getDashboardElements } from "./ui/elements.js?v=20260626-qzone-adapter";
 import { createDashboardEventController } from "./ui/wiring.js?v=20260615-dashboard-events";
 import { createMediaUi } from "./ui/library.js?v=20260619-qzone-relation";
 import { createQzoneUi } from "./ui/portal.js?v=20260620-qzone-single-active";
 import { createStatusView } from "./ui/status.js?v=20260615-progress";
-import { createSettingsEnhancements } from "./ui/enhance.js?v=20260614-smart-schedule";
-import { createSettingsConfig } from "./ui/prefs.js?v=20260618-delay-visibility";
-import { createSweetControls } from "./ui/selects.js?v=20260609-controls";
+import { createSettingsEnhancements } from "./ui/enhance.js?v=20260626-qzone-adapter";
+import { createSettingsConfig } from "./ui/prefs.js?v=20260626-qzone-adapter";
+import { createSweetControls } from "./ui/selects.js?v=20260626-provider-combo";
 import { createDashboardState } from "./ui/session.js?v=20260619-qzone-entry-api";
 import { createTargetsUi } from "./ui/targets.js?v=20260615-target-edit-focus";
 import { createSakuraControls } from "./ui/sakura.js?v=20260610-structure";
@@ -32,6 +32,7 @@ const {
   closeSweetSelects,
   initSweetCombos,
   initSweetSelects,
+  registerSweetCombo,
   syncSweetCombo,
   syncSweetSelect,
   syncSweetSelects,
@@ -200,6 +201,7 @@ const {
   setNotice,
   loadStatus,
   closeSweetSelects,
+  registerSweetCombo,
   syncSweetCombo,
   syncSweetSelect,
   syncSweetSelects,

@@ -1,6 +1,8 @@
+import json
+
 from .shared import (
-    DAILY_SHARE_INTERNAL_TRIGGER,
     DAILY_SHARE_MEMORY_PROMPT,
+    DAILY_SHARE_SOURCE,
     logger,
 )
 
@@ -20,6 +22,15 @@ class ContextMemoryMixin:
 
         return full_text.strip()
 
+    def _conversation_history_list(self, conversation) -> list:
+        raw = getattr(conversation, "history", []) if conversation else []
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw or "[]")
+            except json.JSONDecodeError:
+                return []
+        return list(raw) if isinstance(raw, list) else []
+
     def _build_daily_life_memos_meta(self, target_umo: str) -> dict:
         target = str(target_umo or "").strip()
         adapter_id, real_id = self._parse_umo(target)
@@ -36,54 +47,55 @@ class ContextMemoryMixin:
         return meta
 
     async def record_bot_reply_to_history(self, target_umo: str, content: str, image_desc: str = None):
-        """
-        将机器人主动发送的消息写入 AstrBot 框架的对话历史中。
-        """
-        if not target_umo: return
+        if not target_umo:
+            return
 
+        final_parts = []
         clean_content = self._clean_share_text_for_memory(content)
-        final_content = clean_content
+        if clean_content:
+            final_parts.append(clean_content)
         if image_desc:
-            final_content += f"\n\n[发送了一张配图: {image_desc}]"
+            final_parts.append(f"[发送了一张配图: {image_desc}]")
+
+        final_content = "\n\n".join(final_parts).strip()
+        if not final_content:
+            return
 
         try:
             conv_manager = getattr(self.context, "conversation_manager", None)
-            if not conv_manager or not hasattr(conv_manager, "add_message_pair"):
-                logger.warning("[上下文] 当前 AstrBot 版本过低，不支持追加对话消息，无法写入消息历史。")
+            get_curr = getattr(conv_manager, "get_curr_conversation_id", None)
+            get_conversation = getattr(conv_manager, "get_conversation", None)
+            update_conversation = getattr(conv_manager, "update_conversation", None)
+            if not (conv_manager and callable(get_curr) and callable(get_conversation) and callable(update_conversation)):
+                logger.warning("[上下文] 当前 AstrBot 版本不支持直接更新对话历史，无法写入分享历史。")
                 return
-            
-            # 获取或创建会话标识。
-            conversation_id = await conv_manager.get_curr_conversation_id(target_umo)
+
+            conversation_id = await get_curr(target_umo)
             if not conversation_id:
-                conversation_id = await conv_manager.new_conversation(target_umo)
-            
-            # 使用内部标记保留成对历史，同时避免把主动分享误识别为用户真实发言。
-            user_msg = {
-                "role": "user",
-                "content": [{"type": "text", "text": DAILY_SHARE_INTERNAL_TRIGGER}],
-            }
-            assistant_msg = {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": final_content,
-                    }
-                ],
-            }
-            
-            await conv_manager.add_message_pair(
-                cid=conversation_id,
-                user_message=user_msg,
-                assistant_message=assistant_msg,
+                new_conversation = getattr(conv_manager, "new_conversation", None)
+                if not callable(new_conversation):
+                    return
+                conversation_id = await new_conversation(target_umo)
+
+            conversation = await get_conversation(target_umo, conversation_id)
+            history = self._conversation_history_list(conversation)
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": final_content,
+                    "source": DAILY_SHARE_SOURCE,
+                }
             )
-            logger.debug(f"[上下文] 已写入历史: {target_umo}")
-            
+
+            await update_conversation(target_umo, conversation_id, history=history)
+            logger.debug(f"[上下文] 已写入分享历史: {target_umo}")
+
         except Exception as e:
             logger.warning(f"[上下文] 写入对话历史失败: {e}")
 
     async def record_to_memos(self, target_umo: str, content: str, image_desc: str = None):
-        if not self.memory_conf.get("record_share_to_memory", True): return
+        if not self.memory_conf.get("record_share_to_memory", True):
+            return
         plugin = self._get_life_plugin()
         runtime = getattr(plugin, "runtime", None)
         schedule = getattr(runtime, "schedule_memos_selected_items", None)

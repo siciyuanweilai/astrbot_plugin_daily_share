@@ -78,18 +78,21 @@ class DashboardConfigPayloadMixin:
                         or 0
                     ),
                     "qzone_auto_interaction_cron": qzone.get("qzone_auto_interaction_cron", "0 */2 * * *"),
-                    "qzone_auto_interaction_rate_limit_policy": str(
-                        qzone.get("qzone_auto_interaction_rate_limit_policy", "record_only") or "record_only"
-                    ),
-                    "qzone_auto_interaction_rate_limit_cooldown_seconds": int(
-                        qzone.get("qzone_auto_interaction_rate_limit_cooldown_seconds", 600)
-                        or 600
-                    ),
                     "qzone_enable_auto_like": bool(qzone.get("qzone_enable_auto_like", False)),
                     "qzone_auto_like_limit": int(qzone.get("qzone_auto_like_limit", 3) or 3),
                     "qzone_enable_auto_comment": bool(qzone.get("qzone_enable_auto_comment", False)),
                     "qzone_auto_comment_limit": int(qzone.get("qzone_auto_comment_limit", 3) or 3),
                     "qzone_auto_comment_prompt": str(qzone.get("qzone_auto_comment_prompt", "") or ""),
+                    "qzone_enable_auto_comment_image_vision": bool(
+                        qzone.get("qzone_enable_auto_comment_image_vision", False)
+                    ),
+                    "qzone_auto_comment_image_vision_limit": int(
+                        qzone.get("qzone_auto_comment_image_vision_limit", 1)
+                        or 1
+                    ),
+                    "qzone_auto_comment_image_vision_provider": str(
+                        qzone.get("qzone_auto_comment_image_vision_provider", "") or ""
+                    ),
                     "qzone_enable_auto_reply": bool(qzone.get("qzone_enable_auto_reply", False)),
                     "qzone_auto_reply_limit": int(qzone.get("qzone_auto_reply_limit", 3) or 3),
                     "qzone_auto_reply_prompt": str(qzone.get("qzone_auto_reply_prompt", "") or ""),
@@ -167,4 +170,5 @@ class DashboardConfigPayloadMixin:
             },
             "options": self._page_config_options(),
             "schema_meta": self._page_config_schema_meta(),
+            "schema_values": self._page_config_schema_values(),
         }

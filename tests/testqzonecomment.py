@@ -161,6 +161,41 @@ class FakeDb:
 
 
 class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_transient_query_failure_logs_debug(self):
+        module, _models = _load_auto_comment_module()
+        task_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.task"]
+        calls = []
+
+        def record(level):
+            return lambda message: calls.append((level, message))
+
+        class Owner:
+            def __init__(self):
+                self.saved = None
+
+            async def _qzone_auto_save_state(self, state_key, state, processed, result, *, run_at=None):
+                self.saved = (state_key, state, processed, result, run_at)
+
+        owner = Owner()
+        result = task_module._qzone_auto_result(commented=0)
+        with patch.object(task_module.logger, "debug", record("debug")):
+            with patch.object(task_module.logger, "warning", record("warning")):
+                returned = await task_module._qzone_abort_query_failure(
+                    owner,
+                    state_key="state",
+                    state={},
+                    processed={},
+                    result=result,
+                    run_at=123,
+                    message="[每日分享] QQ 空间自动评论查询失败",
+                    error=RuntimeError("network busy"),
+                )
+
+        self.assertIs(returned, result)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(calls, [("debug", "[每日分享] QQ 空间自动评论查询失败: network busy")])
+        self.assertIsNotNone(owner.saved)
+
     def test_reply_submit_targets_prioritize_latest_comment_before_parent(self):
         service_module, models = _load_qzone_service_module()
         post = models.QzonePost(uin=1, tid="self")
@@ -532,6 +567,518 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("【当前生活状态参考】", prompt)
             self.assertIn("不要主动透露具体地点、行程、关系、备忘录", prompt)
 
+    async def test_auto_comment_includes_image_vision_context_when_enabled(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs)
+                return types.SimpleNamespace(completion_text="桌上有一杯咖啡和一本打开的书")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False, "llm_provider_id": "ignored-provider"},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "这下午很有生活感"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        post = models.QzonePost(
+            uin=2,
+            tid="image-post",
+            name="FRIEND_NICK",
+            text="午后",
+            images=["https://example.com/cafe.jpg"],
+        )
+
+        result = await manager._generate_qzone_auto_comment(post, state=state)
+
+        self.assertEqual(result, "这下午很有生活感")
+        self.assertEqual(manager.context.calls[0]["chat_provider_id"], "default-provider")
+        self.assertEqual(manager.context.calls[0]["image_urls"], ["https://example.com/cafe.jpg"])
+        self.assertIn("【配图识别】", manager.prompts[0])
+        self.assertIn("桌上有一杯咖啡和一本打开的书", manager.prompts[0])
+        self.assertIn("image_vision_cache", state)
+
+    async def test_auto_comment_image_vision_logs_debug_path(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                return types.SimpleNamespace(completion_text="画面里有人站在阳光下")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=Context(),
+                )
+
+            async def llm(self, **kwargs):
+                return "这张很有夏天的感觉"
+
+        logs = []
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        post = models.QzonePost(
+            uin=2,
+            tid="image-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://example.com/sun.jpg"],
+        )
+
+        vision_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.vision"]
+        with patch.object(vision_module.logger, "debug", lambda message, *args, **kwargs: logs.append(str(message))):
+            await manager._generate_qzone_auto_comment(post, state={})
+
+        self.assertTrue(any("QQ 空间好友动态配图识别开始" in item for item in logs))
+        self.assertTrue(any("QQ 空间好友动态配图识别成功" in item for item in logs))
+
+    async def test_auto_comment_image_vision_reuses_state_cache(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["image_urls"][0])
+                return types.SimpleNamespace(completion_text="窗边有一盆绿植")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "养得不错嘛"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        post = models.QzonePost(
+            uin=2,
+            tid="cached-image-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://example.com/plant.jpg"],
+        )
+
+        await manager._generate_qzone_auto_comment(post, state=state)
+        await manager._generate_qzone_auto_comment(post, state=state)
+
+        self.assertEqual(manager.context.calls, ["https://example.com/plant.jpg"])
+        self.assertEqual(len(manager.prompts), 2)
+        self.assertIn("窗边有一盆绿植", manager.prompts[1])
+
+    async def test_auto_comment_image_vision_cache_ignores_volatile_url_query(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["image_urls"][0])
+                return types.SimpleNamespace(completion_text="有人在美术馆看蓝色画作")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "这张很文艺"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        first = models.QzonePost(
+            uin=2,
+            tid="same-image-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=aaa&_t=1"],
+        )
+        second = models.QzonePost(
+            uin=2,
+            tid="same-image-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=bbb&_t=2"],
+        )
+
+        await manager._generate_qzone_auto_comment(first, state=state)
+        await manager._generate_qzone_auto_comment(second, state=state)
+
+        self.assertEqual(manager.context.calls, ["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=aaa&_t=1"])
+        self.assertIn("有人在美术馆看蓝色画作", manager.prompts[1])
+
+    async def test_auto_comment_image_vision_cache_survives_changed_post_key(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["image_urls"][0])
+                return types.SimpleNamespace(completion_text="展厅里有人注视蓝色画作")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "这张照片很安静"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        first = models.QzonePost(
+            uin=2,
+            tid="friend-feed-key",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=aaa"],
+        )
+        second = models.QzonePost(
+            uin=2,
+            tid="recent-feed-key",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=bbb"],
+        )
+
+        await manager._generate_qzone_auto_comment(first, state=state)
+        await manager._generate_qzone_auto_comment(second, state=state)
+
+        self.assertEqual(manager.context.calls, ["https://m.qpic.cn/psc?/V10abc/photo.jpg&token=aaa"])
+        self.assertIn("展厅里有人注视蓝色画作", manager.prompts[1])
+
+    async def test_auto_comment_image_vision_cache_uses_post_context_when_image_url_changes(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["image_urls"][0])
+                return types.SimpleNamespace(completion_text="一名女生在展厅里看蓝色画作")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "美术馆氛围感有了"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        first = models.QzonePost(
+            uin=2,
+            tid="friend-feed-key",
+            name="会好起来的",
+            text="今天去看画",
+            create_time=1782467000,
+            images=["https://m.qpic.cn/psc?/V10abc/photo-a.jpg&token=aaa"],
+        )
+        second = models.QzonePost(
+            uin=2,
+            tid="recent-feed-key",
+            name="会好起来的",
+            text="今天去看画",
+            create_time=1782467000,
+            images=["https://r.qzone.qq.com/photo/random-cdn-path.jpg?token=bbb"],
+        )
+
+        await manager._generate_qzone_auto_comment(first, state=state)
+        await manager._generate_qzone_auto_comment(second, state=state)
+
+        self.assertEqual(manager.context.calls, ["https://m.qpic.cn/psc?/V10abc/photo-a.jpg&token=aaa"])
+        self.assertIn("一名女生在展厅里看蓝色画作", manager.prompts[1])
+
+    async def test_auto_comment_image_vision_cache_uses_stable_post_id_without_time(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["image_urls"][0])
+                return types.SimpleNamespace(completion_text="女生在展厅里看蓝色画作")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "这张很有氛围"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        first = models.QzonePost(
+            uin=2,
+            tid="stable-post",
+            name="会好起来的",
+            text="",
+            images=["https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa"],
+        )
+        second = models.QzonePost(
+            uin=2,
+            tid="stable-post",
+            name="会好起来的",
+            text="",
+            images=["https://r.qzone.qq.com/photo/new-cdn-path.jpg?token=bbb"],
+        )
+
+        await manager._generate_qzone_auto_comment(first, state=state)
+        await manager._generate_qzone_auto_comment(second, state=state)
+
+        self.assertEqual(manager.context.calls, ["https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa"])
+        self.assertIn("女生在展厅里看蓝色画作", manager.prompts[1])
+
+    async def test_auto_comment_image_vision_cache_is_saved_immediately(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                return types.SimpleNamespace(completion_text="画面里有一杯咖啡")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.db = FakeDb()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=Context(),
+                )
+
+            async def llm(self, **kwargs):
+                return "这杯咖啡看着很救命"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        post = models.QzonePost(
+            uin=2,
+            tid="save-cache-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://example.com/cafe.jpg?token=temporary"],
+        )
+
+        await manager._generate_qzone_auto_comment(post, state=state)
+
+        saved = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
+        self.assertIn("画面里有一杯咖啡", set(saved["image_vision_cache"].values()))
+
+    async def test_auto_comment_image_vision_cache_save_merges_existing_state(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def get_using_provider(self):
+                return types.SimpleNamespace(meta=lambda: types.SimpleNamespace(id="default-provider"))
+
+            async def llm_generate(self, **kwargs):
+                return types.SimpleNamespace(completion_text="画面里有一束花")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.db = FakeDb(
+                    {
+                        module.QZONE_AUTO_COMMENT_STATE_KEY: {
+                            "processed": {"old": {"action": "commented"}},
+                            "last_result": {"commented": 1},
+                        }
+                    }
+                )
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False},
+                    context=Context(),
+                )
+
+            async def llm(self, **kwargs):
+                return "花挺好看"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        state = {}
+        post = models.QzonePost(
+            uin=2,
+            tid="save-merge-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://example.com/flower.jpg?token=temporary"],
+        )
+
+        await manager._generate_qzone_auto_comment(post, state=state)
+
+        saved = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
+        self.assertEqual(saved["processed"], {"old": {"action": "commented"}})
+        self.assertEqual(saved["last_result"], {"commented": 1})
+        self.assertIn("画面里有一束花", set(saved["image_vision_cache"].values()))
+
+    async def test_auto_comment_image_vision_provider_overrides_llm_provider(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs)
+                return types.SimpleNamespace(completion_text="图片里有一只猫")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "qzone_enable_auto_comment_image_vision": True,
+                    "qzone_auto_comment_image_vision_provider": "qzone-vision-provider",
+                }
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False, "llm_provider_id": "normal-provider"},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                return "猫猫营业了"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        post = models.QzonePost(
+            uin=2,
+            tid="image-post",
+            name="FRIEND_NICK",
+            text="",
+            images=["https://example.com/cat.jpg"],
+        )
+
+        await manager._generate_qzone_auto_comment(post, state={})
+
+        self.assertEqual(manager.context.calls[0]["chat_provider_id"], "qzone-vision-provider")
+
+    async def test_auto_comment_image_vision_skips_without_configured_or_default_provider(self):
+        module, models = _load_auto_comment_module()
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_using_provider(self):
+                return None
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs)
+                return types.SimpleNamespace(completion_text="不应调用")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                self.prompts = []
+                self.context = Context()
+                self.plugin = types.SimpleNamespace(
+                    llm_conf={"use_persona": False, "llm_provider_id": "ignored-provider"},
+                    context=self.context,
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "按纯文字评论"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+        post = models.QzonePost(
+            uin=2,
+            tid="image-post",
+            name="FRIEND_NICK",
+            text="正文",
+            images=["https://example.com/photo.jpg"],
+        )
+
+        result = await manager._generate_qzone_auto_comment(post, state={})
+
+        self.assertEqual(result, "按纯文字评论")
+        self.assertEqual(manager.context.calls, [])
+        self.assertNotIn("【配图识别】", manager.prompts[0])
+
     async def test_thread_reply_prompt_includes_same_floor_history(self):
         module, models = _load_auto_comment_module()
 
@@ -767,6 +1314,82 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["processed"]["3:new"]["content"], "这家书店听起来好舒服")
         self.assertEqual(state["processed"]["3:new"]["author"], "朋友B")
 
+    async def test_auto_comment_prioritizes_mention_posts(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.comments = []
+                self.mention_calls = 0
+                self.friend_calls = 0
+                self.mention_posts = [
+                    models.QzonePost(
+                        uin=2,
+                        tid="mention",
+                        name="FRIEND_NICK",
+                        text="周末去旧书店吗？@BOT_NICK",
+                    ),
+                ]
+                self.posts = [
+                    models.QzonePost(
+                        uin=3,
+                        tid="normal",
+                        name="朋友B",
+                        text="今天去了书店",
+                    ),
+                ]
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_mention_posts(self, *, offset=0, count=10, with_detail=True):
+                self.mention_calls += 1
+                return self.mention_posts
+
+            async def query_friend_feeds(self, *, pos=0, num=5, with_detail=False):
+                self.friend_calls += 1
+                return self.posts
+
+            async def comment(self, post_id, content):
+                self.comments.append((post_id, content))
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_auto_comment_limit": 1,
+                }
+                self.db = FakeDb()
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                )
+
+            async def llm(self, **kwargs):
+                return "去，记得给我留一杯热可可"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            result = await manager.execute_qzone_auto_comment()
+
+        self.assertEqual(result["commented"], 1)
+        self.assertEqual(manager.plugin.qzone_service.mention_calls, 1)
+        self.assertEqual(manager.plugin.qzone_service.friend_calls, 1)
+        self.assertEqual(
+            manager.plugin.qzone_service.comments,
+            [("2:mention", "去，记得给我留一杯热可可")],
+        )
+        state = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
+        self.assertEqual(state["processed"]["2:mention"]["action"], "commented")
+        self.assertNotIn("3:normal", state["processed"])
+
     async def test_auto_comment_send_failure_waits_until_next_run(self):
         module, models = _load_auto_comment_module()
 
@@ -833,6 +1456,73 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(manager.plugin.qzone_service.comments, [("3:new", "这家书店听起来好舒服")])
         state = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
         self.assertEqual(state["processed"]["3:new"]["action"], "commented")
+
+    async def test_auto_comment_processed_alias_skips_changed_post_key(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.comments = []
+                self.run = 0
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
+                self.run += 1
+                return [
+                    models.QzonePost(
+                        uin=3,
+                        tid="feed-key" if self.run == 1 else "detail-key",
+                        curkey="stable-curkey",
+                        unikey="stable-unikey",
+                        name="朋友B",
+                        text="今天去了展厅",
+                        images=["https://example.com/gallery.jpg"],
+                    )
+                ]
+
+            async def comment(self, post_id, content):
+                self.comments.append((post_id, content))
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_auto_comment_limit": 1,
+                    "qzone_enable_auto_comment_image_vision": True,
+                }
+                self.db = FakeDb()
+                self.prompts = []
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                    context=types.SimpleNamespace(),
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "这张真不错"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            first = await manager.execute_qzone_auto_comment()
+            second = await manager.execute_qzone_auto_comment()
+
+        self.assertEqual(first["commented"], 1)
+        self.assertEqual(second["commented"], 0)
+        self.assertEqual(manager.plugin.qzone_service.comments, [("3:feed-key", "这张真不错")])
+        self.assertEqual(len(manager.prompts), 1)
+        state = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
+        self.assertEqual(state["processed"]["3:feed-key"]["action"], "commented")
+        self.assertEqual(state["processed"]["post:3:311:curkey:stable-curkey"]["action"], "commented")
 
     async def test_auto_comment_llm_failure_counts_generation_failure(self):
         module, models = _load_auto_comment_module()
@@ -936,6 +1626,63 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         state = manager.db.state[module.QZONE_AUTO_LIKE_STATE_KEY]
         self.assertEqual(state["processed"]["2:sad"]["action"], "liked")
         self.assertEqual(state["processed"]["3:happy"]["action"], "liked")
+
+    async def test_auto_like_processed_alias_skips_changed_post_key(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.likes = []
+                self.run = 0
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
+                self.run += 1
+                return [
+                    models.QzonePost(
+                        uin=3,
+                        tid="feed-key" if self.run == 1 else "detail-key",
+                        curkey="stable-curkey",
+                        unikey="stable-unikey",
+                        name="朋友B",
+                        text="今天去了展厅",
+                    )
+                ]
+
+            async def like(self, post_id):
+                self.likes.append(post_id)
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_like": True,
+                    "qzone_auto_like_limit": 1,
+                }
+                self.db = FakeDb()
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                )
+
+        manager = Manager()
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            first = await manager.execute_qzone_auto_like()
+            second = await manager.execute_qzone_auto_like()
+
+        self.assertEqual(first["liked"], 1)
+        self.assertEqual(second["liked"], 0)
+        self.assertEqual(manager.plugin.qzone_service.likes, ["3:feed-key"])
+        state = manager.db.state[module.QZONE_AUTO_LIKE_STATE_KEY]
+        self.assertEqual(state["processed"]["3:feed-key"]["action"], "liked")
+        self.assertEqual(state["processed"]["post:3:311:curkey:stable-curkey"]["action"], "liked")
 
     async def test_auto_like_does_not_call_llm(self):
         module, models = _load_auto_comment_module()
@@ -1245,44 +1992,6 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         state = manager.db.state[module.QZONE_AUTO_REPLY_STATE_KEY]
         self.assertEqual(state["processed"]["1:self:c1"]["action"], "replied")
 
-    async def test_auto_reply_rate_limit_cooldown_policy_skips_current_run(self):
-        module, _models = _load_auto_comment_module()
-
-        class Db:
-            def __init__(self):
-                self.state = {
-                    module.QZONE_AUTO_REPLY_STATE_KEY: {
-                        "rate_limited_until": int(module.time.time()) + 600,
-                        "processed": {},
-                    }
-                }
-
-            async def get_state(self, key, default):
-                return self.state.get(key, default)
-
-            async def set_state(self, key, value):
-                self.state[key] = value
-
-        class Manager(module.TaskQzoneAutoCommentMixin):
-            def __init__(self):
-                self.qzone_conf = {
-                    "enable_qzone": True,
-                    "qzone_enable_auto_reply": True,
-                    "qzone_auto_reply_limit": 1,
-                    "qzone_auto_interaction_rate_limit_policy": "cooldown",
-                }
-                self.db = Db()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=types.SimpleNamespace(),
-                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
-                )
-
-        result = await Manager().execute_qzone_auto_reply()
-
-        self.assertEqual(result["replied"], 0)
-        self.assertEqual(result["skipped"], 1)
-
     async def test_auto_reply_send_failure_waits_until_next_run(self):
         module, models = _load_auto_comment_module()
 
@@ -1418,8 +2127,8 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["skipped"], 1)
         self.assertEqual(manager.llm_calls, 1)
         state = manager.db.state[module.QZONE_AUTO_REPLY_STATE_KEY]
-        self.assertGreater(state["rate_limited_until"], 0)
-        self.assertIn("使用人数过多", state["rate_limited_reason"])
+        self.assertNotIn("rate_limited_until", state)
+        self.assertNotIn("rate_limited_reason", state)
         self.assertEqual(state["processed"]["1:self:c1"]["action"], "retry_later")
         self.assertEqual(state["processed"]["1:self:c1"]["content"], "谢谢你呀")
 
@@ -2470,6 +3179,199 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["processed"]["2:friend:r1"]["action"], "thread_commented")
         self.assertEqual(state["processed"]["2:friend:r1"]["parent_comment_id"], "c1")
 
+    async def test_execute_auto_comment_does_not_top_comment_same_post_after_thread_reply(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.recent_calls = 0
+                self.top_comments = []
+                self.replies = []
+                self.recent_posts = [
+                    models.QzonePost(
+                        uin=2,
+                        tid="friend",
+                        name="Friend",
+                        text="今天去了展厅",
+                        images=["https://example.com/gallery.jpg"],
+                        comments=[
+                            models.QzoneComment(
+                                uin=1,
+                                nickname="Me",
+                                content="这张很文艺",
+                                tid="c1",
+                                create_time=100,
+                            ),
+                            models.QzoneComment(
+                                uin=2,
+                                nickname="Friend",
+                                content="下次一起去",
+                                tid="r1",
+                                parent_tid="c1",
+                                reply_to_tid="c1",
+                                reply_to_uin=1,
+                                create_time=200,
+                            ),
+                        ],
+                    )
+                ]
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
+                self.recent_calls += 1
+                return self.recent_posts
+
+            async def comment(self, post_id, content):
+                self.top_comments.append((post_id, content))
+
+            async def reply_comment(self, post_id, comment, content, *, parent_comment=None):
+                self.replies.append((post_id, comment.tid, content, parent_comment.tid if parent_comment else ""))
+                return {"comment_id": "self-r1", "comment_uin": 1, "transport": "addreply_ugc"}
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_auto_comment_limit": 2,
+                    "qzone_enable_auto_comment_image_vision": True,
+                }
+                self.db = FakeDb()
+                self.prompts = []
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                    context=types.SimpleNamespace(),
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "行，下次一起去"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            result = await manager.execute_qzone_auto_comment()
+
+        self.assertEqual(result["commented"], 1)
+        self.assertEqual(manager.plugin.qzone_service.top_comments, [])
+        self.assertEqual(manager.plugin.qzone_service.replies, [("2:friend", "r1", "行，下次一起去", "c1")])
+        self.assertEqual(len(manager.prompts), 1)
+        self.assertNotIn("【配图识别】", manager.prompts[0])
+
+    async def test_execute_auto_comment_merges_stale_mention_with_recent_detail(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.top_comments = []
+                self.replies = []
+                self.mention_post = models.QzonePost(
+                    uin=2,
+                    tid="friend",
+                    name="Friend",
+                    text="今天去了展厅",
+                    images=["https://example.com/gallery.jpg?stale=1"],
+                    comments=[
+                        models.QzoneComment(
+                            uin=2,
+                            nickname="Friend",
+                            content="原来是编的吗？",
+                            tid="deleted-r0",
+                            parent_tid="c1",
+                            reply_to_tid="c1",
+                            reply_to_uin=1,
+                            create_time=150,
+                        )
+                    ],
+                )
+                self.recent_post = models.QzonePost(
+                    uin=2,
+                    tid="friend",
+                    name="Friend",
+                    text="今天去了展厅",
+                    images=["https://example.com/gallery.jpg?fresh=1"],
+                    comments=[
+                        models.QzoneComment(
+                            uin=1,
+                            nickname="Me",
+                            content="高马尾加蓝色画作，文艺浓度直接超标了",
+                            tid="c1",
+                            create_time=100,
+                        ),
+                        models.QzoneComment(
+                            uin=2,
+                            nickname="Friend",
+                            content="还有码？",
+                            tid="r1",
+                            parent_tid="c1",
+                            reply_to_tid="c1",
+                            reply_to_uin=1,
+                            create_time=200,
+                        ),
+                    ],
+                )
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_mention_posts(self, *, offset=0, count=5, with_detail=False):
+                return [self.mention_post]
+
+            async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
+                return [self.recent_post]
+
+            async def comment(self, post_id, content):
+                self.top_comments.append((post_id, content))
+
+            async def reply_comment(self, post_id, comment, content, *, parent_comment=None):
+                self.replies.append((post_id, comment.tid, content, parent_comment.tid if parent_comment else ""))
+                return {"comment_id": "self-r1", "comment_uin": 1, "transport": "addreply_ugc"}
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_auto_comment_limit": 2,
+                    "qzone_enable_auto_comment_image_vision": True,
+                }
+                self.db = FakeDb()
+                self.prompts = []
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                    context=types.SimpleNamespace(),
+                )
+
+            async def llm(self, **kwargs):
+                self.prompts.append(kwargs.get("prompt", ""))
+                return "有，艺术加工那种码"
+
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            result = await manager.execute_qzone_auto_comment()
+
+        service = manager.plugin.qzone_service
+        self.assertEqual(result["commented"], 1)
+        self.assertEqual(service.top_comments, [])
+        self.assertEqual(service.replies, [("2:friend", "r1", "有，艺术加工那种码", "c1")])
+        self.assertEqual(len(manager.prompts), 1)
+        self.assertNotIn("【配图识别】", manager.prompts[0])
+
     async def test_execute_auto_comment_continues_latest_friend_thread_reply(self):
         module, models = _load_auto_comment_module()
 
@@ -2972,6 +3874,71 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.recent_calls, 1)
         self.assertEqual(service.replies, [("2:friend", "r1", "行，下次一起去", "c1")])
 
+    async def test_auto_comment_rate_limit_records_retry_without_warning_failure(self):
+        module, models = _load_auto_comment_module()
+        discuss_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.executors.discuss"]
+
+        class Service:
+            def __init__(self):
+                self.comments = []
+                self.posts = [
+                    models.QzonePost(
+                        uin=2,
+                        tid="friend",
+                        name="Friend",
+                        text="今天太阳真大",
+                    )
+                ]
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_friend_feeds(self, *, pos=0, num=5, with_detail=False):
+                return self.posts
+
+            async def comment(self, post_id, content):
+                self.comments.append((post_id, content))
+                raise RuntimeError("使用人数过多，请稍后再试")
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_auto_comment_limit": 1,
+                }
+                self.db = FakeDb()
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                )
+                self.llm_calls = 0
+
+            async def llm(self, **kwargs):
+                self.llm_calls += 1
+                return "路上记得补水"
+
+        logs = []
+        manager = Manager()
+        manager.plugin._call_llm_wrapper = manager.llm
+
+        with patch.object(discuss_module.logger, "debug", lambda message, *args, **kwargs: logs.append(("debug", str(message)))):
+            with patch.object(discuss_module.logger, "warning", lambda message, *args, **kwargs: logs.append(("warning", str(message)))):
+                result = await manager.execute_qzone_auto_comment()
+
+        self.assertEqual(result["commented"], 0)
+        self.assertEqual(result["failed"], 0)
+        self.assertEqual(result["skipped"], 1)
+        self.assertTrue(result["rate_limited"])
+        self.assertTrue(any("QQ 空间自动评论稍后重试" in message for level, message in logs if level == "debug"))
+        self.assertFalse(any("QQ 空间自动评论失败" in message for level, message in logs if level == "warning"))
+        state = manager.db.state[module.QZONE_AUTO_COMMENT_STATE_KEY]
+        self.assertNotIn("rate_limited_until", state)
+        self.assertNotIn("rate_limited_reason", state)
+        self.assertEqual(state["processed"]["2:friend"]["action"], "retry_later")
+        self.assertEqual(state["processed"]["2:friend"]["content"], "路上记得补水")
+
     async def test_execute_auto_interaction_aggregates_comment_and_reply_results(self):
         module, _models = _load_auto_comment_module()
 
@@ -3011,6 +3978,51 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["skipped"], 3)
         self.assertEqual(result["failed"], 1)
         self.assertEqual(result["generation_failed"], 1)
+
+    async def test_execute_auto_interaction_stops_after_comment_rate_limit(self):
+        module, _models = _load_auto_comment_module()
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_interaction": True,
+                    "qzone_enable_auto_like": True,
+                    "qzone_enable_auto_comment": True,
+                    "qzone_enable_auto_reply": True,
+                }
+                self.plugin = types.SimpleNamespace(_is_terminated=False)
+                self.calls = []
+
+            async def execute_qzone_auto_like(self, *, emit_summary=True):
+                self.calls.append(("like", emit_summary))
+                return {"enabled": True, "scanned": 1, "liked": 0, "skipped": 1, "failed": 0, "generation_failed": 0}
+
+            async def execute_qzone_auto_comment(self, *, emit_summary=True):
+                self.calls.append(("comment", emit_summary))
+                return {
+                    "enabled": True,
+                    "scanned": 1,
+                    "commented": 0,
+                    "skipped": 1,
+                    "failed": 0,
+                    "generation_failed": 0,
+                    "rate_limited": True,
+                    "rate_limited_reason": "使用人数过多，请稍后再试",
+                }
+
+            async def execute_qzone_auto_reply(self, *, emit_summary=True):
+                self.calls.append(("reply", emit_summary))
+                raise AssertionError("reply should be skipped after Qzone rate limit")
+
+        manager = Manager()
+
+        result = await manager.execute_qzone_auto_interaction()
+
+        self.assertEqual(manager.calls, [("like", False), ("comment", False)])
+        self.assertEqual(result["commented"], 0)
+        self.assertEqual(result["replied"], 0)
+        self.assertEqual(result["skipped"], 2)
 
     async def test_execute_auto_interaction_skips_summary_when_no_success(self):
         module, _models = _load_auto_comment_module()

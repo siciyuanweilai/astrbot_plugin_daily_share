@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>仪表盘</title>
-    <link rel="stylesheet" href="./style.css?v=20260620-qzone-tab-lift" />
+    <link rel="stylesheet" href="./style.css?v=20260626-provider-combo" />
   </head>
   <body>
     <div id="sakuraLayer" class="sakura-layer" aria-hidden="true"></div>
@@ -864,6 +864,7 @@
                 <span>模型服务商</span>
                 <input id="cfgLlmProviderId" type="text" autocomplete="off" placeholder="跟随默认" data-empty-label="跟随默认" />
                 <datalist id="cfgLlmProviderOptions"></datalist>
+                <datalist id="cfgAdapterOptions"></datalist>
               </label>
               <label class="setting-field">
                 <span>生成超时</span>
@@ -919,6 +920,6 @@
       </section>
     </div>
 
-    <script type="module" src="./app.js?v=20260619-qzone-relation"></script>
+    <script type="module" src="./app.js?v=20260626-qzone-adapter"></script>
   </body>
 </html>

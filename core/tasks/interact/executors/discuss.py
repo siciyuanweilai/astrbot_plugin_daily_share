@@ -7,21 +7,25 @@ from ..comments import QzoneCommentIndex
 from ..errors import QzoneAutoInteractionRateLimited
 from ..scan import _query_qzone_friend_posts
 from ..task import (
-    _mark_current_qzone_rate_limited,
     _qzone_abort_query_failure,
     _qzone_auto_config,
     _qzone_auto_result,
     _qzone_finish_task,
+    _qzone_is_retry_later_error,
+    _qzone_mark_result_rate_limited,
     _qzone_prepare_task,
     _qzone_query_fetch_count,
 )
 from ..tracker import (
     QZONE_ACTION_COMMENTED,
+    QZONE_ACTION_RETRY_LATER,
     QZONE_ACTION_SKIPPED,
     QZONE_ACTION_THREAD_COMMENTED,
     QZONE_AUTO_COMMENT_DEFAULT_COOLDOWN_HOURS,
     QZONE_AUTO_COMMENT_STATE_KEY,
+    _mark_qzone_post_processed,
     _mark_qzone_processed,
+    _post_alias_keys,
     _qzone_pending_reply,
 )
 from .pacing import QZONE_ACTION_DELAY_SECONDS
@@ -36,8 +40,9 @@ async def _execute_qzone_auto_comment_thread_reply(
     result: dict,
     *,
     limit: int,
-) -> None:
+) -> set[str]:
     paused = False
+    replied_post_keys: set[str] = set()
     for candidate in _qzone_friend_thread_comment_candidates(
         owner,
         posts,
@@ -77,28 +82,37 @@ async def _execute_qzone_auto_comment_thread_reply(
                 parent_comment=parent_comment,
                 result_count_key="commented",
             )
+            post_key = str(getattr(post, "key", "") or "").strip()
+            if post_key:
+                replied_post_keys.add(post_key)
         except QzoneAutoInteractionRateLimited as exc:
             paused = True
             result["skipped"] += 1
-            _mark_current_qzone_rate_limited(owner, state, exc)
+            _qzone_mark_result_rate_limited(result, exc)
             logger.debug(f"[每日分享] QQ 空间好友动态自动续评稍后重试: {exc}")
         except Exception as exc:
             result["failed"] += 1
             logger.warning(f"[每日分享] QQ 空间好友动态自动续评失败: {exc}")
+    return replied_post_keys
 
 
 async def _execute_qzone_auto_comment_new_posts(
     owner,
     posts: list,
     ctx,
+    state: dict,
     processed: dict,
     result: dict,
     *,
     limit: int,
+    skip_post_keys: set[str] | None = None,
 ) -> None:
+    skip_post_keys = skip_post_keys or set()
     for post in posts:
         if result["commented"] >= limit:
             break
+        if str(getattr(post, "key", "") or "").strip() in skip_post_keys:
+            continue
         result["scanned"] += 1
         post_key = str(getattr(post, "key", "") or "").strip()
         comment_index = QzoneCommentIndex.build(post, ctx.uin)
@@ -111,22 +125,29 @@ async def _execute_qzone_auto_comment_new_posts(
             result["skipped"] += 1
             continue
 
-        try:
-            comment = await owner._generate_qzone_auto_comment(post)
-        except Exception as exc:
-            result["failed"] += 1
-            result["generation_failed"] += 1
-            logger.warning(f"[每日分享] QQ 空间自动评论生成失败: {exc}")
-            continue
+        pending_comment = next(
+            (reply for reply in (_qzone_pending_reply(processed, key) for key in _post_alias_keys(post)) if reply),
+            "",
+        )
+        if pending_comment:
+            comment = pending_comment
+        else:
+            try:
+                comment = await owner._generate_qzone_auto_comment(post, state=state)
+            except Exception as exc:
+                result["failed"] += 1
+                result["generation_failed"] += 1
+                logger.warning(f"[每日分享] QQ 空间自动评论生成失败: {exc}")
+                continue
         try:
             if not comment:
                 _mark_qzone_processed(processed, post_key, QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
                 continue
             await owner.plugin.qzone_service.comment(post_key, comment)
-            _mark_qzone_processed(
+            _mark_qzone_post_processed(
                 processed,
-                post_key,
+                post,
                 QZONE_ACTION_COMMENTED,
                 content=comment,
                 post_key=post_key,
@@ -145,6 +166,22 @@ async def _execute_qzone_auto_comment_new_posts(
             )
             await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
         except Exception as exc:
+            if _qzone_is_retry_later_error(exc):
+                _mark_qzone_post_processed(
+                    processed,
+                    post,
+                    QZONE_ACTION_RETRY_LATER,
+                    content=comment,
+                    post_key=post_key,
+                    post_uin=int(getattr(post, "uin", 0) or 0),
+                    post_tid=str(getattr(post, "tid", "") or ""),
+                    author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
+                    reason=str(exc),
+                )
+                result["skipped"] += 1
+                _qzone_mark_result_rate_limited(result, exc)
+                logger.debug(f"[每日分享] QQ 空间自动评论稍后重试: {exc}")
+                break
             result["failed"] += 1
             logger.warning(f"[每日分享] QQ 空间自动评论失败: {exc}")
 
@@ -181,7 +218,7 @@ async def execute_qzone_auto_comment_task(owner, *, emit_summary: bool = True) -
             error=exc,
         )
 
-    await _execute_qzone_auto_comment_thread_reply(
+    thread_replied_post_keys = await _execute_qzone_auto_comment_thread_reply(
         owner,
         posts,
         ctx,
@@ -195,9 +232,11 @@ async def execute_qzone_auto_comment_task(owner, *, emit_summary: bool = True) -
         owner,
         posts,
         ctx,
+        state,
         processed,
         result,
         limit=limit,
+        skip_post_keys=thread_replied_post_keys,
     )
 
     await _qzone_finish_task(

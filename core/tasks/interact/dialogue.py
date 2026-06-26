@@ -10,6 +10,7 @@ from .formatting import (
     _qzone_auto_reply_comment_summary,
     _qzone_auto_reply_thread_summary,
 )
+from .vision import _qzone_auto_comment_image_context
 
 
 class QzoneAutoPromptMixin:
@@ -75,12 +76,15 @@ class QzoneAutoPromptMixin:
             raise RuntimeError("LLM 未返回有效内容")
         return text
 
-    async def _generate_qzone_auto_comment(self, post) -> str:
+    async def _generate_qzone_auto_comment(self, post, *, state: dict | None = None) -> str:
         prompt_parts = [
             "请以真实好友的语气，给这条好友 QQ 空间动态写一条自然、简短、有人味的评论。",
             _qzone_auto_interaction_time_context(),
             self._qzone_auto_comment_post_summary(post),
         ]
+        image_context = await _qzone_auto_comment_image_context(self, post, state=state)
+        if image_context:
+            prompt_parts.append(image_context)
         life_context = await self._qzone_auto_life_context_prompt()
         if life_context:
             prompt_parts.append(life_context)

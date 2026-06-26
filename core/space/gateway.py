@@ -68,10 +68,22 @@ class QzoneClientServiceMixin(QzoneHeaderMixin):
         return ctx
 
     def _get_bot(self):
-        adapter_id = str(getattr(self.plugin, "_cached_qq_adapter_id", "") or "")
+        conf = getattr(self.plugin, "qzone_conf", {}) or {}
+        configured_adapter_id = str(conf.get("qzone_adapter_id", "") or "").strip()
+        cached_adapter_id = str(getattr(self.plugin, "_cached_qq_adapter_id", "") or "").strip()
+        adapter_id = configured_adapter_id or cached_adapter_id
         bot = self.plugin.ctx_service._get_bot_instance(adapter_id)
         if bot:
             return bot
+        if configured_adapter_id:
+            logger.debug(
+                f"[每日分享] QQ 空间配置的机器人实例不可用: {configured_adapter_id}，"
+                "已回退默认实例。"
+            )
+            adapter_id = cached_adapter_id
+            bot = self.plugin.ctx_service._get_bot_instance(adapter_id)
+            if bot:
+                return bot
         bot_map = getattr(self.plugin.ctx_service, "bot_map", {}) or {}
         onebot_bots = [
             item

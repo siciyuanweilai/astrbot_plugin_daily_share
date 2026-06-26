@@ -1,7 +1,6 @@
 from astrbot.api import logger
 
 from .shared import (
-    DAILY_SHARE_INTERNAL_TRIGGER,
     DAILY_SHARE_MEMORY_PROMPT,
     DAILY_SHARE_SOURCE,
 )
@@ -202,11 +201,12 @@ class ContextService(
             if len(self.bot_map) == 1:
                 return list(self.bot_map.values())[0]
 
-            logger.error(
+            adapter_id, bot = next(iter(self.bot_map.items()))
+            logger.debug(
                 f"[每日分享] 存在多个机器人实例 {list(self.bot_map.keys())} 但未指定适配器标识，"
-                "无法确定使用哪个实例。"
+                f"默认使用第一个实例: {adapter_id}"
             )
-            return None
+            return bot
 
         logger.debug("[每日分享] 当前机器人缓存为空，可能仍在等待适配器初始化。")
         return None

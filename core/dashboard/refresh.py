@@ -58,6 +58,9 @@ class DashboardConfigRefreshMixin:
         self.command_handler.basic_conf = self.basic_conf
         self.command_handler.extra_shares_conf = self.extra_shares_conf
         self.command_handler.qzone_conf = self.qzone_conf
+        qzone_service = getattr(self, "qzone_service", None)
+        if qzone_service:
+            qzone_service.invalidate()
 
     async def _rebuild_scheduler_after_config(self, *, clear_pending_when_disabled: bool = False) -> None:
         self.scheduler.remove_all_jobs()

@@ -6,11 +6,32 @@ from astrbot.api import logger
 
 from .options import QzoneAutoInteractionConfig
 from .formatting import _qzone_summary_generation_failed_suffix
-from .tracker import _mark_qzone_rate_limited
+from .errors import _is_qzone_retry_later_error
 
 
 QZONE_QUERY_MAX_POSTS = 20
 QZONE_QUERY_MIN_POSTS = 5
+
+
+def _is_qzone_transient_query_error(error: Exception) -> bool:
+    text = str(error or "").lower()
+    return any(
+        token in text
+        for token in (
+            "network busy",
+            "server busy",
+            "temporarily unavailable",
+            "try again later",
+            "timeout",
+            "timed out",
+            "connection reset",
+            "connection aborted",
+            "网络繁忙",
+            "系统繁忙",
+            "服务器繁忙",
+            "稍后再试",
+        )
+    )
 
 
 def _qzone_auto_result(**extra: int | bool) -> dict:
@@ -85,7 +106,10 @@ async def _qzone_abort_query_failure(
     error: Exception,
 ) -> dict:
     result["failed"] += 1
-    logger.warning(f"{message}: {error}")
+    if _qzone_is_retry_later_error(error):
+        _qzone_mark_result_rate_limited(result, error)
+    log = logger.debug if _is_qzone_transient_query_error(error) else logger.warning
+    log(f"{message}: {error}")
     await owner._qzone_auto_save_state(state_key, state, processed, result, run_at=run_at)
     return result
 
@@ -119,42 +143,19 @@ async def _qzone_prepare_task(
         now=now,
         cooldown_hours=cooldown_hours,
     )
-    if await _qzone_save_rate_limited_skip(
-        owner,
-        state_key=state_key,
-        state=state,
-        processed=processed,
-        result=result,
-        run_at=now,
-    ):
-        return False, state, processed, now
     return True, state, processed, now
 
 
-async def _qzone_save_rate_limited_skip(
-    owner,
-    *,
-    state_key: str,
-    state: dict,
-    processed: dict,
-    result: dict,
-    run_at: int,
-) -> bool:
-    cfg = _qzone_auto_config(owner)
-    until = cfg.rate_limited_until(state, now=run_at)
-    if not until:
-        return False
-    result["skipped"] += 1
-    await owner._qzone_auto_save_state(state_key, state, processed, result, run_at=run_at)
-    logger.debug(f"[每日分享] QQ 空间自动互动仍在限流冷却中，跳过本轮: {until}")
-    return True
+def _qzone_result_rate_limited(result: dict) -> bool:
+    return bool(isinstance(result, dict) and result.get("rate_limited"))
 
 
-def _mark_current_qzone_rate_limited(owner, state: dict, exc: Exception) -> None:
-    cfg = _qzone_auto_config(owner)
-    _mark_qzone_rate_limited(
-        state,
-        reason=str(exc),
-        now=int(time.time()),
-        cooldown_seconds=cfg.rate_limit_cooldown_seconds,
-    )
+def _qzone_mark_result_rate_limited(result: dict, exc: Exception) -> None:
+    if not isinstance(result, dict):
+        return
+    result["rate_limited"] = True
+    result["rate_limited_reason"] = str(exc or "").strip()
+
+
+def _qzone_is_retry_later_error(exc: Exception) -> bool:
+    return _is_qzone_retry_later_error(exc)

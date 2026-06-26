@@ -32,6 +32,7 @@ class _ConversationManager:
     def __init__(self, history=None):
         self.history = history or []
         self.added_pairs = []
+        self.updated_conversations = []
 
     async def get_curr_conversation_id(self, unified_msg_origin):
         return "cid"
@@ -44,6 +45,17 @@ class _ConversationManager:
 
     async def add_message_pair(self, cid, user_message, assistant_message):
         self.added_pairs.append((cid, user_message, assistant_message))
+
+    async def update_conversation(self, unified_msg_origin, conversation_id=None, history=None, **kwargs):
+        self.history = list(history or [])
+        self.updated_conversations.append(
+            {
+                "unified_msg_origin": unified_msg_origin,
+                "conversation_id": conversation_id,
+                "history": self.history,
+                **kwargs,
+            }
+        )
 
 
 class _PlatformHistoryManager:
@@ -191,15 +203,20 @@ def _service(history=None, context_conf=None, platform_records=None, stars=None)
 
 
 class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
-    def test_internal_marker_and_memory_prompt_are_chinese_without_square_brackets(self):
+    def test_memory_prompt_is_chinese_without_square_brackets(self):
         context_module, _ = _service()
 
-        self.assertEqual(context_module.DAILY_SHARE_INTERNAL_TRIGGER, "愿此见闻悄然为我启封")
         self.assertEqual(context_module.DAILY_SHARE_MEMORY_PROMPT, "每日分享记录")
-        self.assertNotIn("[", context_module.DAILY_SHARE_INTERNAL_TRIGGER)
-        self.assertNotIn("]", context_module.DAILY_SHARE_INTERNAL_TRIGGER)
         self.assertNotIn("[", context_module.DAILY_SHARE_MEMORY_PROMPT)
         self.assertNotIn("]", context_module.DAILY_SHARE_MEMORY_PROMPT)
+
+    def test_get_bot_instance_defaults_to_first_when_adapter_is_missing(self):
+        _, service = _service()
+        first = object()
+        second = object()
+        service.bot_map = {"V": first, "Swan": second}
+
+        self.assertIs(service._get_bot_instance(""), first)
 
     def test_old_virtual_prompt_is_not_special_cased(self):
         _, service = _service()
@@ -261,28 +278,6 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(msg["source"], "chat")
         self.assertEqual(msg["content"], "普通助手历史\n旧分享文本")
 
-    async def test_new_share_pair_marks_following_assistant_as_daily_share(self):
-        context_module, service = _service(
-            [
-                {
-                    "role": "user",
-                    "content": "愿此见闻悄然为我启封",
-                },
-                {"role": "assistant", "content": "新分享内容"},
-            ],
-            {"deep_history_max_count": 1},
-        )
-
-        data = await service._get_conversation_history_data(
-            "aiocqhttp:GroupMessage:123",
-            is_group=True,
-        )
-
-        self.assertEqual(len(data["messages"]), 1)
-        self.assertEqual(data["messages"][0]["source"], context_module.DAILY_SHARE_SOURCE)
-        self.assertEqual(data["messages"][0]["content"], "新分享内容")
-        self.assertEqual(data["group_info"], {})
-
     def test_private_prompt_weakens_daily_share_as_background(self):
         context_module, service = _service()
         config_module = sys.modules[CONFIG_MODULE_NAME]
@@ -302,7 +297,7 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("背景: 你之前主动分享过：今天适合散步。", prompt)
         self.assertNotIn("你: 今天适合散步。", prompt)
 
-    async def test_record_bot_reply_writes_internal_trigger_and_plain_assistant_content(self):
+    async def test_record_bot_reply_writes_daily_share_assistant_without_internal_trigger(self):
         context_module, service = _service()
         manager = service.context.conversation_manager
 
@@ -312,14 +307,41 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
             image_desc="晴天小路",
         )
 
-        self.assertEqual(len(manager.added_pairs), 1)
-        _, user_message, assistant_message = manager.added_pairs[0]
-        self.assertEqual(
-            user_message["content"][0]["text"],
-            context_module.DAILY_SHARE_INTERNAL_TRIGGER,
+        self.assertEqual(manager.added_pairs, [])
+        self.assertEqual(len(manager.updated_conversations), 1)
+        history = manager.updated_conversations[0]["history"]
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["role"], "assistant")
+        self.assertEqual(history[0]["source"], context_module.DAILY_SHARE_SOURCE)
+        self.assertEqual(history[0]["content"], "今天适合散步。\n\n[发送了一张配图: 晴天小路]")
+
+    async def test_saved_daily_share_source_is_preserved_without_internal_trigger(self):
+        context_module = _load_context_module()
+        service = context_module.ContextService(
+            types.SimpleNamespace(
+                conversation_manager=_ConversationManager(
+                    [
+                        {
+                            "role": "assistant",
+                            "content": "新分享内容",
+                            "source": context_module.DAILY_SHARE_SOURCE,
+                        },
+                    ]
+                ),
+                message_history_manager=_PlatformHistoryManager(),
+                platform_manager=None,
+            ),
+            {"context_conf": {"deep_history_max_count": 1}},
         )
-        assistant_text = assistant_message["content"][0]["text"]
-        self.assertEqual(assistant_text, "今天适合散步。\n\n[发送了一张配图: 晴天小路]")
+
+        data = await service._get_conversation_history_data(
+            "aiocqhttp:GroupMessage:123",
+            is_group=True,
+        )
+
+        self.assertEqual(len(data["messages"]), 1)
+        self.assertEqual(data["messages"][0]["source"], context_module.DAILY_SHARE_SOURCE)
+        self.assertEqual(data["messages"][0]["content"], "新分享内容")
 
     async def test_record_to_memos_uses_daily_life_runtime(self):
         plugin = _DailyLifePlugin()
@@ -402,10 +424,10 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
             types.SimpleNamespace(
                 conversation_manager=_ConversationManager(
                     [
-                        {"role": "user", "content": context_module.DAILY_SHARE_INTERNAL_TRIGGER},
                         {
                             "role": "assistant",
                             "content": "今天适合散步。\n\n[发送了一张配图: 晴天小路]",
+                            "source": context_module.DAILY_SHARE_SOURCE,
                         },
                     ]
                 ),

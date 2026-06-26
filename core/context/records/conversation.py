@@ -41,22 +41,11 @@ class ContextHistoryConversationFetchMixin:
                 return {}
 
             messages = []
-            next_assistant_is_daily_share = False
-            history_window = history[-(max_count + 1):]
+            history_window = history[-max_count:]
             for item in history_window:
-                role_content = self._extract_conversation_item_role_content(item)
-                if role_content and self._is_internal_share_trigger(*role_content):
-                    next_assistant_is_daily_share = True
-                    continue
-
                 msg = self._normalize_conversation_history_item(item)
                 if msg:
-                    if next_assistant_is_daily_share:
-                        if msg.get("role") == "assistant":
-                            msg["source"] = DAILY_SHARE_SOURCE
-                        next_assistant_is_daily_share = False
                     messages.append(msg)
-            messages = messages[-max_count:]
 
             if not messages:
                 return {}

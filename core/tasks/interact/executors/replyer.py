@@ -3,11 +3,11 @@ from astrbot.api import logger
 from ..candidate import _qzone_self_reply_candidates
 from ..errors import QzoneAutoInteractionRateLimited
 from ..task import (
-    _mark_current_qzone_rate_limited,
     _qzone_abort_query_failure,
     _qzone_auto_config,
     _qzone_auto_result,
     _qzone_finish_task,
+    _qzone_mark_result_rate_limited,
     _qzone_prepare_task,
     _qzone_query_fetch_count,
 )
@@ -73,7 +73,7 @@ async def _execute_qzone_auto_reply_candidates(
         except QzoneAutoInteractionRateLimited as exc:
             paused = True
             result["skipped"] += 1
-            _mark_current_qzone_rate_limited(owner, state, exc)
+            _qzone_mark_result_rate_limited(result, exc)
             logger.debug(f"[每日分享] QQ 空间自动回评稍后重试: {exc}")
             break
         except Exception as exc:

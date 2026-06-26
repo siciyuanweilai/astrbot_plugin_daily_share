@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from time import time
 from typing import Any
 
 
@@ -68,7 +67,7 @@ class QzonePost:
     images: list[str] = field(default_factory=list)
     videos: list[str] = field(default_factory=list)
     comments: list[QzoneComment] = field(default_factory=list)
-    create_time: int = field(default_factory=lambda: int(time()))
+    create_time: int = 0
     avatar_url: str = ""
     rt_con: str = ""
     expandable: bool = False

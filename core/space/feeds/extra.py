@@ -5,7 +5,25 @@ from datetime import datetime
 from typing import Any
 
 from ..entry import parse_about_me, parse_favorites, parse_last_year, parse_message_board
+from ..models import QzonePost
+from ..parse import parse_recent_feed_list
 from ..relation import parse_qzone_relations, parse_qzone_visit_stats
+
+
+def _about_me_feed_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    data = payload.get("data") if isinstance(payload, dict) else {}
+    items = data.get("data") if isinstance(data, dict) else []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _is_mention_feed_item(item: dict[str, Any], self_uin: int) -> bool:
+    appid = str(item.get("appid") or "311").strip()
+    if appid and appid != "311":
+        return False
+    html = str(item.get("html") or "")
+    if "提到我" in html:
+        return True
+    return bool(self_uin and f"nameCard_{int(self_uin)}" in html and "@" in html)
 
 
 class QzoneFeedExtraMixin:
@@ -40,6 +58,51 @@ class QzoneFeedExtraMixin:
         result = parse_about_me(payload)
         self._remember_posts(result.get("items") or [])
         return result
+
+    async def query_mention_posts(
+        self,
+        *,
+        offset: int = 0,
+        count: int = 10,
+        with_detail: bool = True,
+    ) -> list[QzonePost]:
+        ctx = await self.context()
+        limit = max(1, min(int(count or 10), 20))
+        payload = await self._request(
+            "GET",
+            self.ABOUT_ME_URL,
+            params={
+                "uin": ctx.uin,
+                "begin_time": 0,
+                "end_time": 0,
+                "getappnotification": 1,
+                "getnotifi": 1,
+                "has_get_key": 0,
+                "offset": max(0, int(offset or 0)),
+                "set": 0,
+                "count": limit,
+                "useutf8": 1,
+                "outputhtmlfeed": 1,
+                "grz": time.time(),
+                "scope": 1,
+                "g_tk": ctx.gtk,
+            },
+            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}"),
+        )
+        if not self._ok(payload):
+            raise RuntimeError(str(payload.get("message") or "获取 QQ 空间提到我动态失败"))
+
+        items = [
+            item
+            for item in _about_me_feed_items(payload)
+            if _is_mention_feed_item(item, ctx.uin)
+        ]
+        posts = parse_recent_feed_list({"data": {"data": items}})
+        detail = getattr(self, "_query_recent_post_details", None)
+        if with_detail and callable(detail):
+            posts = await detail(posts)
+        self._remember_posts(posts)
+        return posts
 
     async def query_last_year(self, *, year: int | None = None, count: int = 10) -> dict[str, Any]:
         ctx = await self.context()

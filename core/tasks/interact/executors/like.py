@@ -8,6 +8,8 @@ from ..task import (
     _qzone_auto_config,
     _qzone_auto_result,
     _qzone_finish_task,
+    _qzone_is_retry_later_error,
+    _qzone_mark_result_rate_limited,
     _qzone_prepare_task,
     _qzone_query_fetch_count,
 )
@@ -16,7 +18,7 @@ from ..tracker import (
     QZONE_AUTO_LIKE_DEFAULT_COOLDOWN_HOURS,
     QZONE_AUTO_LIKE_POLICY_VERSION,
     QZONE_AUTO_LIKE_STATE_KEY,
-    _mark_qzone_processed,
+    _mark_qzone_post_processed,
     _post_key,
 )
 from .pacing import QZONE_ACTION_DELAY_SECONDS
@@ -65,9 +67,9 @@ async def execute_qzone_auto_like_task(owner, *, emit_summary: bool = True) -> d
 
         try:
             await owner.plugin.qzone_service.like(post_key)
-            _mark_qzone_processed(
+            _mark_qzone_post_processed(
                 processed,
-                post_key,
+                post,
                 QZONE_ACTION_LIKED,
                 author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
                 policy_version=QZONE_AUTO_LIKE_POLICY_VERSION,
@@ -83,6 +85,11 @@ async def execute_qzone_auto_like_task(owner, *, emit_summary: bool = True) -> d
             )
             await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
         except Exception as exc:
+            if _qzone_is_retry_later_error(exc):
+                result["skipped"] += 1
+                _qzone_mark_result_rate_limited(result, exc)
+                logger.debug(f"[每日分享] QQ 空间自动点赞稍后重试: {exc}")
+                break
             result["failed"] += 1
             logger.warning(f"[每日分享] QQ 空间自动点赞失败: {exc}")
 

@@ -148,6 +148,7 @@
     cfgNewsRandomSources: document.getElementById("cfgNewsRandomSources"),
     cfgLlmProviderId: document.getElementById("cfgLlmProviderId"),
     cfgLlmProviderOptions: document.getElementById("cfgLlmProviderOptions"),
+    cfgAdapterOptions: document.getElementById("cfgAdapterOptions"),
     cfgLlmTimeout: document.getElementById("cfgLlmTimeout"),
     cfgUsePersona: document.getElementById("cfgUsePersona"),
     cfgPersonaId: document.getElementById("cfgPersonaId"),

@@ -58,19 +58,9 @@ class ContextHistoryPlatformFetchMixin:
                     break
 
             messages = []
-            next_assistant_is_daily_share = False
             for record in records or []:
-                role_content = self._extract_platform_history_role_content(record)
-                if role_content and self._is_internal_share_trigger(*role_content):
-                    next_assistant_is_daily_share = True
-                    continue
-
                 msg = self._normalize_platform_history_item(record)
                 if msg:
-                    if next_assistant_is_daily_share:
-                        if msg.get("role") == "assistant":
-                            msg["source"] = DAILY_SHARE_SOURCE
-                        next_assistant_is_daily_share = False
                     messages.append(msg)
 
             messages = messages[-max_count:]

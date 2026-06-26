@@ -57,6 +57,7 @@ class DashboardApplyQzoneMixin:
                 "qzone_enable_auto_interaction",
                 "qzone_enable_auto_like",
                 "qzone_enable_auto_comment",
+                "qzone_enable_auto_comment_image_vision",
                 "qzone_enable_auto_reply",
             ),
         )
@@ -108,18 +109,6 @@ class DashboardApplyQzoneMixin:
             cron_default="0 */2 * * *",
             label="空间自动互动",
         )
-        if "qzone_auto_interaction_rate_limit_policy" in qzone_body:
-            policy = str(qzone_body.get("qzone_auto_interaction_rate_limit_policy") or "").strip().lower()
-            qzone["qzone_auto_interaction_rate_limit_policy"] = (
-                "cooldown" if policy in {"cooldown", "pause", "block", "block_until_cooldown"} else "record_only"
-            )
-        if "qzone_auto_interaction_rate_limit_cooldown_seconds" in qzone_body:
-            qzone["qzone_auto_interaction_rate_limit_cooldown_seconds"] = self._page_int_value(
-                qzone_body.get("qzone_auto_interaction_rate_limit_cooldown_seconds"),
-                600,
-                min_value=60,
-                max_value=86400,
-            )
         self._page_apply_qzone_auto_interaction_fields(
             qzone,
             qzone_body,
