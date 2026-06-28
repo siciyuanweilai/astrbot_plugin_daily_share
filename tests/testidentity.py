@@ -1,4 +1,4 @@
-﻿import importlib.util
+import importlib.util
 import sys
 import types
 import unittest
@@ -99,7 +99,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
             return "今天状态还不错。$$happy$$"
 
         context = types.SimpleNamespace(
-            persona_manager=_PersonaManager("你的名字叫李知恬。性别女，18岁。")
+            persona_manager=_PersonaManager("你的名字叫测试人格。性别女，18岁。")
         )
         service = content_module.ContentService(
             {"news_conf": {}, "basic_conf": {}, "context_conf": {}},
@@ -119,7 +119,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIn("角色本人原文约束", calls[0]["prompt"])
-        self.assertIn("你的名字叫李知恬。性别女，18岁。", calls[0]["prompt"])
+        self.assertIn("你的名字叫测试人格。性别女，18岁。", calls[0]["prompt"])
         self.assertIn("不要自行改写或补全其中没有写明的身份细节", calls[0]["prompt"])
 
     def test_private_user_prompt_checks_relationship_sections(self):

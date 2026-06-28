@@ -95,10 +95,10 @@ class _QzoneService:
 
     async def publish_post(self, *, text="", images=None, videos=None):
         self.calls.append({"text": text, "images": list(images or []), "videos": list(videos or [])})
-        return self.post_cls(tid="post-1", uin=188852752, text=text, videos=["qzone://video/vid-1"] if videos else [])
+        return self.post_cls(tid="post-1", uin=100000001, text=text, videos=["qzone://video/vid-1"] if videos else [])
 
     async def context(self):
-        return types.SimpleNamespace(uin=188852752, nickname="未来酱")
+        return types.SimpleNamespace(uin=100000001, nickname="测试用户乙")
 
     async def query_relations(self, *, relation_type="care"):
         self.calls.append({"relation_type": relation_type})
@@ -132,7 +132,7 @@ class _QzoneService:
 
     async def query_last_year(self, *, year=None, count=10):
         self.calls.append({"entry": "today", "year": year, "count": count})
-        return {"items": [self.post_cls(tid="today-1", uin=188852752, name="未来酱", text="去年的今天")], "has_more": False}
+        return {"items": [self.post_cls(tid="today-1", uin=100000001, name="测试用户乙", text="去年的今天")], "has_more": False}
 
     async def query_message_board(self, *, target_id="", start=0, num=10):
         self.calls.append({"entry": "board", "target_id": target_id, "start": start, "num": num})
@@ -221,7 +221,7 @@ class DashboardQzonePublishTests(unittest.IsolatedAsyncioTestCase):
         result = await plugin.page_qzone_relation()
 
         self.assertTrue(result["ok"])
-        self.assertEqual(result["data"]["account"]["nickname"], "未来酱")
+        self.assertEqual(result["data"]["account"]["nickname"], "测试用户乙")
         self.assertEqual(result["data"]["type"], "care")
         self.assertEqual(result["data"]["items"][0]["uin"], 10001)
         self.assertEqual(result["data"]["stats"]["today_views"], 2)

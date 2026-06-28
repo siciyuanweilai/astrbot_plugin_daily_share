@@ -1,4 +1,4 @@
-﻿import json
+import json
 import importlib.util
 import unittest
 from pathlib import Path
@@ -443,14 +443,14 @@ class ConfigSchemaTests(unittest.TestCase):
             {
                 "schema_extra": {
                     "root": {
-                        "contact_aliases": ["10001:四次元未来"],
+                        "contact_aliases": ["10001:测试用户甲"],
                     }
                 }
             }
         )
 
-        self.assertEqual(plugin.config["contact_aliases"], ["10001:四次元未来"])
-        self.assertEqual(plugin.contact_aliases, ["10001:四次元未来"])
+        self.assertEqual(plugin.config["contact_aliases"], ["10001:测试用户甲"])
+        self.assertEqual(plugin.contact_aliases, ["10001:测试用户甲"])
         with self.assertRaises(RuntimeError):
             plugin._apply_page_config_payload({"schema_extra": {"root": {"contact_aliases": ["bad-format"]}}})
 

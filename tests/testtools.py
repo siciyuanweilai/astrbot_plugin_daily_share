@@ -53,6 +53,7 @@ class LlmToolDocstringTests(unittest.TestCase):
                 "index": "string",
                 "query": "string",
                 "source": "string",
+                "source_explicit": "boolean",
                 "to_qzone": "boolean",
             },
         )

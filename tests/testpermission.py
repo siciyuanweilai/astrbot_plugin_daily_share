@@ -166,6 +166,21 @@ class NewsLinkToolPermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("https://example.com/news", result)
         self.assertEqual(self.host.task_manager.calls[0][0], "aiocqhttp:FriendMessage:10001")
 
+    async def test_news_link_ignores_source_without_explicit_flag(self):
+        await self.host._news_link_tool_impl(_Event(role="member"), index="2", source="zhihu")
+
+        self.assertIsNone(self.host.task_manager.calls[0][1]["source_key"])
+
+    async def test_news_link_uses_source_with_explicit_flag(self):
+        await self.host._news_link_tool_impl(
+            _Event(role="member"),
+            index="2",
+            source="zhihu",
+            source_explicit=True,
+        )
+
+        self.assertEqual(self.host.task_manager.calls[0][1]["source_key"], "zhihu")
+
     async def test_news_link_accepts_tool_context_wrapper(self):
         result = await self.host._news_link_tool_impl(_ContextWrapper(_Event(role="member")), index="6")
 

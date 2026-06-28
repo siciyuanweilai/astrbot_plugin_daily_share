@@ -88,6 +88,7 @@ class PluginToolMixin:
         index: str = "",
         query: str = "",
         source: str = None,
+        source_explicit: bool = False,
         to_qzone: bool = False,
     ):
         if self._is_terminated:
@@ -102,7 +103,7 @@ class PluginToolMixin:
         if to_qzone and not is_admin:
             return "QQ空间新闻链接仅管理员可查询。"
 
-        source_key = self._resolve_news_source_name(source)
+        source_key = self._resolve_news_source_name(source) if source_explicit else None
         target_uid = QZONE_TARGET_ID if to_qzone else event.unified_msg_origin
         result = await self.task_manager.get_cached_news_link(
             target_uid,

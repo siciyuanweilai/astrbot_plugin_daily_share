@@ -23,14 +23,18 @@ class TaskCommandLocalNewsMixin:
 
         if not news_src_key:
             news_src_key = self.news_service.select_news_source()
-        news_data = await self.news_service.get_hot_news(news_src_key)
+        news_data = await self.news_service.get_hot_news(
+            news_src_key,
+            limit=self.get_news_snapshot_limit(),
+        )
         if not news_data:
             source_name = NEWS_SOURCE_MAP.get(news_src_key or "", {}).get("name") or "新闻源"
             await event.send(event.plain_result(f"获取【{source_name}】新闻失败，分享已取消。"))
             return False, None, None, news_src_key
 
         news_src_key = news_data[1]
-        await self._cache_news_snapshot_for_targets(target_umo, news_data=news_data)
+        snapshot_data = self._news_snapshot_payload(news_data[0], news_src_key)
+        await self._cache_news_snapshot_for_targets(target_umo, snapshot_data=snapshot_data)
 
         img_path = None
         if get_image and not need_image and self.image_conf.get("attach_hot_news_image", True):
@@ -39,7 +43,7 @@ class TaskCommandLocalNewsMixin:
                 if img_path:
                     await self._cache_news_snapshot_for_targets(
                         target_umo,
-                        source_key=news_data[1],
+                        snapshot_data=snapshot_data,
                         image_url=img_path,
                     )
             except Exception as e:

@@ -45,8 +45,11 @@ class TaskCommandImageMixin:
             )
             await self._cache_news_snapshot_for_targets(
                 QZONE_TARGET_ID if to_qzone else None,
-                news_data=snapshot_data,
-                source_key=actual_source_key,
+                snapshot_data=(
+                    self._news_snapshot_payload(snapshot_data[0], snapshot_data[1])
+                    if snapshot_data
+                    else None
+                ),
                 image_url=img_url,
                 event=event,
             )

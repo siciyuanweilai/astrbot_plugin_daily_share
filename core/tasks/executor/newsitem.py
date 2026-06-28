@@ -27,10 +27,14 @@ class TaskExecutorNewsMixin:
         current_news_source = news_source or self.news_service.select_news_source(
             excluded_source=last_news_source,
         )
-        news_data = await self.news_service.get_hot_news(current_news_source)
+        news_data = await self.news_service.get_hot_news(
+            current_news_source,
+            limit=self.get_news_snapshot_limit(),
+        )
         if news_data:
             await self.db.update_state_dict(target_state_key(uid), {"last_news_source": news_data[1]})
-            await self._cache_news_snapshot_for_targets(uid, news_data=news_data)
+            snapshot_data = self._news_snapshot_payload(news_data[0], news_data[1])
+            await self._cache_news_snapshot_for_targets(uid, snapshot_data=snapshot_data)
             return True, news_data
 
         source_name = NEWS_SOURCE_MAP.get(current_news_source or "", {}).get("name") or "新闻源"
@@ -47,19 +51,23 @@ class TaskExecutorNewsMixin:
         self._finish_share_progress(progress_id, success=False, message="获取新闻失败")
         return False, None
 
-    async def _maybe_attach_hot_news_image(self, *, uid: str, stype: ShareType) -> str | None:
+    async def _maybe_attach_hot_news_image(self, *, uid: str, stype: ShareType, news_data=None) -> str | None:
         if stype != ShareType.NEWS or not self.image_conf.get("attach_hot_news_image", True):
             return None
         try:
             state = await self.db.get_state(target_state_key(uid), {})
-            last_source = state.get("last_news_source")
+            last_source = news_data[1] if news_data else state.get("last_news_source")
             if not last_source:
                 return None
             img_path, _ = self.news_service.get_hot_news_image_url(last_source)
             if img_path:
                 await self._cache_news_snapshot_for_targets(
                     uid,
-                    source_key=last_source,
+                    snapshot_data=(
+                        self._news_snapshot_payload(news_data[0], news_data[1])
+                        if news_data
+                        else None
+                    ),
                     image_url=img_path,
                 )
             return img_path

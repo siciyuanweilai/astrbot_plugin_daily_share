@@ -65,15 +65,9 @@ class TaskQzoneMediaMixin:
                 target_local_img = img_url
                 if target_local_img:
                     self._complete_share_progress_step(progress_id, "image", "新闻配图已获取")
-                snapshot_data = await self.news_service.get_hot_news(
-                    news_data[1],
-                    limit=self.get_news_snapshot_limit(),
-                    allow_fallback=False,
-                )
                 await self._cache_news_snapshot_for_targets(
                     QZONE_TARGET_ID,
-                    news_data=snapshot_data,
-                    source_key=news_data[1],
+                    snapshot_data=self._news_snapshot_payload(news_data[0], news_data[1]),
                     image_url=img_url,
                     event=event,
                 )

@@ -1,7 +1,9 @@
+import hashlib
 import time
 from typing import Any
 
 from .comments import _comment_created_at, _comment_tid, _comment_uin
+from .formatting import _qzone_post_plain_text
 
 
 QZONE_AUTO_LIKE_POLICY_VERSION = 3
@@ -45,6 +47,31 @@ def _post_key(post) -> str:
     return str(getattr(post, "key", "") or "").strip()
 
 
+def _post_stable_body_key(post) -> str:
+    uin = str(getattr(post, "uin", "") or "").strip()
+    appid = str(getattr(post, "appid", "") or "").strip()
+    created_at = int(getattr(post, "create_time", 0) or 0)
+    if not uin or not created_at:
+        return ""
+    content = _qzone_post_plain_text(post)
+    images = getattr(post, "images", None) or []
+    videos = getattr(post, "videos", None) or []
+    if not content and not images and not videos:
+        return ""
+    identity = "|".join(
+        (
+            uin,
+            appid,
+            str(created_at),
+            content[:260],
+            str(len(images)),
+            str(len(videos)),
+        )
+    )
+    digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:16]
+    return f"post:{uin}:{appid}:body:{digest}"
+
+
 def _post_alias_keys(post) -> list[str]:
     keys = [_post_key(post)]
     uin = str(getattr(post, "uin", "") or "").strip()
@@ -54,6 +81,7 @@ def _post_alias_keys(post) -> list[str]:
         if not value:
             continue
         keys.append(f"post:{uin}:{appid}:{name}:{value}")
+    keys.append(_post_stable_body_key(post))
     return list(dict.fromkeys(key for key in keys if key))
 
 

@@ -100,6 +100,7 @@ class PluginNewsHelperMixin:
                 f"最近新闻源：{source_name}" + (f"（source={source_key}）" if source_key else ""),
                 f"可查条目数：{len(items)}",
                 "调用规则：用户说第几条时，你自己理解序号并把阿拉伯数字字符串填入 index；不要把“第十条链接”整句填入 query。",
+                "调用规则：只有用户本轮明确点名新闻源时，才填写 source 并把 source_explicit 设为 true；否则 source 留空、source_explicit=false，使用最近新闻源。",
                 "调用规则：用户问链接/原文时 action=link；问详情/详细说说/摘要时 action=summary；问来源/出处时 action=source。",
                 "调用规则：用户只说“这个/刚才那条/上面那条”且没有明确序号时，index 留空，news_link 会使用最近关注新闻。",
                 "回复规则：news_link 返回短链接后，最终回复必须原样包含该短链接，不要省略、不要改写成原始长链接。",

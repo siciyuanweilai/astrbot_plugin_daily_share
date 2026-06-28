@@ -26,6 +26,11 @@ class ImageNewsShareMixin:
             limit=self.task_manager.get_news_snapshot_limit(),
             allow_fallback=False,
         )
+        snapshot_payload = (
+            {"items": snapshot_data[0], "source": snapshot_data[1]}
+            if snapshot_data
+            else None
+        )
 
         if is_qzone_target:
             await self._run_qzone_news_image_share(
@@ -34,7 +39,7 @@ class ImageNewsShareMixin:
                 img_url=img_url,
                 src_name=src_name,
                 current_uid=current_uid,
-                snapshot_data=snapshot_data,
+                snapshot_data=snapshot_payload,
             )
             return
 
@@ -44,7 +49,7 @@ class ImageNewsShareMixin:
             img_url=img_url,
             src_name=src_name,
             current_uid=current_uid,
-            snapshot_data=snapshot_data,
+            snapshot_data=snapshot_payload,
         )
 
     async def _run_qzone_news_image_share(
@@ -60,8 +65,7 @@ class ImageNewsShareMixin:
         for target in (QZONE_TARGET_ID, current_uid):
             await self.task_manager.cache_news_snapshot(
                 target,
-                news_data=snapshot_data,
-                source_key=news_src,
+                snapshot_data=snapshot_data,
                 image_url=img_url,
             )
 
@@ -101,8 +105,7 @@ class ImageNewsShareMixin:
     ) -> None:
         await self.task_manager.cache_news_snapshot(
             current_uid,
-            news_data=snapshot_data,
-            source_key=news_src,
+            snapshot_data=snapshot_data,
             image_url=img_url,
         )
         await self._send_manual_share_result(event, event.plain_result(f"正在获取 [{src_name}] 图片..."))

@@ -19,7 +19,18 @@ class TaskNewsCacheLookupMixin:
             return "工具内部提示：没有当前会话信息。请自然说明暂时查不到刚才那条新闻链接，不要提及工具状态。"
 
         if source_key and refresh_source:
-            ok = await self.cache_news_snapshot(target, source_key=source_key)
+            news_data = await self.news_service.get_hot_news(
+                source_key,
+                limit=self.get_news_snapshot_limit(),
+                allow_fallback=False,
+            )
+            ok = bool(
+                news_data
+                and await self.cache_news_snapshot(
+                    target,
+                    snapshot_data=self._news_snapshot_payload(news_data[0], news_data[1]),
+                )
+            )
             if not ok:
                 source_name = NEWS_SOURCE_MAP.get(source_key, {}).get("name", source_key)
                 return f"工具内部提示：获取【{source_name}】新闻列表失败。请自然说明暂时拿不到原文链接，不要提及工具状态。"

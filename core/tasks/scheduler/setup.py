@@ -66,7 +66,13 @@ class TaskSchedulerSetupMixin:
             async def custom_wrapper():
                 if self.plugin._is_terminated:
                     return
-                await delayed_custom_execute()
+                await self._schedule_or_execute_delayed(
+                    state_key=target_state_key(target_id),
+                    delay_minutes=self._read_delay_minutes(self.basic_conf, "cron_random_delay"),
+                    delayed_func=delayed_custom_execute,
+                    delayed_job_id=f"delayed_custom_share_{target_id}",
+                    log_label=f"独立任务 {target_id}",
+                )
 
             actual_cron = CRON_TEMPLATES.get(cron_str, cron_str)
             cron_kwargs = self._parse_cron_to_kwargs(actual_cron)

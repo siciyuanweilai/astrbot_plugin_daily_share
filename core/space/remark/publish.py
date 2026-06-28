@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 
 class QzoneCommentPostMixin:
     """提交 QQ 空间一级评论。"""
@@ -10,27 +12,17 @@ class QzoneCommentPostMixin:
         if not content:
             raise RuntimeError("评论内容不能为空")
         ctx = await self.context()
-        payload = await self._request(
-            "POST",
-            self.COMMENT_URL,
-            params={"g_tk": ctx.gtk},
-            data={
-                "hostUin": post.uin,
-                "topicId": f"{post.uin}_{post.tid}",
-                "content": content,
-                "format": "json",
-                "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",
-            },
-            retry_parse_error=False,
+        data = self._h5_comment_data(ctx, post, content=content)
+        data.update(
+            busi_param=json.dumps(getattr(post, "busi_param", {}) or {}, ensure_ascii=False),
+            isSignIn="0",
         )
-        if self._comment_submit_ok(payload):
-            return
-
         payload = await self._request(
             "POST",
             self.H5_COMMENT_URL,
             params={"g_tk": ctx.gtk},
-            data=self._h5_comment_data(ctx, post, content=content),
+            data=data,
+            headers=self._comment_h5_headers(ctx, referer=str(data.get("qzreferrer") or "")),
             retry_parse_error=False,
         )
         if self._comment_submit_ok(payload):

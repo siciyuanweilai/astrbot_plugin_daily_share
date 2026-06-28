@@ -72,7 +72,7 @@ def _load_share_module():
 
 class _Event:
     message_str = "/分享 心情 空间"
-    unified_msg_origin = "aiocqhttp:GroupMessage:89761500"
+    unified_msg_origin = "aiocqhttp:GroupMessage:100000002"
 
     def __init__(self):
         self.sent = []

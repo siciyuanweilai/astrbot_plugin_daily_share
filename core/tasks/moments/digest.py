@@ -22,12 +22,15 @@ class TaskQzoneNewsMixin:
             excluded_source=last_news_source,
         )
 
-        news_data = await self.news_service.get_hot_news(actual_source)
+        news_data = await self.news_service.get_hot_news(
+            actual_source,
+            limit=self.get_news_snapshot_limit(),
+        )
         if news_data:
             await self.db.update_state_dict(QZONE_STATE_KEY, {"last_news_source": news_data[1]})
             await self._cache_news_snapshot_for_targets(
                 QZONE_TARGET_ID,
-                news_data=news_data,
+                snapshot_data=self._news_snapshot_payload(news_data[0], news_data[1]),
                 event=event,
             )
             return True, news_data

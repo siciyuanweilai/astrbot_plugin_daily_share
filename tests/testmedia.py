@@ -278,7 +278,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                         "type": "news",
                     },
                     {
-                        "target_id": "aiocqhttp:FriendMessage:89761500",
+                        "target_id": "aiocqhttp:FriendMessage:100000002",
                         "type": "mood",
                     },
                 ]
@@ -291,7 +291,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
             calls,
             [
                 ("get_group_info", {"group_id": 123456}),
-                ("get_stranger_info", {"user_id": 89761500}),
+                ("get_stranger_info", {"user_id": 100000002}),
             ],
         )
 

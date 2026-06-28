@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import tempfile
 import unittest
 import importlib.util
@@ -186,7 +186,7 @@ class QzoneParserTests(unittest.TestCase):
                     "items_list": [
                         {
                             "uin": "o10001",
-                            "name": "李知恬",
+                            "name": "测试人格",
                             "remark": "恬恬",
                             "img": "https://q.qlogo.cn/g?b=qq&nk=10001&s=30",
                             "score": "88",
@@ -201,7 +201,7 @@ class QzoneParserTests(unittest.TestCase):
 
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["uin"], 10001)
-        self.assertEqual(items[0]["name"], "李知恬")
+        self.assertEqual(items[0]["name"], "测试人格")
         self.assertEqual(items[0]["remark"], "恬恬")
         self.assertEqual(items[0]["score"], 88)
         self.assertIn("10001", items[0]["home"])
@@ -296,7 +296,7 @@ class QzoneParserTests(unittest.TestCase):
                         "appid": "311",
                         "key": "abc",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "pic": "https://q.qlogo.cn/headimg_dl?dst_uin=12345&spec=100",
                         "abstime": 1718000000,
                         "html": """
@@ -327,7 +327,7 @@ class QzoneParserTests(unittest.TestCase):
                         "appid": "311",
                         "key": "abc",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "pic": "https://q.qlogo.cn/headimg_dl?dst_uin=12345&spec=100",
                         "abstime": 1718000000,
                         "html": """
@@ -357,7 +357,7 @@ class QzoneParserTests(unittest.TestCase):
                         "appid": "311",
                         "key": "abc",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "abstime": 1718000000,
                         "html": '<div class="f-info">第一行<br>第二行 展开全文</div>',
                     }
@@ -380,7 +380,7 @@ class QzoneParserTests(unittest.TestCase):
                         "key": "stream-key",
                         "fid": "real-fid",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "curkey": "curkey-from-feed",
                         "unikey": "unikey-from-feed",
                         "operation": {"busi_param": {"private": "value"}},
@@ -409,16 +409,16 @@ class QzoneParserTests(unittest.TestCase):
                             <li class="f-single">
                               <div class="f-single-head">
                                 <div class="f-nick">
-                                  <a class="f-name q_namecard" link="nameCard_2492835361">四次元未来</a>
+                                  <a class="f-name q_namecard" link="nameCard_2492835361">测试用户甲</a>
                                 </div>
                               </div>
                               <div id="feed_2492835361_311_0_1774000000_1_1">
                                 <div class="qz_summary wupfeed">
                                   <i class="none" name="feed_data" data-tid="1774000000" data-uin="2492835361" data-abstime="1774000000" data-fkey="real-fkey-abc123"></i>
-                                  <div class="f-info">四次元未来：今天去了书店</div>
+                                  <div class="f-info">测试用户甲：今天去了书店</div>
                                   <div class="comments-list">
                                     <ul>
-                                      <li class="comments-item bor3" data-type="commentroot" data-tid="11" data-uin="188852752" data-nick="Bot">
+                                      <li class="comments-item bor3" data-type="commentroot" data-tid="11" data-uin="100000001" data-nick="Bot">
                                         <div class="comments-item-bd">
                                           <div class="comments-content">
                                             <a class="nickname">Bot</a>&nbsp;:&nbsp;这家书店听起来好舒服
@@ -426,12 +426,12 @@ class QzoneParserTests(unittest.TestCase):
                                         </div>
                                         <div class="comments-list mod-comments-sub">
                                           <ul>
-                                            <li class="comments-item bor3" data-type="replyroot" data-tid="1" data-uin="2492835361" data-nick="四次元未来">
+                                            <li class="comments-item bor3" data-type="replyroot" data-tid="1" data-uin="2492835361" data-nick="测试用户甲">
                                               <div class="comments-content">
-                                                <a class="nickname">四次元未来</a>&nbsp;回复<a class="nickname">Bot</a>&nbsp;:&nbsp;下次一起去
+                                                <a class="nickname">测试用户甲</a>&nbsp;回复<a class="nickname">Bot</a>&nbsp;:&nbsp;下次一起去
                                               </div>
                                               <div class="comments-op">
-                                                <a class="reply" data-param="t1_tid=real-fkey-abc123&t2_uin=188852752&t2_tid=11">回复</a>
+                                                <a class="reply" data-param="t1_tid=real-fkey-abc123&t2_uin=100000001&t2_tid=11">回复</a>
                                               </div>
                                             </li>
                                           </ul>
@@ -452,13 +452,13 @@ class QzoneParserTests(unittest.TestCase):
 
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].key, "2492835361:real-fkey-abc123")
-        self.assertEqual(posts[0].name, "四次元未来")
+        self.assertEqual(posts[0].name, "测试用户甲")
         self.assertEqual(posts[0].text, "今天去了书店")
         self.assertEqual(posts[0].create_time, 1774000000)
         self.assertEqual([comment.tid for comment in posts[0].comments], ["11", "11_r_1_2492835361"])
         self.assertEqual(posts[0].comments[1].parent_tid, "11")
         self.assertEqual(posts[0].comments[1].reply_to_tid, "11")
-        self.assertEqual(posts[0].comments[1].reply_to_uin, 188852752)
+        self.assertEqual(posts[0].comments[1].reply_to_uin, 100000001)
         self.assertEqual(posts[0].comments[1].content, "下次一起去")
 
     def test_recent_feed_parses_feeds3_html_outside_data_array(self):
@@ -469,10 +469,10 @@ class QzoneParserTests(unittest.TestCase):
                 "main": {
                     "html": """
                         <li class="f-single">
-                          <div class="f-nick"><a class="f-name q_namecard" link="nameCard_2492835361">四次元未来</a></div>
+                          <div class="f-nick"><a class="f-name q_namecard" link="nameCard_2492835361">测试用户甲</a></div>
                           <div id="feed_2492835361_311_0_1774000000_1_1">
                             <i class="none" name="feed_data" data-tid="1774000000" data-uin="2492835361" data-abstime="1774000000" data-fkey="real-fkey-main"></i>
-                            <div class="f-info">四次元未来：藏在 main 里的动态</div>
+                            <div class="f-info">测试用户甲：藏在 main 里的动态</div>
                           </div>
                         </li>
                     """
@@ -494,7 +494,7 @@ class QzoneParserTests(unittest.TestCase):
                         "appid": "311",
                         "fid": "liked-fid",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "like": {"isliked": 1},
                         "html": '<div class="f-info">测试看看</div>',
                     }
@@ -549,7 +549,7 @@ class QzoneParserTests(unittest.TestCase):
                         "key": "video-stream-key",
                         "fid": "video-fid",
                         "uin": 12345,
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "abstime": 1718000000,
                         "html": """
                             <div class="f-info">视频正文</div>
@@ -579,7 +579,7 @@ class QzoneParserTests(unittest.TestCase):
                         "key": "video-stream-key",
                         "fid": "video-fid",
                         "common": {"uin": 12345},
-                        "nickname": "未来酱",
+                        "nickname": "测试用户乙",
                         "abstime": 1718000000,
                         "html": """
                             <div class="f-info">上传了一个视频</div>
@@ -602,7 +602,7 @@ class QzoneParserTests(unittest.TestCase):
         post = _parser_module.parse_feed_item(
             {
                 "tid": "mood-video",
-                "uin": 188852752,
+                "uin": 100000001,
                 "appid": 311,
                 "content": "hello",
                 "richval": "playurl=http://cache.tv.qq.com/qqplayerout.swf?v=1075_0b53richvid&auto=0&vid=1075_0b53richvid",
@@ -616,7 +616,7 @@ class QzoneParserTests(unittest.TestCase):
         post = _parser_module.parse_feed_item(
             {
                 "tid": "liked-mood",
-                "uin": 188852752,
+                "uin": 100000001,
                 "content": "hello",
                 "like": {"ismylike": "1"},
             }
@@ -629,7 +629,7 @@ class QzoneParserTests(unittest.TestCase):
         post = _parser_module.parse_feed_item(
             {
                 "tid": "mood-video",
-                "uin": 188852752,
+                "uin": 100000001,
                 "appid": 311,
                 "content": "hello",
                 "operation": {"busi_param": {"vvid": "1075_0b53vvidfield"}},
@@ -674,7 +674,7 @@ class QzoneParserTests(unittest.TestCase):
 
     def test_publish_feedinfo_parses_native_video_marker(self):
         markup = """
-            <li class="f-single f-s-s" id="fct_188852752_311_0_1781752293_0_1" data-uin="188852752">
+            <li class="f-single f-s-s" id="fct_100000001_311_0_1781752293_0_1" data-uin="100000001">
               <div class="f-info">今天测试一下</div>
               <div class="img-box f-video-wrap" data-vid="1075_0b53feedinfovid">
                 <img src="https://example.com/cover.jpg">
@@ -682,7 +682,7 @@ class QzoneParserTests(unittest.TestCase):
             </li>
         """
 
-        post = parse_feedinfo_html(markup, context_uin=188852752, context_tid="feedinfo-tid", context_time=1781752293)
+        post = parse_feedinfo_html(markup, context_uin=100000001, context_tid="feedinfo-tid", context_time=1781752293)
 
         self.assertIsNotNone(post)
         self.assertEqual(post.tid, "feedinfo-tid")
@@ -695,7 +695,7 @@ class QzoneParserTests(unittest.TestCase):
             {
                 "tid": "mood-1",
                 "uin": 12345,
-                "nickname": "未来酱",
+                "nickname": "测试用户乙",
                 "content": "今天也很好",
                 "pic": [{"url1": "https://example.com/content.jpg"}],
                 "created_time": 1718000000,
@@ -1032,10 +1032,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
@@ -1058,10 +1058,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                             {
                                 "html": """
                                     <li class="f-single">
-                                      <div class="f-nick"><a class="f-name q_namecard" link="nameCard_2492835361">四次元未来</a></div>
+                                      <div class="f-nick"><a class="f-name q_namecard" link="nameCard_2492835361">测试用户甲</a></div>
                                       <div id="feed_2492835361_311_0_1774000000_1_1">
                                         <i class="none" name="feed_data" data-tid="1774000000" data-uin="2492835361" data-abstime="1774000000" data-fkey="real-fkey-abc123"></i>
-                                        <div class="f-info">四次元未来：今天去了书店</div>
+                                        <div class="f-info">测试用户甲：今天去了书店</div>
                                       </div>
                                     </li>
                                 """
@@ -1190,10 +1190,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
@@ -1209,7 +1209,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["type"], "care_by")
         self.assertEqual(result["items"][0]["uin"], 10001)
         self.assertEqual(service.call["url"], service.RELATION_URL)
-        self.assertEqual(service.call["params"]["uin"], 188852752)
+        self.assertEqual(service.call["params"]["uin"], 100000001)
         self.assertEqual(service.call["params"]["do"], 2)
         self.assertEqual(service.call["params"]["g_tk"], "337168208")
 
@@ -1222,10 +1222,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
@@ -1235,7 +1235,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                         "msglist": [
                             {
                                 "tid": "mood-1",
-                                "uin": 188852752,
+                                "uin": 100000001,
                                 "content": "今天很开心",
                                 "commentlist": [
                                     {
@@ -1251,12 +1251,12 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {
                     "code": 0,
                     "tid": "mood-1",
-                    "uin": 188852752,
+                    "uin": 100000001,
                     "content": "今天很开心",
                 }
 
         service = Service()
-        posts = await service.query_posts(target_id="188852752", with_detail=True)
+        posts = await service.query_posts(target_id="100000001", with_detail=True)
 
         self.assertEqual(len(posts), 1)
         self.assertEqual([comment.tid for comment in posts[0].comments], ["c1"])
@@ -1270,10 +1270,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
@@ -1283,7 +1283,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                         "msglist": [
                             {
                                 "tid": "mood-1",
-                                "uin": 188852752,
+                                "uin": 100000001,
                                 "content": "今天很开心",
                                 "commentlist": [
                                     {
@@ -1294,8 +1294,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                                         "replyList": [
                                             {
                                                 "commentId": "r1",
-                                                "commentUin": 188852752,
-                                                "nickname": "未来酱",
+                                                "commentUin": 100000001,
+                                                "nickname": "测试用户乙",
                                                 "commentContent": "谢谢你呀",
                                             },
                                             {
@@ -1313,7 +1313,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {
                     "code": 0,
                     "tid": "mood-1",
-                    "uin": 188852752,
+                    "uin": 100000001,
                     "content": "今天很开心",
                     "commentList": [
                         {
@@ -1326,7 +1326,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 }
 
         service = Service()
-        posts = await service.query_posts(target_id="188852752", with_detail=True)
+        posts = await service.query_posts(target_id="100000001", with_detail=True)
 
         self.assertEqual([comment.tid for comment in posts[0].comments], ["c1", "r1", "r2"])
         self.assertEqual(posts[0].comments[1].parent_tid, "c1")
@@ -1341,10 +1341,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
@@ -1354,7 +1354,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                         "msglist": [
                             {
                                 "tid": "mood-1",
-                                "uin": 188852752,
+                                "uin": 100000001,
                                 "content": "今天很开心",
                                 "commentlist": [
                                     {
@@ -1378,7 +1378,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {
                     "code": 0,
                     "tid": "mood-1",
-                    "uin": 188852752,
+                    "uin": 100000001,
                     "content": "今天很开心",
                     "commentList": [
                         {
@@ -1401,7 +1401,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 }
 
         service = Service()
-        posts = await service.query_posts(target_id="188852752", with_detail=True)
+        posts = await service.query_posts(target_id="100000001", with_detail=True)
 
         self.assertEqual([comment.tid for comment in posts[0].comments], ["11", "11_r_2_10001"])
         self.assertEqual(posts[0].comments[0].submit_tid, "root-real-11")
@@ -1467,18 +1467,18 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         service_module = _load_qzone_service()
         service = service_module.QzoneService(types.SimpleNamespace())
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752", "ptcz": "noise"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001", "ptcz": "noise"},
         )
 
         headers = service._h5_headers(ctx)
 
         self.assertEqual(headers["Content-Type"], "application/json")
-        self.assertIn("uin=188852752", headers["Cookie"])
-        self.assertIn("p_uin=188852752", headers["Cookie"])
+        self.assertIn("uin=100000001", headers["Cookie"])
+        self.assertIn("p_uin=100000001", headers["Cookie"])
         self.assertIn("p_skey=p_skey", headers["Cookie"])
         self.assertIn("skey=skey", headers["Cookie"])
         self.assertIn("ptcz=noise", headers["Cookie"])
@@ -1487,16 +1487,16 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         service_module = _load_qzone_service()
         service = service_module.QzoneService(types.SimpleNamespace())
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
-        headers = service._comment_h5_headers(ctx, referer="https://h5.qzone.qq.com/188852752/mood/post-1")
+        headers = service._comment_h5_headers(ctx, referer="https://h5.qzone.qq.com/100000001/mood/post-1")
 
         self.assertEqual(headers["Origin"], service.H5_ORIGIN)
-        self.assertEqual(headers["Referer"], "https://h5.qzone.qq.com/188852752/mood/post-1")
+        self.assertEqual(headers["Referer"], "https://h5.qzone.qq.com/100000001/mood/post-1")
         self.assertEqual(headers["X-Requested-With"], "XMLHttpRequest")
         self.assertEqual(headers["Sec-Fetch-Mode"], "cors")
 
@@ -1506,11 +1506,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
         service = service_module.QzoneService(plugin)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752", "extra": "ignored"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001", "extra": "ignored"},
         )
 
         class FakeResponse:
@@ -1555,7 +1555,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["_endpoint"], "cover-chunk-0")
             self.assertTrue(service._h2_session.http2)
             call = service._h2_session.calls[0]
-            self.assertIn("uin=188852752", call["headers"]["Cookie"])
+            self.assertIn("uin=100000001", call["headers"]["Cookie"])
             self.assertIn("p_skey=p_skey", call["headers"]["Cookie"])
             self.assertIn("skey=skey", call["headers"]["Cookie"])
             self.assertIn("extra=ignored", call["headers"]["Cookie"])
@@ -1573,7 +1573,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             async def get_cookies(self, *, domain):
                 self.domains.append(domain)
                 cookies = {
-                    "user.qzone.qq.com": "uin=o188852752; skey=skey",
+                    "user.qzone.qq.com": "uin=o100000001; skey=skey",
                     "h5.qzone.qq.com": "p_skey=p_skey; pt4_token=pt-token",
                     "qzone.qq.com": "ptcz=ptcz-value",
                 }
@@ -1595,7 +1595,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("user.qzone.qq.com", bot.domains)
         self.assertIn("h5.qzone.qq.com", bot.domains)
         self.assertIn("qzone.qq.com", bot.domains)
-        self.assertEqual(ctx.uin, 188852752)
+        self.assertEqual(ctx.uin, 100000001)
         self.assertEqual(ctx.p_skey, "p_skey")
         self.assertEqual(ctx.cookie_values["pt4_token"], "pt-token")
         self.assertEqual(ctx.cookie_values["ptcz"], "ptcz-value")
@@ -1629,18 +1629,18 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         service._session = FakeSession()
         service._session_timeout_seconds = service._api_timeout_seconds()
         service._ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752", "ptcz": "noise"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001", "ptcz": "noise"},
         )
         service._ctx_at = 9999999999
 
         result = await service._request(
             "GET",
             "https://example.com",
-            headers={"Cookie": "uin=188852752;p_skey=p_skey"},
+            headers={"Cookie": "uin=100000001;p_skey=p_skey"},
         )
 
         self.assertEqual(result["code"], 0)
@@ -1652,11 +1652,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
         service = service_module.QzoneService(plugin)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001"},
         )
         service.native_calls = 0
 
@@ -1705,7 +1705,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             self.assertEqual(service.native_calls, 1)
-            self.assertIn("uin=188852752", service.native_headers["Cookie"])
+            self.assertIn("uin=100000001", service.native_headers["Cookie"])
             self.assertEqual(result["data"]["session"], "cover-session")
             self.assertEqual(result["_transport"], "HTTP/2")
         finally:
@@ -1717,11 +1717,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
         service = service_module.QzoneService(plugin)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001"},
         )
 
         class H2Response:
@@ -1807,11 +1807,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
         service = service_module.QzoneService(plugin)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001"},
         )
 
         class H2Response:
@@ -1893,11 +1893,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
         service = service_module.QzoneService(plugin)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
-            cookie_values={"uin": "o188852752"},
+            nickname="测试用户乙",
+            cookie_values={"uin": "o100000001"},
         )
         service.native_calls = 0
 
@@ -1988,10 +1988,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _upload_image(self, image):
@@ -2027,10 +2027,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _submit_post(self, ctx, data):
@@ -2054,10 +2054,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _upload_local_video(self, ctx, video):
@@ -2077,7 +2077,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "未生成相册视频动态"):
             await service.publish_post(text="本地视频", videos=[{"source": "base64://AAAA", "require_album_dynamic": True}])
 
-        self.assertEqual(service.uploaded[0][0], 188852752)
+        self.assertEqual(service.uploaded[0][0], 100000001)
         self.assertEqual(service.uploaded[0][1]["source"], "base64://AAAA")
         self.assertEqual(service.uploaded[0][1]["publish_text"], "本地视频")
         self.assertIsNone(service.submit_data)
@@ -2097,10 +2097,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _upload_local_video(self, ctx, video):
@@ -2170,7 +2170,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         try:
             service = Service()
-            ctx = service_module.QzoneContext(188852752, "skey", "p_skey", "未来酱")
+            ctx = service_module.QzoneContext(100000001, "skey", "p_skey", "测试用户乙")
 
             links, post_videos, album_video_post = await service._prepare_publish_videos(
                 ctx,
@@ -2225,7 +2225,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                     }
 
             service = Service(types.SimpleNamespace(_cached_qq_adapter_id="", ctx_service=CtxService()))
-            ctx = service_module.QzoneContext(188852752, "skey", "p_skey", "未来酱")
+            ctx = service_module.QzoneContext(100000001, "skey", "p_skey", "测试用户乙")
 
             with self.assertRaisesRegex(RuntimeError, "未生成相册视频动态"):
                 await service._prepare_publish_videos(
@@ -2248,10 +2248,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _upload_local_video(self, ctx, video):
@@ -2306,10 +2306,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _upload_local_video(self, ctx, video):
@@ -2353,10 +2353,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         result = await service._confirm_uploaded_video_in_library(ctx, "vid-from-library")
@@ -2404,10 +2404,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         uploaded = await service._upload_local_video(ctx, {"source": "local.mp4"})
@@ -2472,10 +2472,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         await service._upload_local_video(
@@ -2510,10 +2510,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         with self.assertRaisesRegex(RuntimeError, "未生成相册视频动态"):
@@ -2532,7 +2532,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "ret": 0,
                     "data": "base64-video-chunk",
-                    "cookie": "uin=188852752;p_skey=secret",
+                    "cookie": "uin=100000001;p_skey=secret",
                     "video_token": "secret-video-token",
                     "video_data": "base64-video-data",
                     "biz": {
@@ -2622,10 +2622,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         with patch.object(service_module.asyncio, "sleep", no_sleep):
@@ -2652,10 +2652,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _local_media_payload(self, media, *, default_name, label):
@@ -2758,10 +2758,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             async def _local_media_payload(self, media, *, default_name, label):
@@ -2809,7 +2809,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return [
                     service_module.QzonePost(
                         tid="video-feed",
-                        uin=188852752,
+                        uin=100000001,
                         text="上传了一个视频",
                         videos=[
                             "https://video.qq.com/from-album.mp4",
@@ -2912,7 +2912,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return [
                     service_module.QzonePost(
                         tid="video-feed",
-                        uin=188852752,
+                        uin=100000001,
                         text="视频正文",
                         videos=["qzone://video/vid-cover-feed"],
                         create_time=9999999999,
@@ -2931,10 +2931,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service(extracted_cover)
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
         with patch.object(service_module.asyncio, "sleep", no_sleep):
             uploaded = await service._upload_local_video(
@@ -3031,10 +3031,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         uploaded = await service._upload_local_video(
@@ -3092,10 +3092,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         post = await service._confirm_album_video_public(
@@ -3165,10 +3165,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         post = await service._confirm_album_video_public(
@@ -3237,10 +3237,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         post = await service._confirm_album_video_public(
@@ -3274,7 +3274,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                             "video_info": {
                                 "video_share_h5": (
                                     "https://h5.qzone.qq.com/ugc/share/video?"
-                                    "uin=188852752&appid=4&cellid=album-cell&busi_param_1=photo-sloc"
+                                    "uin=100000001&appid=4&cellid=album-cell&busi_param_1=photo-sloc"
                                 )
                             },
                         }
@@ -3319,10 +3319,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         links, post_videos, album_video_post = await service._prepare_publish_videos(
@@ -3368,7 +3368,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return [
                     service_module.QzonePost(
                         tid="dynamic-feed",
-                        uin=188852752,
+                        uin=100000001,
                         text="上传了一个视频",
                         videos=["qzone://video/vid-public"],
                         create_time=9999999999,
@@ -3381,10 +3381,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         links, post_videos, album_video_post = await service._prepare_publish_videos(
@@ -3433,10 +3433,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         with self.assertRaisesRegex(RuntimeError, "未生成相册视频动态"):
@@ -3461,10 +3461,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         video_links, post_videos, album_video_post = await service._prepare_publish_videos(
@@ -3486,11 +3486,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
-                    nickname="未来酱",
-                    cookie_values={"uin": "o188852752"},
+                    nickname="测试用户乙",
+                    cookie_values={"uin": "o100000001"},
                 )
 
             async def _upload_local_video(self, ctx, video):
@@ -3539,10 +3539,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
         video_payload = {
             "filename": "video.mp4",
@@ -3558,7 +3558,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             title="title",
             description="desc",
             play_time=1200,
-            client_key="188852752_1718000000000",
+            client_key="100000001_1718000000000",
             upload_time=1718000000,
         )
         result = await service._upload_h5_file_chunks(
@@ -3578,7 +3578,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(control_req["biz_req"]["sDesc"], "desc")
         self.assertEqual(control_req["biz_req"]["iPlayTime"], 1200)
         self.assertEqual(control_req["biz_req"]["iUploadTime"], 1718000000)
-        self.assertEqual(control_req["biz_req"]["extend_info"]["clientkey"], "188852752_1718000000000")
+        self.assertEqual(control_req["biz_req"]["extend_info"]["clientkey"], "100000001_1718000000000")
         self.assertNotIn("iBusiNessType", control_req["biz_req"])
         self.assertNotIn("vBusiNessData", control_req["biz_req"])
         upload_call = service.calls[1]
@@ -3604,13 +3604,13 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = service_module.QzoneService(types.SimpleNamespace())
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
             cookie_values={
-                "uin": "o188852752",
-                "p_uin": "o188852752",
+                "uin": "o100000001",
+                "p_uin": "o100000001",
                 "pt4_token": "pt-token",
                 "extra": "value",
             },
@@ -3618,8 +3618,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         cookie = service._h5_headers(ctx)["Cookie"]
 
-        self.assertIn("uin=188852752", cookie)
-        self.assertIn("p_uin=188852752", cookie)
+        self.assertIn("uin=100000001", cookie)
+        self.assertIn("p_uin=100000001", cookie)
         self.assertIn("p_skey=p_skey", cookie)
         self.assertIn("skey=skey", cookie)
         self.assertIn("pt4_token=pt-token", cookie)
@@ -3681,10 +3681,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         result = await service._upload_video_cover(
@@ -3696,7 +3696,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             album_name=service.DEFAULT_VIDEO_ALBUM_NAME,
             album_type_id=service.DEFAULT_VIDEO_ALBUM_TYPE_ID,
             default_album=True,
-            client_key="188852752_1718000000000",
+            client_key="100000001_1718000000000",
             description="视频正文",
             video_size=1234,
             duration_ms=5678,
@@ -3712,7 +3712,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(control_req["biz_req"]["sPicDesc"], "视频正文")
         self.assertNotIn("iBusiNessType", control_req["biz_req"])
         self.assertNotIn("vBusiNessData", control_req["biz_req"])
-        self.assertEqual(control_req["biz_req"]["mapExt"]["mobile_fakefeeds_clientkey"], "188852752_1718000000000")
+        self.assertEqual(control_req["biz_req"]["mapExt"]["mobile_fakefeeds_clientkey"], "100000001_1718000000000")
         self.assertEqual(control_req["biz_req"]["sAlbumID"], "")
         self.assertEqual(control_req["biz_req"]["sAlbumName"], "")
         self.assertEqual(control_req["biz_req"]["iAlbumTypeID"], service.DEFAULT_VIDEO_ALBUM_TYPE_ID)
@@ -3743,8 +3743,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(upload_call["url"].endswith("/FileUpload"))
         self.assertEqual(upload_call["params"]["g_tk"], ctx.gtk)
         self.assertEqual(upload_call["params"]["type"], "form")
-        self.assertEqual(init_call["headers"]["Cookie"], "uin=188852752;p_skey=p_skey")
-        self.assertEqual(upload_call["headers"]["Cookie"], "uin=188852752;p_skey=p_skey")
+        self.assertEqual(init_call["headers"]["Cookie"], "uin=100000001;p_skey=p_skey")
+        self.assertEqual(upload_call["headers"]["Cookie"], "uin=100000001;p_skey=p_skey")
         body_text = service_module.QzoneService._multipart_text(upload_call["body"])
         self.assertIn("pic_qzone", body_text)
         self.assertIn("FileUpload", body_text)
@@ -3764,10 +3764,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             async def context(self):
                 self.context_calls += 1
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey=f"skey-{self.context_calls}",
                     p_skey=f"p_skey-{self.context_calls}",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                     cookie_values={"pt4_token": f"pt-token-{self.context_calls}"},
                 )
 
@@ -3810,7 +3810,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         init_calls = [call for call in service.calls if call["label"] == "cover-init"]
         self.assertEqual(result["data"]["flag"], 1)
         self.assertFalse(service.invalidated)
-        self.assertEqual(init_calls[0]["headers"]["Cookie"], "uin=188852752;p_skey=p_skey-1")
+        self.assertEqual(init_calls[0]["headers"]["Cookie"], "uin=100000001;p_skey=p_skey-1")
         self.assertIn("pt4_token=pt-token-1", init_calls[1]["headers"]["Cookie"])
         self.assertIn("p_skey=p_skey-1", init_calls[1]["headers"]["Cookie"])
         self.assertEqual(service.calls[-1]["headers"]["Cookie"], init_calls[1]["headers"]["Cookie"])
@@ -3891,10 +3891,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -3908,10 +3908,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(service.request["method"], "GET")
         self.assertEqual(service.request["url"], service.ALBUM_LIST_JSON_URL)
-        self.assertEqual(service.request["params"]["hostUin"], 188852752)
-        self.assertEqual(service.request["params"]["uin"], "188852752")
+        self.assertEqual(service.request["params"]["hostUin"], 100000001)
+        self.assertEqual(service.request["params"]["uin"], "100000001")
         self.assertEqual(service.request["params"]["format"], "json")
-        self.assertEqual(service.request["headers"]["Cookie"], "uin=188852752;p_skey=p_skey")
+        self.assertEqual(service.request["headers"]["Cookie"], "uin=100000001;p_skey=p_skey")
 
     async def test_qzone_album_for_video_creates_public_album_when_only_system_album_exists(self):
         service_module = _load_qzone_service()
@@ -3936,10 +3936,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -3973,10 +3973,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -4007,10 +4007,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -4050,10 +4050,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -4084,10 +4084,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(ctx, {"source": "local.mp4"})
@@ -4113,10 +4113,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             async def context(self):
                 self.context_calls += 1
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey=f"skey-{self.context_calls}",
                     p_skey=f"p_skey-{self.context_calls}",
-                    nickname="未来酱",
+                    nickname="测试用户乙",
                 )
 
             def invalidate(self):
@@ -4146,7 +4146,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertFalse(service.invalidated)
-        self.assertEqual(service.calls[0]["headers"]["Cookie"], "uin=188852752;p_skey=p_skey-1")
+        self.assertEqual(service.calls[0]["headers"]["Cookie"], "uin=100000001;p_skey=p_skey-1")
         self.assertIn("p_skey=p_skey-1", service.calls[1]["headers"]["Cookie"])
         self.assertIn("skey=skey-1", service.calls[1]["headers"]["Cookie"])
         self.assertFalse(service.calls[0]["retry"])
@@ -4170,10 +4170,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         album = await service._qzone_album_for_video(
@@ -4205,10 +4205,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         ctx = service_module.QzoneContext(
-            uin=188852752,
+            uin=100000001,
             skey="skey",
             p_skey="p_skey",
-            nickname="未来酱",
+            nickname="测试用户乙",
         )
 
         result = await service._upload_video_cover(
@@ -4218,7 +4218,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             vid="vid-1",
             album_id="album-1",
             album_name="默认相册",
-            client_key="188852752_1718000000000",
+            client_key="100000001_1718000000000",
             upload_time=1718000000,
             video_size=4321,
             duration_ms=8765,
@@ -4234,7 +4234,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         map_params = control_req["biz_req"]["stExtendInfo"]["mapParams"]
         external_map_ext = control_req["biz_req"]["stExternalMapExt"]
         self.assertEqual(map_params["vid"], "vid-1")
-        self.assertEqual(map_params["clientkey"], "188852752_1718000000000")
+        self.assertEqual(map_params["clientkey"], "100000001_1718000000000")
         self.assertEqual(map_params["albumid"], "album-1")
         self.assertEqual(map_params["album_id"], "album-1")
         self.assertEqual(map_params["topicId"], "album-1")
@@ -4455,7 +4455,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("replyId", service.request_data)
         self.assertNotIn("replyTid", service.request_data)
 
-    async def test_comment_falls_back_to_h5_re_feeds(self):
+    async def test_comment_uses_h5_feed_payload(self):
         service_module = _load_qzone_service()
 
         class Service(service_module.QzoneService):
@@ -4472,23 +4472,26 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             async def _request(self, method, url, *, params=None, data=None, headers=None, retry=True, retry_parse_error=True):
-                self.calls.append((url, dict(data or {})))
-                return {"code": -10000, "message": "使用人数过多，请稍后再试"} if len(self.calls) == 1 else {"code": 0}
+                self.calls.append((url, dict(data or {}), dict(headers or {})))
+                return {"code": 0}
 
         service = Service()
-        post = service_module.QzonePost(uin=20002, tid="post-1", appid=311)
+        post = service_module.QzonePost(uin=20002, tid="post-1", appid=311, busi_param={"from": "feeds"})
         service._post_cache[post.key] = post
 
         await service.comment(post.key, "hello")
 
-        self.assertEqual(len(service.calls), 2)
-        self.assertEqual(service.calls[0][0], service.COMMENT_URL)
-        self.assertEqual(service.calls[0][1]["topicId"], "20002_post-1")
-        self.assertEqual(service.calls[0][1]["format"], "json")
-        self.assertEqual(service.calls[1][0], service.H5_COMMENT_URL)
-        self.assertEqual(service.calls[1][1]["topicId"], "20002_post-1__1")
-        self.assertEqual(service.calls[1][1]["format"], "fs")
-        self.assertEqual(service.calls[1][1]["paramstr"], "1")
+        self.assertEqual(len(service.calls), 1)
+        url, data, headers = service.calls[0]
+        self.assertEqual(url, service.H5_COMMENT_URL)
+        self.assertEqual(data["topicId"], "20002_post-1__1")
+        self.assertEqual(data["format"], "fs")
+        self.assertEqual(data["feedsType"], 100)
+        self.assertEqual(data["appid"], 311)
+        self.assertEqual(data["paramstr"], "1")
+        self.assertEqual(data["isSignIn"], "0")
+        self.assertEqual(data["busi_param"], '{"from": "feeds"}')
+        self.assertEqual(headers["Origin"], service.H5_ORIGIN)
 
     async def test_reply_comment_thread_reply_uses_only_addreply_ugc_for_own_post(self):
         service_module = _load_qzone_service()
@@ -4648,7 +4651,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -4662,16 +4665,16 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return self.detail_post
 
         service = Service()
-        post = service_module.QzonePost(uin=188852752, tid="post-1", appid=311)
-        parent = service_module.QzoneComment(uin=89761500, nickname="Friend", tid="4", submit_tid="4")
+        post = service_module.QzonePost(uin=100000001, tid="post-1", appid=311)
+        parent = service_module.QzoneComment(uin=100000002, nickname="Friend", tid="4", submit_tid="4")
         child = service_module.QzoneComment(
-            uin=89761500,
+            uin=100000002,
             nickname="Friend",
-            tid="4_r_2_89761500",
+            tid="4_r_2_100000002",
             submit_tid="2",
             parent_tid="4",
             reply_to_tid="4",
-            reply_to_uin=188852752,
+            reply_to_uin=100000001,
         )
         service._post_cache[post.key] = post
 
@@ -4681,7 +4684,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.calls, [])
         self.assertTrue(getattr(ctx.exception, "reply_verification_failed", False))
         self.assertEqual(getattr(ctx.exception, "verification_status"), "unsafe_synthetic_thread_target")
-        self.assertEqual(getattr(ctx.exception, "attempted_targets"), [{"comment_id": "4_r_2_89761500", "comment_uin": 89761500}])
+        self.assertEqual(getattr(ctx.exception, "attempted_targets"), [{"comment_id": "4_r_2_100000002", "comment_uin": 100000002}])
 
     async def test_reply_comment_avoids_short_id_when_parent_and_child_submit_id_collide(self):
         service_module = _load_qzone_service()
@@ -4694,7 +4697,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -4708,30 +4711,30 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return self.detail_post
 
         service = Service()
-        post = service_module.QzonePost(uin=188852752, tid="post-1", appid=311)
-        parent = service_module.QzoneComment(uin=89761500, nickname="Friend", tid="2", submit_tid="2")
+        post = service_module.QzonePost(uin=100000001, tid="post-1", appid=311)
+        parent = service_module.QzoneComment(uin=100000002, nickname="Friend", tid="2", submit_tid="2")
         child = service_module.QzoneComment(
-            uin=89761500,
+            uin=100000002,
             nickname="Friend",
-            tid="2_r_2_89761500",
+            tid="2_r_2_100000002",
             submit_tid="2",
             parent_tid="2",
-            reply_to_tid="2_r_1_188852752",
-            reply_to_uin=188852752,
+            reply_to_tid="2_r_1_100000001",
+            reply_to_uin=100000001,
         )
         post.comments = [
             parent,
             service_module.QzoneComment(
-                uin=188852752,
+                uin=100000001,
                 nickname="Me",
-                tid="2_r_1_188852752",
+                tid="2_r_1_100000001",
                 submit_tid="1",
                 raw_tid="1",
                 parent_tid="2",
                 reply_to_tid="2",
                 raw_reply_to_tid="2",
-                reply_to_uin=89761500,
-                raw_reply_to_uin=89761500,
+                reply_to_uin=100000002,
+                raw_reply_to_uin=100000002,
             ),
             child,
         ]
@@ -4743,8 +4746,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(service.calls[0][0], service.ADD_REPLY_UGC_URL)
         self.assertEqual(service.calls[0][1]["commentId"], "2")
-        self.assertEqual(service.calls[0][1]["commentUin"], 89761500)
-        self.assertEqual(service.calls[0][1]["topicId"], "188852752_post-1")
+        self.assertEqual(service.calls[0][1]["commentUin"], 100000002)
+        self.assertEqual(service.calls[0][1]["topicId"], "100000001_post-1")
         self.assertNotIn("t2_tid", service.calls[0][1])
         self.assertNotIn("t2_uin", service.calls[0][1])
         self.assertTrue(getattr(ctx.exception, "reply_verification_failed", False))
@@ -4753,11 +4756,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_verify_thread_reply_accepts_stable_target_even_when_raw_short_id_matches_parent(self):
         service_module = _load_qzone_service()
         post = service_module.QzonePost(
-            uin=188852752,
+            uin=100000001,
             tid="post-1",
             comments=[
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
                     tid="2",
                     submit_tid="2",
@@ -4765,29 +4768,29 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                     create_time=100,
                 ),
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
-                    tid="2_r_2_89761500",
+                    tid="2_r_2_100000002",
                     submit_tid="2",
                     parent_tid="2",
-                    reply_to_tid="2_r_1_188852752",
-                    reply_to_uin=188852752,
-                    content="@{uin:188852752,nick:Me,auto:1} 等你好久了",
+                    reply_to_tid="2_r_1_100000001",
+                    reply_to_uin=100000001,
+                    content="@{uin:100000001,nick:Me,auto:1} 等你好久了",
                     create_time=120,
                 ),
                 service_module.QzoneComment(
-                    uin=188852752,
+                    uin=100000001,
                     nickname="Me",
-                    tid="2_r_3_188852752",
+                    tid="2_r_3_100000001",
                     submit_tid="3",
                     raw_tid="3",
                     parent_tid="2",
-                    reply_to_tid="2_r_2_89761500",
+                    reply_to_tid="2_r_2_100000002",
                     raw_reply_to_tid="2",
-                    reply_to_uin=89761500,
-                    raw_reply_to_uin=89761500,
+                    reply_to_uin=100000002,
+                    raw_reply_to_uin=100000002,
                     reply_to_tid_source="t2_tid",
-                    content="@{uin:89761500,nick:Friend,auto:1} reply",
+                    content="@{uin:100000002,nick:Friend,auto:1} reply",
                     create_time=2000000000,
                 ),
             ],
@@ -4798,8 +4801,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         result = service_module.QzoneService._verify_thread_reply_in_post(
             post,
             target,
-            "@{uin:89761500,nick:Friend,auto:1} reply",
-            self_uin=188852752,
+            "@{uin:100000002,nick:Friend,auto:1} reply",
+            self_uin=100000001,
             target_ids=service_module.QzoneService._reply_verification_target_ids(
                 target,
                 parent_comment=parent,
@@ -4810,7 +4813,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result["status"], "confirmed")
-        self.assertEqual(result["verified_reply_tid"], "2_r_3_188852752")
+        self.assertEqual(result["verified_reply_tid"], "2_r_3_100000001")
         self.assertEqual(result["candidates"][-1]["raw_reply_to_tid"], "2")
 
     async def test_reply_comment_rejects_unsafe_thread_reply_without_legacy_fallback(self):
@@ -4823,7 +4826,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -4834,16 +4837,16 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": -10049, "message": "该条内容已被删除"} if len(self.calls) == 1 else {"code": 0}
 
         service = Service()
-        post = service_module.QzonePost(uin=188852752, tid="post-1", appid=311)
-        parent = service_module.QzoneComment(uin=89761500, nickname="Friend", tid="4", submit_tid="4")
+        post = service_module.QzonePost(uin=100000001, tid="post-1", appid=311)
+        parent = service_module.QzoneComment(uin=100000002, nickname="Friend", tid="4", submit_tid="4")
         child = service_module.QzoneComment(
-            uin=89761500,
+            uin=100000002,
             nickname="Friend",
-            tid="4_r_2_89761500",
+            tid="4_r_2_100000002",
             submit_tid="2",
             parent_tid="4",
-            reply_to_tid="4_r_1_188852752",
-            reply_to_uin=188852752,
+            reply_to_tid="4_r_1_100000001",
+            reply_to_uin=100000001,
         )
         service._post_cache[post.key] = post
 
@@ -4864,7 +4867,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -4876,12 +4879,12 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def detail(self, post_id):
                 return service_module.QzonePost(
-                    uin=188852752,
+                    uin=100000001,
                     tid="post-1",
                     appid=311,
                     comments=[
                         service_module.QzoneComment(
-                            uin=89761500,
+                            uin=100000002,
                             nickname="Friend",
                             tid="4",
                             submit_tid="4",
@@ -4889,36 +4892,36 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                             create_time=100,
                         ),
                         service_module.QzoneComment(
-                            uin=188852752,
+                            uin=100000001,
                             nickname="Me",
-                            tid="4_r_1_188852752",
+                            tid="4_r_1_100000001",
                             submit_tid="1",
                             parent_tid="4",
                             reply_to_tid="4",
-                            reply_to_uin=89761500,
-                            content="@{uin:89761500,nick:Friend,auto:1} 先回一下",
+                            reply_to_uin=100000002,
+                            content="@{uin:100000002,nick:Friend,auto:1} 先回一下",
                             create_time=110,
                         ),
                         service_module.QzoneComment(
-                            uin=89761500,
+                            uin=100000002,
                             nickname="Friend",
-                            tid="4_r_2_89761500",
+                            tid="4_r_2_100000002",
                             submit_tid="2",
                             parent_tid="4",
-                            reply_to_tid="4_r_1_188852752",
-                            reply_to_uin=188852752,
-                            content="@{uin:188852752,nick:Me,auto:1} 已经在路上了",
+                            reply_to_tid="4_r_1_100000001",
+                            reply_to_uin=100000001,
+                            content="@{uin:100000001,nick:Me,auto:1} 已经在路上了",
                             create_time=120,
                         ),
                         service_module.QzoneComment(
-                            uin=188852752,
+                            uin=100000001,
                             nickname="Me",
-                            tid="4_r_3_188852752",
+                            tid="4_r_3_100000001",
                             submit_tid="3",
                             parent_tid="4",
                             reply_to_tid="4",
-                            reply_to_uin=89761500,
-                            content="@{uin:89761500,nick:Friend,auto:1} reply",
+                            reply_to_uin=100000002,
+                            content="@{uin:100000002,nick:Friend,auto:1} reply",
                             create_time=2000000000,
                         ),
                     ],
@@ -4926,36 +4929,36 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         service = Service()
         post = service_module.QzonePost(
-            uin=188852752,
+            uin=100000001,
             tid="post-1",
             appid=311,
             comments=[
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
                     tid="4",
                     submit_tid="4",
                     content="出门了吗",
                 ),
                 service_module.QzoneComment(
-                    uin=188852752,
+                    uin=100000001,
                     nickname="Me",
-                    tid="4_r_1_188852752",
+                    tid="4_r_1_100000001",
                     submit_tid="1",
                     parent_tid="4",
                     reply_to_tid="4",
-                    reply_to_uin=89761500,
-                    content="@{uin:89761500,nick:Friend,auto:1} 先回一下",
+                    reply_to_uin=100000002,
+                    content="@{uin:100000002,nick:Friend,auto:1} 先回一下",
                 ),
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
-                    tid="4_r_2_89761500",
+                    tid="4_r_2_100000002",
                     submit_tid="2",
                     parent_tid="4",
-                    reply_to_tid="4_r_1_188852752",
-                    reply_to_uin=188852752,
-                    content="@{uin:188852752,nick:Me,auto:1} 已经在路上了",
+                    reply_to_tid="4_r_1_100000001",
+                    reply_to_uin=100000001,
+                    content="@{uin:100000001,nick:Me,auto:1} 已经在路上了",
                 ),
             ],
         )
@@ -4969,10 +4972,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(getattr(ctx.exception, "reply_verification_failed", False))
         self.assertEqual(getattr(ctx.exception, "verification_status"), "parent_target")
         self.assertEqual(service.calls[0][0], service.ADD_REPLY_UGC_URL)
-        self.assertEqual(service.calls[0][1]["topicId"], "188852752_post-1")
+        self.assertEqual(service.calls[0][1]["topicId"], "100000001_post-1")
         self.assertEqual(service.calls[0][1]["commentId"], "4")
-        self.assertEqual(service.calls[0][1]["commentUin"], 89761500)
-        self.assertEqual(service.calls[0][1]["content"], "@{uin:89761500,nick:Friend,auto:1} reply")
+        self.assertEqual(service.calls[0][1]["commentUin"], 100000002)
+        self.assertEqual(service.calls[0][1]["content"], "@{uin:100000002,nick:Friend,auto:1} reply")
         self.assertEqual(service.calls[0][1]["format"], "fs")
         self.assertEqual(service.calls[0][1]["code_version"], 1)
         self.assertEqual(service.calls[0][1]["with_fwd"], 0)
@@ -4980,7 +4983,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(url == service.SNS_DELETE_COMMENT_URL for url, _data in service.calls))
         self.assertTrue(
             any(
-                (data.get("comment_id") or data.get("commentId")) == "4_r_3_188852752"
+                (data.get("comment_id") or data.get("commentId")) == "4_r_3_100000001"
                 for _url, data in service.calls
             )
         )
@@ -4991,31 +4994,31 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_thread_reply_addreply_ugc_variant_uses_parent_anchor(self):
         service_module = _load_qzone_service()
         post = service_module.QzonePost(
-            uin=188852752,
+            uin=100000001,
             tid="post-1",
             appid=311,
             comments=[
-                service_module.QzoneComment(uin=89761500, nickname="Friend", tid="4", submit_tid="4"),
+                service_module.QzoneComment(uin=100000002, nickname="Friend", tid="4", submit_tid="4"),
                 service_module.QzoneComment(
-                    uin=188852752,
+                    uin=100000001,
                     nickname="Me",
-                    tid="4_r_1_188852752",
+                    tid="4_r_1_100000001",
                     submit_tid="1",
                     parent_tid="4",
                     reply_to_tid="4",
-                    reply_to_uin=89761500,
+                    reply_to_uin=100000002,
                 ),
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
-                    tid="4_r_2_89761500",
+                    tid="4_r_2_100000002",
                     submit_tid="2",
                     raw_tid="2",
                     parent_tid="4",
-                    reply_to_tid="4_r_1_188852752",
+                    reply_to_tid="4_r_1_100000001",
                     raw_reply_to_tid="1",
-                    reply_to_uin=188852752,
-                    raw_reply_to_uin=188852752,
+                    reply_to_uin=100000001,
+                    raw_reply_to_uin=100000001,
                 ),
             ],
         )
@@ -5030,43 +5033,43 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual([item["name"] for item in variants], ["pc_addreply_ugc_parent"])
-        self.assertEqual(variants[0]["comment_id"], "4_r_2_89761500")
-        self.assertEqual(variants[0]["comment_uin"], 89761500)
+        self.assertEqual(variants[0]["comment_id"], "4_r_2_100000002")
+        self.assertEqual(variants[0]["comment_uin"], 100000002)
         self.assertEqual(variants[0]["payload_comment_id"], "4")
-        self.assertEqual(variants[0]["payload_t2_tid"], "4_r_2_89761500")
-        self.assertEqual(variants[0]["topic_id"], "188852752_post-1")
+        self.assertEqual(variants[0]["payload_t2_tid"], "4_r_2_100000002")
+        self.assertEqual(variants[0]["topic_id"], "100000001_post-1")
 
     async def test_thread_reply_addreply_ugc_variant_allows_colliding_parent_and_child_ids(self):
         service_module = _load_qzone_service()
         post = service_module.QzonePost(
-            uin=188852752,
+            uin=100000001,
             tid="post-1",
             appid=311,
             comments=[
-                service_module.QzoneComment(uin=89761500, nickname="Friend", tid="2", submit_tid="2"),
+                service_module.QzoneComment(uin=100000002, nickname="Friend", tid="2", submit_tid="2"),
                 service_module.QzoneComment(
-                    uin=188852752,
+                    uin=100000001,
                     nickname="Me",
-                    tid="2_r_1_188852752",
+                    tid="2_r_1_100000001",
                     submit_tid="1",
                     raw_tid="1",
                     parent_tid="2",
                     reply_to_tid="2",
                     raw_reply_to_tid="2",
-                    reply_to_uin=89761500,
-                    raw_reply_to_uin=89761500,
+                    reply_to_uin=100000002,
+                    raw_reply_to_uin=100000002,
                 ),
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
-                    tid="2_r_2_89761500",
+                    tid="2_r_2_100000002",
                     submit_tid="2",
                     raw_tid="2",
                     parent_tid="2",
                     reply_to_tid="2",
                     raw_reply_to_tid="2",
-                    reply_to_uin=188852752,
-                    raw_reply_to_uin=188852752,
+                    reply_to_uin=100000001,
+                    raw_reply_to_uin=100000001,
                 ),
             ],
         )
@@ -5081,37 +5084,37 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual([item["name"] for item in variants], ["pc_addreply_ugc_parent"])
-        self.assertEqual(variants[0]["comment_id"], "2_r_2_89761500")
-        self.assertEqual(variants[0]["comment_uin"], 89761500)
+        self.assertEqual(variants[0]["comment_id"], "2_r_2_100000002")
+        self.assertEqual(variants[0]["comment_uin"], 100000002)
         self.assertEqual(variants[0]["payload_comment_id"], "2")
-        self.assertEqual(variants[0]["payload_t2_tid"], "2_r_2_89761500")
-        self.assertEqual(variants[0]["topic_id"], "188852752_post-1")
+        self.assertEqual(variants[0]["payload_t2_tid"], "2_r_2_100000002")
+        self.assertEqual(variants[0]["topic_id"], "100000001_post-1")
 
     async def test_thread_reply_addreply_ugc_variant_allows_friend_post_bot_parent_short_id_one(self):
         service_module = _load_qzone_service()
         post = service_module.QzonePost(
-            uin=89761500,
+            uin=100000002,
             tid="post-1",
             appid=311,
             comments=[
                 service_module.QzoneComment(
-                    uin=188852752,
+                    uin=100000001,
                     nickname="Me",
                     tid="1",
                     submit_tid="1",
                     raw_tid="1",
                 ),
                 service_module.QzoneComment(
-                    uin=89761500,
+                    uin=100000002,
                     nickname="Friend",
-                    tid="1_r_1_89761500",
+                    tid="1_r_1_100000002",
                     submit_tid="1",
                     raw_tid="1",
                     parent_tid="1",
                     reply_to_tid="1",
                     raw_reply_to_tid="1",
-                    reply_to_uin=188852752,
-                    raw_reply_to_uin=188852752,
+                    reply_to_uin=100000001,
+                    raw_reply_to_uin=100000001,
                 ),
             ],
         )
@@ -5126,11 +5129,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual([item["name"] for item in variants], ["pc_addreply_ugc_parent"])
-        self.assertEqual(variants[0]["comment_id"], "1_r_1_89761500")
-        self.assertEqual(variants[0]["comment_uin"], 89761500)
+        self.assertEqual(variants[0]["comment_id"], "1_r_1_100000002")
+        self.assertEqual(variants[0]["comment_uin"], 100000002)
         self.assertEqual(variants[0]["payload_comment_id"], "1")
-        self.assertEqual(variants[0]["payload_t2_tid"], "1_r_1_89761500")
-        self.assertEqual(variants[0]["topic_id"], "89761500_post-1")
+        self.assertEqual(variants[0]["payload_t2_tid"], "1_r_1_100000002")
+        self.assertEqual(variants[0]["topic_id"], "100000002_post-1")
 
     async def test_friend_post_thread_reply_h5_re_feeds_uses_bot_parent_anchor(self):
         service_module = _load_qzone_service()
@@ -5142,7 +5145,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -5153,25 +5156,25 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": 0}
 
         service = Service()
-        post = service_module.QzonePost(uin=897537513, tid="e9557f35fbc73c6af9a40000", appid=311)
+        post = service_module.QzonePost(uin=100000003, tid="e9557f35fbc73c6af9a40000", appid=311)
         parent = service_module.QzoneComment(
-            uin=188852752,
+            uin=100000001,
             nickname="Me",
             tid="1",
             submit_tid="1",
             raw_tid="1",
         )
         child = service_module.QzoneComment(
-            uin=897537513,
-            nickname="会好起来的",
-            tid="1_r_1_897537513",
+            uin=100000003,
+            nickname="测试用户丙",
+            tid="1_r_1_100000003",
             submit_tid="1",
             raw_tid="1",
             parent_tid="1",
             reply_to_tid="1",
             raw_reply_to_tid="1",
-            reply_to_uin=188852752,
-            raw_reply_to_uin=188852752,
+            reply_to_uin=100000001,
+            raw_reply_to_uin=100000001,
         )
         service._post_cache[post.key] = post
 
@@ -5181,14 +5184,14 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(service.calls), 1)
         self.assertEqual(service.calls[0][0], service.H5_COMMENT_URL)
         data = service.calls[0][1]
-        self.assertEqual(data["topicId"], "897537513_e9557f35fbc73c6af9a40000__1")
-        self.assertEqual(data["hostUin"], 897537513)
-        self.assertEqual(data["uin"], 188852752)
-        self.assertEqual(data["content"], "@{uin:897537513,nick:会好起来的,auto:1} 三级评论")
+        self.assertEqual(data["topicId"], "100000003_e9557f35fbc73c6af9a40000__1")
+        self.assertEqual(data["hostUin"], 100000003)
+        self.assertEqual(data["uin"], 100000001)
+        self.assertEqual(data["content"], "@{uin:100000003,nick:测试用户丙,auto:1} 三级评论")
         self.assertEqual(data["commentId"], "1")
-        self.assertEqual(data["commentUin"], 188852752)
+        self.assertEqual(data["commentUin"], 100000001)
         self.assertEqual(data["paramstr"], "2")
-        self.assertEqual(data["qzreferrer"], "https://user.qzone.qq.com/897537513")
+        self.assertEqual(data["qzreferrer"], "https://user.qzone.qq.com/100000003")
 
     async def test_reply_comment_thread_reply_rejects_synthetic_short_id_variants(self):
         service_module = _load_qzone_service()
@@ -5200,7 +5203,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -5213,16 +5216,16 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": 0}
 
         service = Service()
-        post = service_module.QzonePost(uin=188852752, tid="post-1", appid=311)
-        parent = service_module.QzoneComment(uin=89761500, nickname="Friend", tid="4", submit_tid="4")
+        post = service_module.QzonePost(uin=100000001, tid="post-1", appid=311)
+        parent = service_module.QzoneComment(uin=100000002, nickname="Friend", tid="4", submit_tid="4")
         child = service_module.QzoneComment(
-            uin=89761500,
+            uin=100000002,
             nickname="Friend",
-            tid="4_r_2_89761500",
+            tid="4_r_2_100000002",
             submit_tid="2",
             parent_tid="4",
-            reply_to_tid="4_r_1_188852752",
-            reply_to_uin=188852752,
+            reply_to_tid="4_r_1_100000001",
+            reply_to_uin=100000001,
         )
         service._post_cache[post.key] = post
 
@@ -5243,7 +5246,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
             async def context(self):
                 return service_module.QzoneContext(
-                    uin=188852752,
+                    uin=100000001,
                     skey="skey",
                     p_skey="p_skey",
                     nickname="Me",
@@ -5254,27 +5257,27 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": -10049, "message": "该条内容已被删除"}
 
         service = Service()
-        post = service_module.QzonePost(uin=188852752, tid="post-1", appid=311)
-        parent = service_module.QzoneComment(uin=89761500, nickname="Friend", tid="4", submit_tid="4")
+        post = service_module.QzonePost(uin=100000001, tid="post-1", appid=311)
+        parent = service_module.QzoneComment(uin=100000002, nickname="Friend", tid="4", submit_tid="4")
         child = service_module.QzoneComment(
-            uin=89761500,
+            uin=100000002,
             nickname="Friend",
-            tid="4_r_2_89761500",
+            tid="4_r_2_100000002",
             submit_tid="2",
             parent_tid="4",
-            reply_to_tid="4_r_1_188852752",
-            reply_to_uin=188852752,
+            reply_to_tid="4_r_1_100000001",
+            reply_to_uin=100000001,
         )
         post.comments = [
             parent,
             service_module.QzoneComment(
-                uin=188852752,
+                uin=100000001,
                 nickname="Me",
-                tid="4_r_1_188852752",
+                tid="4_r_1_100000001",
                 submit_tid="1",
                 parent_tid="4",
                 reply_to_tid="4",
-                reply_to_uin=89761500,
+                reply_to_uin=100000002,
             ),
             child,
         ]
@@ -5287,8 +5290,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.calls[0][0], service.ADD_REPLY_UGC_URL)
         data = service.calls[0][1]
         self.assertEqual(data["commentId"], "4")
-        self.assertEqual(data["commentUin"], 89761500)
-        self.assertEqual(data["topicId"], "188852752_post-1")
+        self.assertEqual(data["commentUin"], 100000002)
+        self.assertEqual(data["topicId"], "100000001_post-1")
         self.assertNotIn("t1_tid", data)
         self.assertNotIn("t1_uin", data)
         self.assertNotIn("t2_tid", data)
@@ -5408,7 +5411,7 @@ class QzoneHostTests(unittest.IsolatedAsyncioTestCase):
                 self.invalidated = False
 
             async def context(self):
-                return types.SimpleNamespace(nickname="未来酱", uin=188852752)
+                return types.SimpleNamespace(nickname="测试用户乙", uin=100000001)
 
             async def publish_post(self, *, text="", images=None, videos=None):
                 self.publish_calls += 1

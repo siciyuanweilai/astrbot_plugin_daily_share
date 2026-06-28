@@ -120,7 +120,11 @@ class TaskExecutorFlowMixin:
                 target_umo=uid,
                 event=tool_event,
                 period=period,
-                initial_img_path=await self._maybe_attach_hot_news_image(uid=uid, stype=stype),
+                initial_img_path=await self._maybe_attach_hot_news_image(
+                    uid=uid,
+                    stype=stype,
+                    news_data=news_data,
+                ),
             )
 
             send_img_path = send_img_path or img_path

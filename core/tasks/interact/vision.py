@@ -132,6 +132,26 @@ def _qzone_image_context_hash(*parts: object) -> str:
     return hashlib.sha1(identity.encode("utf-8")).hexdigest()[:16]
 
 
+def _qzone_post_body_cache_identity(post) -> str:
+    uin = str(getattr(post, "uin", "") or "").strip()
+    appid = str(getattr(post, "appid", "") or "").strip()
+    created_at = int(getattr(post, "create_time", 0) or 0)
+    content = _qzone_post_plain_text(post)
+    images = getattr(post, "images", None) or []
+    videos = getattr(post, "videos", None) or []
+    if not uin or not created_at or (not content and not images and not videos):
+        return ""
+    return _qzone_image_context_hash(
+        "body",
+        uin,
+        appid,
+        created_at,
+        content[:260],
+        len(images),
+        len(videos),
+    )
+
+
 def _qzone_image_context_cache_keys(post, *, index: int, total: int) -> list[str]:
     prefix = (
         str(getattr(post, "uin", "") or ""),
@@ -148,6 +168,9 @@ def _qzone_image_context_cache_keys(post, *, index: int, total: int) -> list[str
     content = _qzone_post_plain_text(post)
     if created_at or content:
         keys.append(_qzone_image_context_hash(*prefix, "body", created_at, content[:260]))
+    body_identity = _qzone_post_body_cache_identity(post)
+    if body_identity:
+        keys.append(_qzone_image_context_hash(*prefix, "post_body", body_identity))
     return list(dict.fromkeys(keys))
 
 

@@ -126,6 +126,7 @@ class DailySharePlugin(PluginRuntimeMixin, PluginLlmMixin, PluginSupportMixin, D
         主动分享日常内容、新闻热搜、获取热搜图片等。
         当用户想要看新闻、热搜、早安、晚安、知识、心情或推荐时调用此工具。
         也支持获取"每天60s读世界"或"AI资讯快报"图片。
+        只有用户明确要求新闻分享、热搜分享、热搜长图或指定新闻源时，才按新闻类请求调用；娱乐传闻、八卦闲聊不属于新闻分享意图。
 
         Args:
             share_type (string): 分享类型。支持：自动、问候、新闻、心情、知识、推荐、60s新闻、AI资讯。用户没有明确类型时设为自动。
@@ -160,13 +161,15 @@ class DailySharePlugin(PluginRuntimeMixin, PluginLlmMixin, PluginSupportMixin, D
         index: str = "",
         query: str = "",
         source: str = None,
+        source_explicit: bool = False,
         to_qzone: bool = False
     ):
         """
         获取最近一次新闻热搜长图或新闻分享中某条新闻的链接、摘要或来源。
         当用户追问“第3条链接”“这个详细说说”“刚才那条来源”“澎湃第10条原文”等新闻后续问题时调用。
         只要用户追问新闻的“链接、网址、原文、原文链接、出处、来源、详情、摘要、刚才那条、上面那条、第几条”，就优先调用本工具。
-        如果用户同时提到新闻源名称，例如“知乎第3条原文”“澎湃第10条链接”，请把新闻源填入 source。
+        如果用户本轮明确提到新闻源名称，例如“知乎第3条原文”“澎湃第10条链接”，请把新闻源填入 source，并把 source_explicit 设为 true。
+        如果用户只说“第2条链接”“刚才那条详情”等没有点名新闻源的追问，source 必须留空，source_explicit 必须为 false。
         你必须把自己理解出的新闻序号填入 index，使用阿拉伯数字字符串，例如用户说“第十条链接”时 index 填 "10"。
         用户只说“这个”“刚才那条”“上面那条”且没有明确序号时，index 留空，工具会使用最近关注的新闻。
         只负责按结构化序号、最近关注项或标题关键词查缓存；返回结果会优先使用短链接，不要把工具返回的短链接替换成原始长链接；不要用它重新生成新闻分享。
@@ -177,7 +180,8 @@ class DailySharePlugin(PluginRuntimeMixin, PluginLlmMixin, PluginSupportMixin, D
             action (string): 查询动作。链接填 link；详细说明或摘要填 summary；只问来源出处填 source；想看可查列表填 list。用户没说清时默认 link。
             index (string): 用户要看的新闻序号，1 表示第 1 条。必须由你理解用户话语后填写阿拉伯数字字符串，例如 "18"；不要把“第十八条链接”整句填进来。
             query (string): 没有明确序号时填写标题关键词；不要把“第三条”“第3条链接”等序号原句片段填到这里。
-            source (string): 可选新闻源，如财联社、微博、知乎、抖音、快手。只有用户明确指定某个新闻源时填写；追问刚才长图时留空。
+            source (string): 可选新闻源，如财联社、微博、知乎、抖音、快手。只有用户本轮明确指定某个新闻源时填写；追问刚才长图时留空。
+            source_explicit (boolean): 用户本轮是否明确点名了 source 对应新闻源。明确点名才设为 true；否则必须为 false，避免沿用上一轮新闻源。
             to_qzone (boolean): 是否查询最近一次 QQ 空间新闻缓存。只有用户明确说空间或QQ空间那条时设为 true。
         """
         return await self._news_link_tool_impl(
@@ -186,6 +190,7 @@ class DailySharePlugin(PluginRuntimeMixin, PluginLlmMixin, PluginSupportMixin, D
             index=index,
             query=query,
             source=source,
+            source_explicit=source_explicit,
             to_qzone=to_qzone,
         )
 

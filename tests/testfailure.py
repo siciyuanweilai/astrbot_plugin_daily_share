@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import importlib
 import importlib.util
 import os
@@ -691,7 +691,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(manager._coerce_news_tool_index("第10条链接"))
         self.assertIsNone(manager._coerce_news_tool_index("刚才第十条原文"))
 
-    async def test_cache_news_snapshot_fetches_complete_source_list(self):
+    async def test_cache_news_snapshot_stores_snapshot_payload_without_fetch(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
 
@@ -714,14 +714,55 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         ok = await manager.cache_news_snapshot(
             "aiocqhttp:GroupMessage:123",
-            news_data=([{"title": "新闻1", "url": "https://example.com/1"}], "zhihu"),
+            snapshot_data=manager._news_snapshot_payload(
+                [{"title": "新闻1", "url": "https://example.com/1"}],
+                "zhihu",
+            ),
         )
 
         snapshot = plugin.db.state[manager._news_snapshot_key("aiocqhttp:GroupMessage:123")]
         self.assertTrue(ok)
-        self.assertEqual(plugin.news_service.calls, [("zhihu", 50, False)])
-        self.assertEqual(len(snapshot["items"]), 7)
-        self.assertEqual(snapshot["items"][6]["url"], "https://example.com/7")
+        self.assertEqual(plugin.news_service.calls, [])
+        self.assertEqual(len(snapshot["items"]), 1)
+        self.assertEqual(snapshot["source_key"], "zhihu")
+
+    async def test_load_execute_share_news_fetches_snapshot_limit_once(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class NewsService(_NewsService):
+            def __init__(self):
+                self.calls = []
+
+            def select_news_source(self, excluded_source=None):
+                return "yicai"
+
+            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
+                self.calls.append((source, limit, allow_fallback))
+                return (
+                    [
+                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
+                        for i in range(1, 21)
+                    ],
+                    source,
+                )
+
+        plugin.news_service = NewsService()
+        manager = mod.TaskManager(plugin)
+
+        loaded, news_data = await manager._load_execute_share_news(
+            uid="aiocqhttp:GroupMessage:123",
+            stype=mod.ShareType.NEWS,
+            news_source="yicai",
+            history_source="test",
+            progress_id="progress",
+        )
+
+        snapshot = plugin.db.state[manager._news_snapshot_key("aiocqhttp:GroupMessage:123")]
+        self.assertTrue(loaded)
+        self.assertEqual(len(news_data[0]), 20)
+        self.assertEqual(plugin.news_service.calls, [("yicai", 50, True)])
+        self.assertEqual(len(snapshot["items"]), 20)
 
     async def test_cached_news_link_keeps_same_target_source_snapshots(self):
         mod = _load_tasks_module()
@@ -743,11 +784,23 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         await manager.cache_news_snapshot(
             target,
-            news_data=([{"title": "知乎新闻1", "url": "https://example.com/zhihu/1"}], "zhihu"),
+            snapshot_data=manager._news_snapshot_payload(
+                [
+                    {"title": "知乎新闻1", "url": "https://example.com/zhihu/1"},
+                    {"title": "zhihu新闻2", "url": "https://example.com/zhihu/2"},
+                ],
+                "zhihu",
+            ),
         )
         await manager.cache_news_snapshot(
             target,
-            news_data=([{"title": "澎湃新闻1", "url": "https://example.com/thepaper/1"}], "thepaper"),
+            snapshot_data=manager._news_snapshot_payload(
+                [
+                    {"title": "澎湃新闻1", "url": "https://example.com/thepaper/1"},
+                    {"title": "thepaper新闻2", "url": "https://example.com/thepaper/2"},
+                ],
+                "thepaper",
+            ),
         )
 
         result = await manager.get_cached_news_link(
@@ -799,6 +852,39 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("http://qdls.top/?c=abc123", result)
         self.assertNotIn("https://www.36kr.com/p/3841823029447170", result)
         self.assertIn("摘要：这是一条摘要", result)
+
+    async def test_get_cached_news_link_reuses_short_url_cache(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class NewsService(_NewsService):
+            def __init__(self):
+                self.calls = []
+
+            async def shorten_url(self, url):
+                self.calls.append(url)
+                return "http://qdls.top/?c=abc123"
+
+        plugin.news_service = NewsService()
+        manager = mod.TaskManager(plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        plugin.db.state[manager._news_snapshot_key(target)] = {
+            "source_name": YICAI_NAME,
+            "items": [
+                {
+                    "title": "目标新闻",
+                    "url": "https://www.36kr.com/p/3841823029447170",
+                }
+            ],
+        }
+
+        first = await manager.get_cached_news_link(target, index="1", refresh_source=False)
+        second = await manager.get_cached_news_link(target, index="1", refresh_source=False)
+
+        self.assertEqual(plugin.news_service.calls, ["https://www.36kr.com/p/3841823029447170"])
+        self.assertIn("http://qdls.top/?c=abc123", first)
+        self.assertIn("http://qdls.top/?c=abc123", second)
+        self.assertIn("news_short_url_cache", plugin.db.state)
 
     async def test_get_cached_news_link_keeps_original_url_when_shortener_fails(self):
         mod = _load_tasks_module()
@@ -1390,7 +1476,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             "content",
             mod.ShareType.MOOD,
             "life",
-            target_umo="aiocqhttp:FriendMessage:89761500",
+            target_umo="aiocqhttp:FriendMessage:100000002",
             event=event,
         )
 
@@ -1401,7 +1487,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
     async def test_execute_share_generates_visual_media_before_audio(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
-        plugin.receiver_conf = {"users": ["aiocqhttp:FriendMessage:89761500"], "groups": []}
+        plugin.receiver_conf = {"users": ["aiocqhttp:FriendMessage:100000002"], "groups": []}
         plugin.image_conf = {
             "enable_ai_image": True,
             "enable_ai_video": False,
@@ -1426,7 +1512,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         await manager.execute_share(
             force_type=mod.ShareType.MOOD,
-            specific_target="aiocqhttp:FriendMessage:89761500",
+            specific_target="aiocqhttp:FriendMessage:100000002",
         )
 
         self.assertEqual(order, ["image", "audio"])
@@ -1434,7 +1520,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
     async def test_execute_share_sends_audio_then_video_without_image_when_video_exists(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
-        plugin.receiver_conf = {"users": ["aiocqhttp:FriendMessage:89761500"], "groups": []}
+        plugin.receiver_conf = {"users": ["aiocqhttp:FriendMessage:100000002"], "groups": []}
         plugin.image_conf = {
             "enable_ai_image": True,
             "enable_ai_video": True,
@@ -1471,8 +1557,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         await manager.execute_share(
             force_type=mod.ShareType.MOOD,
-            specific_target="aiocqhttp:FriendMessage:89761500",
-            event=_Event(unified_msg_origin="aiocqhttp:FriendMessage:89761500"),
+            specific_target="aiocqhttp:FriendMessage:100000002",
+            event=_Event(unified_msg_origin="aiocqhttp:FriendMessage:100000002"),
         )
 
         self.assertEqual(order, ["image", "video", "audio"])
@@ -1708,10 +1794,41 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(asyncio.gather(*plugin._bg_tasks), timeout=1)
         self.assertFalse(plugin._lock.locked())
 
-    async def test_custom_target_cron_does_not_add_global_random_delay(self):
+    async def test_custom_target_cron_uses_global_random_delay(self):
         mod = _load_tasks_module()
+        delay_mod = sys.modules[f"{TASKS_MODULE_NAME}.scheduler.delay"]
         plugin = _Plugin()
         plugin.basic_conf = {"cron_random_delay": 30}
+        plugin.receiver_conf = {"groups": ["123:08:30:心情"], "users": []}
+        manager = mod.TaskManager(plugin)
+        called = asyncio.Event()
+
+        async def execute_share(*args, **kwargs):
+            called.set()
+
+        manager.execute_share = execute_share
+        manager.setup_custom_target_crons()
+
+        custom_job = next(job for job in plugin.scheduler.jobs if job["kwargs"].get("id") == "custom_share_123")
+        old_randint = delay_mod.random_module.randint
+        delay_mod.random_module.randint = lambda start, end: 120
+        try:
+            await custom_job["func"]()
+        finally:
+            delay_mod.random_module.randint = old_randint
+
+        job_ids = {job["kwargs"].get("id") for job in plugin.scheduler.jobs}
+        self.assertFalse(called.is_set())
+        self.assertIn("delayed_custom_share_123", job_ids)
+        self.assertGreater(
+            plugin.db.state["target_123"]["pending_delay_job"]["target_time"],
+            datetime.now().timestamp(),
+        )
+
+    async def test_custom_target_cron_without_random_delay_runs_immediately(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.basic_conf = {"cron_random_delay": 0}
         plugin.receiver_conf = {"groups": ["123:08:30:心情"], "users": []}
         manager = mod.TaskManager(plugin)
         called = asyncio.Event()

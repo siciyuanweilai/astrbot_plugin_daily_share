@@ -63,8 +63,7 @@ class TaskHelperContextMixin:
     async def _cache_news_snapshot_for_targets(
         self,
         *target_uids,
-        news_data=None,
-        source_key: str = None,
+        snapshot_data=None,
         image_url: str = None,
         event: AstrMessageEvent = None,
     ):
@@ -72,8 +71,7 @@ class TaskHelperContextMixin:
             if target_uid:
                 await self.cache_news_snapshot(
                     target_uid,
-                    news_data=news_data,
-                    source_key=source_key,
+                    snapshot_data=snapshot_data,
                     image_url=image_url,
                 )
         if event:
@@ -81,7 +79,6 @@ class TaskHelperContextMixin:
             if current_target and current_target not in target_uids:
                 await self.cache_news_snapshot(
                     current_target,
-                    news_data=news_data,
-                    source_key=source_key,
+                    snapshot_data=snapshot_data,
                     image_url=image_url,
                 )
