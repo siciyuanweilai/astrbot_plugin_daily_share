@@ -1738,6 +1738,63 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["processed"]["3:feed-key"]["action"], "liked")
         self.assertEqual(state["processed"]["post:3:311:curkey:stable-curkey"]["action"], "liked")
 
+    async def test_auto_like_skips_duplicate_posts_in_same_run(self):
+        module, models = _load_auto_comment_module()
+
+        class Service:
+            def __init__(self):
+                self.likes = []
+
+            async def context(self):
+                return types.SimpleNamespace(uin=1)
+
+            async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
+                return [
+                    models.QzonePost(
+                        uin=3,
+                        tid="feed-key",
+                        curkey="stable-curkey",
+                        name="Friend",
+                        text="今天去看展",
+                    ),
+                    models.QzonePost(
+                        uin=3,
+                        tid="detail-key",
+                        curkey="stable-curkey",
+                        name="Friend",
+                        text="今天去看展",
+                    ),
+                ]
+
+            async def like(self, post_id):
+                self.likes.append(post_id)
+
+        class Manager(module.TaskQzoneAutoCommentMixin):
+            def __init__(self):
+                self.qzone_conf = {
+                    "enable_qzone": True,
+                    "qzone_enable_auto_like": True,
+                    "qzone_auto_like_limit": 2,
+                }
+                self.db = FakeDb()
+                self.plugin = types.SimpleNamespace(
+                    _is_terminated=False,
+                    qzone_service=Service(),
+                    _page_emit_dashboard_event=lambda *args, **kwargs: None,
+                )
+
+        manager = Manager()
+
+        async def no_sleep(_seconds):
+            return None
+
+        with patch.object(module.asyncio, "sleep", no_sleep):
+            result = await manager.execute_qzone_auto_like()
+
+        self.assertEqual(result["liked"], 1)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(manager.plugin.qzone_service.likes, ["3:feed-key"])
+
     async def test_auto_like_processed_body_alias_skips_changed_post_identity(self):
         module, models = _load_auto_comment_module()
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import re
 from datetime import datetime
 from typing import Any
 
@@ -21,9 +22,24 @@ def _is_mention_feed_item(item: dict[str, Any], self_uin: int) -> bool:
     if appid and appid != "311":
         return False
     html = str(item.get("html") or "")
-    if "提到我" in html:
-        return True
-    return bool(self_uin and f"nameCard_{int(self_uin)}" in html and "@" in html)
+    if not self_uin:
+        return False
+    body_pattern = re.compile(
+        r'<(?:p|div)\b[^>]*class=(?P<quote>["\'])[^"\']*\b(?:txt-box-title|txt-box|content-box|qz_summary)\b[^"\']*(?P=quote)[^>]*>.*?</(?:p|div)>',
+        re.I | re.S,
+    )
+    body_blocks = [match.group(0) for match in body_pattern.finditer(html)]
+    if not body_blocks:
+        return False
+    pattern = re.compile(
+        rf'<a\b[^>]*(?:link|href)=["\'][^"\']*nameCard_{int(self_uin)}\b[^"\']*["\'][^>]*>(.*?)</a>',
+        re.I | re.S,
+    )
+    for block in body_blocks:
+        for label in pattern.findall(block):
+            if "@" in label:
+                return True
+    return False
 
 
 class QzoneFeedExtraMixin:

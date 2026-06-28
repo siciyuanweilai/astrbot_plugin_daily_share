@@ -19,6 +19,7 @@ from ..tracker import (
     QZONE_AUTO_LIKE_POLICY_VERSION,
     QZONE_AUTO_LIKE_STATE_KEY,
     _mark_qzone_post_processed,
+    _post_alias_keys,
     _post_key,
 )
 from .pacing import QZONE_ACTION_DELAY_SECONDS
@@ -56,11 +57,17 @@ async def execute_qzone_auto_like_task(owner, *, emit_summary: bool = True) -> d
             error=exc,
         )
 
+    seen_post_keys: set[str] = set()
     for post in posts:
         if result["liked"] >= limit:
             break
         result["scanned"] += 1
         post_key = _post_key(post)
+        post_aliases = set(_post_alias_keys(post))
+        if post_aliases and post_aliases & seen_post_keys:
+            result["skipped"] += 1
+            continue
+        seen_post_keys.update(post_aliases)
         if not owner._qzone_auto_like_candidate(post, self_uin=ctx.uin, processed=processed):
             result["skipped"] += 1
             continue

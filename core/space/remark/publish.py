@@ -19,10 +19,10 @@ class QzoneCommentPostMixin:
         )
         payload = await self._request(
             "POST",
-            self.H5_COMMENT_URL,
+            self.COMMENT_URL,
             params={"g_tk": ctx.gtk},
             data=data,
-            headers=self._comment_h5_headers(ctx, referer=str(data.get("qzreferrer") or "")),
+            headers=self._headers(ctx, Referer=str(data.get("qzreferrer") or ""), Origin=self.BASE_URL),
             retry_parse_error=False,
         )
         if self._comment_submit_ok(payload):

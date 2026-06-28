@@ -1163,6 +1163,33 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                                     </li>
                                 """,
                             },
+                            {
+                                "appid": "311",
+                                "key": "comment-notice-key",
+                                "uin": str(friend_uin),
+                                "nickname": "FRIEND_NICK",
+                                "html": """
+                                    <li class="f-single">
+                                      <div class="f-nick">
+                                        <a class="f-name q_namecard" link="nameCard_20002">FRIEND_NICK</a>
+                                        <span class="state">评论了我的说说</span>
+                                      </div>
+                                      <div id="feed_10001_311_4_1782452785_1_1">
+                                        <i class="none" name="feed_data"
+                                           data-fkey="self-post-key"
+                                           data-tid="self-post-key"
+                                           data-uin="10001"
+                                           data-abstime="1782452785"></i>
+                                        <p class="txt-box-title">Bot 自己发的带图说说</p>
+                                        <div class="comments-content">
+                                          <a class="nickname q_namecard" link="nameCard_20002">FRIEND_NICK</a>
+                                          回复
+                                          <a class="nickname q_namecard" link="nameCard_10001">@BOT_NICK</a>
+                                        </div>
+                                      </div>
+                                    </li>
+                                """,
+                            },
                         ],
                     },
                 }
@@ -4483,7 +4510,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(service.calls), 1)
         url, data, headers = service.calls[0]
-        self.assertEqual(url, service.H5_COMMENT_URL)
+        self.assertEqual(url, service.COMMENT_URL)
         self.assertEqual(data["topicId"], "20002_post-1__1")
         self.assertEqual(data["format"], "fs")
         self.assertEqual(data["feedsType"], 100)
@@ -4491,7 +4518,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["paramstr"], "1")
         self.assertEqual(data["isSignIn"], "0")
         self.assertEqual(data["busi_param"], '{"from": "feeds"}')
-        self.assertEqual(headers["Origin"], service.H5_ORIGIN)
+        self.assertEqual(headers["Origin"], service.BASE_URL)
 
     async def test_reply_comment_thread_reply_uses_only_addreply_ugc_for_own_post(self):
         service_module = _load_qzone_service()
