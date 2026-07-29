@@ -1,5 +1,3 @@
-[![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
-
 <div align="center">
   <img src="./logo.png" width="152" alt="愿此见闻温柔你的日常">
 
