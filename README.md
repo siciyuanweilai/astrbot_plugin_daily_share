@@ -26,6 +26,8 @@
 
 </div>
 
+[![Yousa Ling](https://count.getloli.com/get/@DailyLife?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_life)
+
 > [!TIP]
 > **v1.0.0 正式发布**：日常分享、真实新闻与快照、场景上下文、多模态生成、智能调度、QQ 空间互动和可视化仪表盘已经形成完整闭环。完整发布内容见 [CHANGELOG.md](./CHANGELOG.md)。
 
