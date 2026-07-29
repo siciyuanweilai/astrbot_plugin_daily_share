@@ -1,0 +1,169 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  min-height: 96px;
+  padding: 18px 20px;
+  border: 1px solid rgba(241, 213, 226, 0.9);
+  border-radius: 8px;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.95), rgba(255, 240, 248, 0.88) 58%, rgba(238, 249, 255, 0.9)),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.topbar-title {
+  min-width: 0;
+}
+
+.dashboard-view .topbar {
+  padding-right: 112px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  padding-right: 72px;
+}
+
+.settings-view .topbar-actions {
+  padding-right: 0;
+  flex-wrap: wrap;
+}
+
+.settings-view {
+  min-height: 100vh;
+}
+
+.settings-topbar {
+  width: 100%;
+  padding-right: 112px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  color: #4d2b3a;
+}
+
+h2 {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.icon-button,
+.text-button,
+.primary,
+.segment {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+
+.icon-button:hover,
+.text-button:hover,
+.segment:hover {
+  border-color: #eeb5cf;
+  background: #fff7fb;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.config-list dt,
+.item-meta,
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.primary-column,
+.side-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.primary-column {
+  grid-column: span 2;
+}
+
+.side-column {
+  grid-column: span 1;
+}
+
+.side-column {
+  grid-template-rows: auto;
+}
+
+.control-grid {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.control-grid.has-open-select {
+  z-index: 48;
+}
+
+.panel {
+  position: relative;
+  min-width: 0;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 249, 252, 0.94)),
+    var(--surface);
+}
+
+.panel.has-open-select {
+  z-index: 49;
+}
+
+.panel.wide {
+  grid-column: auto;
+}
+

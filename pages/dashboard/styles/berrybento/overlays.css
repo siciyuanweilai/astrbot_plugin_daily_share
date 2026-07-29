@@ -1,0 +1,210 @@
+.sweet-select-menu,
+.sweet-combo-menu,
+.qzone-card-menu-panel {
+  border-color: var(--bento-line-strong);
+  border-radius: 18px;
+  padding: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 232, 0.96)),
+    var(--bento-card-solid);
+  box-shadow: 0 22px 44px rgba(126, 71, 96, 0.18);
+}
+
+.sweet-select-menu,
+.sweet-combo-menu {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.sweet-select-option,
+.sweet-combo-option,
+.qzone-card-menu-panel button {
+  border-radius: 14px;
+}
+
+html[data-theme="dark"] .sweet-select-menu,
+html[data-theme="dark"] .sweet-combo-menu,
+html[data-theme="dark"] .qzone-card-menu-panel {
+  background:
+    linear-gradient(145deg, rgba(66, 43, 58, 0.98), rgba(39, 29, 42, 0.98)),
+    var(--bento-card);
+}
+
+.sweet-select-option::before,
+.sweet-combo-option::before {
+  content: "";
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 999px;
+  background: var(--bento-strawberry);
+}
+
+.sweet-select-option:hover,
+.sweet-select-option.is-active,
+.sweet-combo-option:hover,
+.sweet-combo-option.is-active {
+  background: color-mix(in oklab, var(--bento-strawberry) 15%, transparent);
+  color: var(--accent-strong);
+}
+
+.sweet-select-option.is-selected,
+.sweet-combo-option.is-selected {
+  background: linear-gradient(135deg, rgba(255, 120, 170, 0.18), rgba(255, 224, 122, 0.18));
+  color: var(--accent-strong);
+}
+
+.notice {
+  border-radius: 20px;
+  border-color: rgba(255, 255, 255, 0.72);
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.9) 0 13%, transparent 14%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 249, 255, 0.9));
+  box-shadow: 0 18px 44px rgba(126, 71, 96, 0.18);
+}
+
+html[data-theme="dark"] .notice {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 220, 236, 0.12) 0 13%, transparent 14%),
+    linear-gradient(135deg, rgba(66, 43, 58, 0.96), rgba(39, 29, 42, 0.92));
+}
+
+.media-lightbox-content,
+.text-lightbox-panel {
+  border-radius: 28px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 244, 250, 0.9)),
+    var(--bento-card-solid);
+  box-shadow: 0 28px 80px rgba(39, 20, 31, 0.28);
+}
+
+.media-lightbox.image-mode .media-lightbox-content {
+  width: fit-content;
+  max-width: calc(100vw - 16px);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .media-lightbox-content,
+html[data-theme="dark"] .text-lightbox-panel {
+  background:
+    linear-gradient(145deg, rgba(66, 43, 58, 0.96), rgba(39, 29, 42, 0.94)),
+    var(--bento-card-solid);
+}
+
+html[data-theme="dark"] .media-lightbox.image-mode .media-lightbox-content {
+  background: transparent;
+}
+
+html[data-theme="dark"] .media-lightbox-controls {
+  border-color: rgba(255, 198, 224, 0.28);
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 220, 236, 0.18) 0 18%, transparent 20%),
+    linear-gradient(135deg, rgba(58, 37, 52, 0.88), rgba(36, 24, 35, 0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 228, 240, 0.12),
+    0 16px 40px rgba(8, 3, 10, 0.38);
+  color: #ffe3ef;
+}
+
+html[data-theme="dark"] .media-lightbox-time {
+  color: #ffe0ec;
+  text-shadow: 0 1px 8px rgba(8, 3, 10, 0.36);
+}
+
+html[data-theme="dark"] .media-lightbox.video-mode .media-lightbox-play-button,
+html[data-theme="dark"] .media-lightbox-mute-button {
+  border-color: rgba(255, 198, 224, 0.36);
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 235, 244, 0.78), rgba(82, 50, 68, 0.82) 58%, rgba(52, 34, 48, 0.9)),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.2), rgba(145, 220, 243, 0.1));
+  color: #ffd5e7;
+  box-shadow:
+    0 8px 18px rgba(8, 3, 10, 0.34),
+    0 0 0 4px rgba(255, 198, 224, 0.08);
+}
+
+html[data-theme="dark"] .media-lightbox.video-mode .media-lightbox-play-button:hover,
+html[data-theme="dark"] .media-lightbox.video-mode .media-lightbox-play-button:focus-visible,
+html[data-theme="dark"] .media-lightbox-mute-button:hover,
+html[data-theme="dark"] .media-lightbox-mute-button:focus-visible {
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 240, 247, 0.86), rgba(95, 54, 76, 0.86) 58%, rgba(60, 38, 54, 0.92)),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.26), rgba(145, 220, 243, 0.14));
+  box-shadow:
+    0 10px 22px rgba(8, 3, 10, 0.42),
+    0 0 0 6px rgba(255, 198, 224, 0.12);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input {
+  --media-progress-fill: linear-gradient(90deg, #ff78aa, #ffc0d8);
+  --media-progress-rest: rgba(255, 220, 236, 0.24);
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+
+html[data-theme="dark"] .media-lightbox-progress input::-webkit-slider-runnable-track {
+  border-color: rgba(255, 198, 224, 0.32);
+  background:
+    linear-gradient(90deg, #ff78aa 0 var(--media-progress-percent), var(--media-progress-rest) var(--media-progress-percent) 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(8, 3, 10, 0.36),
+    0 0 0 1px rgba(255, 228, 240, 0.06);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input::-moz-range-track {
+  border-color: rgba(255, 198, 224, 0.32);
+  background: var(--media-progress-rest);
+  box-shadow:
+    inset 0 1px 2px rgba(8, 3, 10, 0.36),
+    0 0 0 1px rgba(255, 228, 240, 0.06);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input::-moz-range-progress {
+  background: var(--media-progress-fill);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input::-webkit-slider-thumb {
+  border-color: rgba(255, 242, 248, 0.94);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.96), transparent 24%),
+    linear-gradient(135deg, #ffc0d8, #ff78aa);
+  box-shadow:
+    0 4px 14px rgba(8, 3, 10, 0.34),
+    0 0 0 4px rgba(255, 120, 170, 0.14);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input::-moz-range-thumb {
+  border-color: rgba(255, 242, 248, 0.94);
+  background: linear-gradient(135deg, #ffc0d8, #ff78aa);
+  box-shadow:
+    0 4px 14px rgba(8, 3, 10, 0.34),
+    0 0 0 4px rgba(255, 120, 170, 0.14);
+}
+
+html[data-theme="dark"] .media-lightbox-progress input:focus-visible {
+  outline-color: rgba(255, 192, 216, 0.72);
+}
+
+@container (width < 980px) {
+  .qzone-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .qzone-rail,
+  .qzone-aside {
+    position: static;
+  }
+
+  .qzone-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+}
+
+

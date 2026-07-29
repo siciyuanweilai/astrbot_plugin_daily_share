@@ -1,0 +1,185 @@
+.qzone-panel {
+  --qzone-content-width: minmax(420px, 1fr);
+  container-type: inline-size;
+}
+
+.qzone-shell {
+  grid-template-columns: minmax(190px, 0.55fr) minmax(420px, 1.28fr) minmax(250px, 0.72fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.qzone-timeline {
+  gap: 14px;
+}
+
+.qzone-rail,
+.qzone-aside {
+  position: sticky;
+  inset-block-start: 18px;
+}
+
+.qzone-account-card,
+.qzone-tabs,
+.qzone-target-field,
+.qzone-composer,
+.qzone-toolbar,
+.qzone-card,
+.qzone-relation-card {
+  border-radius: 24px;
+}
+
+.qzone-tabs {
+  padding: 10px;
+}
+
+.qzone-tab {
+  border-radius: 17px;
+}
+
+.qzone-tab.active,
+.qzone-tab:hover {
+  background: linear-gradient(135deg, color-mix(in oklab, var(--bento-strawberry) 18%, white), color-mix(in oklab, var(--bento-blue) 22%, white));
+  color: var(--accent-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+html[data-theme="dark"] .qzone-tab.active,
+html[data-theme="dark"] .qzone-tab:hover {
+  background: linear-gradient(135deg, rgba(255, 120, 170, 0.18), rgba(145, 220, 243, 0.14));
+}
+
+.qzone-composer {
+  position: relative;
+  overflow: hidden;
+}
+
+.qzone-composer textarea {
+  border-radius: 20px;
+  background:
+    linear-gradient(rgba(255, 120, 170, 0.14) 1px, transparent 1px),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 249, 232, 0.9));
+  background-size: 100% 29px, auto;
+}
+
+html[data-theme="dark"] .qzone-composer textarea {
+  background:
+    linear-gradient(rgba(255, 120, 170, 0.08) 1px, transparent 1px),
+    linear-gradient(145deg, rgba(61, 40, 54, 0.96), rgba(39, 29, 42, 0.92));
+  background-size: 100% 29px, auto;
+}
+
+.qzone-card {
+  position: relative;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.qzone-card::before {
+  position: absolute;
+  inset-block: 16px;
+  inset-inline-start: 0;
+  inline-size: 5px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--bento-strawberry), var(--bento-blue));
+  content: "";
+  pointer-events: none;
+}
+
+.qzone-card:hover,
+.qzone-card.selected {
+  border-color: var(--bento-line-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 22px 40px rgba(205, 89, 132, 0.16), var(--bento-glow);
+}
+
+.qzone-upload-button,
+.qzone-load-more,
+.text-button,
+.icon-button {
+  border-radius: 999px;
+}
+
+.qzone-upload-button,
+.text-button,
+.icon-button,
+.qzone-relation-tabs button,
+.qzone-relation-pager button {
+  color: var(--accent-strong);
+}
+
+html[data-theme="dark"] .qzone-upload-button {
+  border-color: rgba(255, 198, 224, 0.34);
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255, 230, 241, 0.18) 0 14%, transparent 15%),
+    linear-gradient(135deg, rgba(70, 45, 61, 0.94), rgba(38, 28, 41, 0.9));
+  color: #ffd9e9;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 228, 240, 0.12),
+    0 10px 24px rgba(8, 3, 10, 0.22);
+}
+
+html[data-theme="dark"] .qzone-upload-button:hover {
+  border-color: rgba(255, 198, 224, 0.48);
+  background:
+    radial-gradient(circle at 22% 18%, rgba(255, 235, 245, 0.24) 0 14%, transparent 15%),
+    linear-gradient(135deg, rgba(82, 50, 69, 0.96), rgba(45, 32, 48, 0.92));
+  color: #fff0f6;
+}
+
+html[data-theme="dark"] .qzone-upload-button:has(input:disabled) {
+  color: rgba(255, 216, 232, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 228, 240, 0.08);
+}
+
+.qzone-media {
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #fff, #fff4d2);
+  box-shadow: 0 8px 18px rgba(126, 71, 96, 0.12);
+}
+
+html[data-theme="dark"] .qzone-media {
+  background: linear-gradient(145deg, rgba(66, 43, 58, 0.9), rgba(39, 29, 42, 0.9));
+}
+
+html[data-theme="dark"] .qzone-card-menu-toggle {
+  color: rgba(255, 216, 232, 0.82);
+}
+
+html[data-theme="dark"] .qzone-card-menu-toggle:hover,
+html[data-theme="dark"] .qzone-card-menu-toggle[aria-expanded="true"] {
+  background: rgba(255, 198, 224, 0.12);
+  color: #fff0f6;
+}
+
+html[data-theme="dark"] .qzone-expand,
+html[data-theme="dark"] .qzone-card-comment-more {
+  color: #ffc0d8;
+}
+
+html[data-theme="dark"] .qzone-expand:hover,
+html[data-theme="dark"] .qzone-card-comment-more:hover {
+  color: #fff0f6;
+}
+
+html[data-theme="dark"] .qzone-social-button {
+  color: rgba(255, 224, 238, 0.72);
+}
+
+html[data-theme="dark"] .qzone-social-button:hover,
+html[data-theme="dark"] .qzone-social-button:focus-visible {
+  background: rgba(255, 198, 224, 0.12);
+  color: #ffd8e8;
+}
+
+html[data-theme="dark"] .qzone-social-button.active {
+  color: #ff91bd;
+}
+
+html[data-theme="dark"] .qzone-comment-enter-hint {
+  border-color: rgba(255, 198, 224, 0.32);
+  background: rgba(70, 45, 61, 0.82);
+  color: #ffd8e8;
+}
+

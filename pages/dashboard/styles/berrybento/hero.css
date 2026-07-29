@@ -1,0 +1,492 @@
+.bento-shell {
+  position: relative;
+  z-index: 2;
+  width: min(100% - 28px, 1580px);
+  padding-block: clamp(18px, 3vw, 40px);
+}
+
+.page-view {
+  container-type: inline-size;
+}
+
+.bento-page,
+.bento-settings-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.bento-page::before,
+.bento-settings-page::before {
+  position: fixed;
+  inset-block-start: 12%;
+  inset-inline-start: max(18px, calc((100vw - 1580px) / 2));
+  z-index: -1;
+  inline-size: clamp(130px, 14vw, 230px);
+  aspect-ratio: 1;
+  border-radius: 48% 52% 44% 56%;
+  background:
+    radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.7) 0 12%, transparent 13%),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.22), rgba(255, 224, 122, 0.18));
+  content: "";
+  filter: blur(0.3px);
+  pointer-events: none;
+  transform: rotate(-12deg);
+}
+
+.bento-settings-page::before {
+  inset-block-start: 18%;
+  inset-inline-start: auto;
+  inset-inline-end: max(18px, calc((100vw - 1580px) / 2));
+  background:
+    radial-gradient(circle at 38% 28%, rgba(255, 255, 255, 0.68) 0 12%, transparent 13%),
+    linear-gradient(135deg, rgba(145, 220, 243, 0.24), rgba(255, 120, 170, 0.16));
+  transform: rotate(10deg);
+}
+
+.bento-dashboard {
+  display: grid;
+  gap: clamp(18px, 2.4vw, 30px);
+}
+
+.bento-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 188px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 360px);
+  align-items: center;
+  gap: clamp(18px, 3vw, 34px);
+  overflow: hidden;
+  margin-block-end: clamp(16px, 2.3vw, 28px);
+  padding: clamp(24px, 4vw, 46px);
+  padding-inline-end: clamp(104px, 11vw, 172px);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: var(--bento-radius-xl);
+  background:
+    radial-gradient(circle at 10% 16%, rgba(255, 255, 255, 0.9), transparent 12%),
+    radial-gradient(circle at 92% 10%, rgba(255, 224, 122, 0.38), transparent 26%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 241, 247, 0.7) 48%, rgba(229, 250, 255, 0.72)),
+    var(--bento-card);
+  box-shadow: var(--bento-shadow), var(--bento-glow);
+}
+
+.bento-hero::before,
+.bento-hero::after {
+  position: absolute;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+}
+
+.bento-hero::before {
+  inset: 16px;
+  border: 1px dashed rgba(216, 63, 125, 0.24);
+  border-radius: calc(var(--bento-radius-xl) - 12px);
+  background:
+    radial-gradient(circle at 78% 62%, rgba(255, 120, 170, 0.12), transparent 22%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.2), transparent 34%, rgba(255, 255, 255, 0.2));
+}
+
+.bento-hero::after {
+  inline-size: min(34%, 440px);
+  block-size: 150px;
+  inset-block-end: -38px;
+  inset-inline-end: 92px;
+  border-radius: 999px 999px 0 0;
+  background:
+    radial-gradient(circle at 18% 42%, var(--bento-strawberry) 0 8%, transparent 9%),
+    radial-gradient(circle at 38% 34%, var(--bento-lemon) 0 7%, transparent 8%),
+    radial-gradient(circle at 58% 44%, var(--bento-mint) 0 8%, transparent 9%),
+    radial-gradient(circle at 78% 36%, var(--bento-blue) 0 7%, transparent 8%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(255, 203, 223, 0.44));
+  filter: blur(0.2px);
+  transform: rotate(-4deg);
+}
+
+.bento-hero-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 0.875rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+.settings-section-title {
+  font-family: var(--bento-font-display);
+  letter-spacing: 0;
+}
+
+h1 {
+  margin: 0;
+  max-width: 12em;
+  color: var(--bento-ink);
+  font-size: 4rem;
+  line-height: 0.95;
+  overflow-wrap: normal;
+  text-wrap: balance;
+  word-break: keep-all;
+}
+
+.bento-subtitle {
+  max-width: 47em;
+  margin: 0;
+  color: var(--bento-ink-soft);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.72;
+}
+
+.bento-ribbon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.bento-ribbon > :is(span, .bento-ribbon-button) {
+  --ribbon-accent: var(--accent-strong);
+  --ribbon-wash: rgba(255, 226, 239, 0.74);
+  --ribbon-bubble: rgba(255, 120, 170, 0.14);
+  --ribbon-dot: linear-gradient(135deg, var(--bento-strawberry), var(--bento-lemon));
+  --ribbon-dot-shadow: 0 0 0 4px rgba(255, 120, 170, 0.12);
+  --ribbon-x: 0px;
+  --ribbon-y: 0px;
+  --ribbon-lift: 0px;
+  --ribbon-tilt: 0deg;
+  --ribbon-hover-tilt: 0deg;
+  --ribbon-scale: 1;
+  --ribbon-width: 320px;
+  --ribbon-radius: 999px 44px 999px 58px / 78% 56% 68% 52%;
+  --ribbon-shine: rgba(255, 255, 255, 0.88);
+  --ribbon-tail: rgba(255, 255, 255, 0.5);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: min(100%, var(--ribbon-width));
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 17px 12px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  border-radius: var(--ribbon-radius);
+  background:
+    radial-gradient(ellipse at 12% 34%, rgba(255, 255, 255, 0.94) 0 22%, transparent 23%),
+    radial-gradient(circle at 83% 34%, var(--ribbon-bubble) 0 16%, transparent 17%),
+    radial-gradient(circle at 95% 62%, rgba(255, 255, 255, 0.58) 0 7%, transparent 8%),
+    linear-gradient(103deg, rgba(255, 255, 255, 0.95), var(--ribbon-wash) 56%, rgba(255, 255, 255, 0.66));
+  color: var(--ribbon-accent);
+  font-size: 13px;
+  font-weight: 950;
+  box-shadow:
+    0 18px 34px rgba(205, 89, 132, 0.12),
+    0 4px 0 rgba(255, 255, 255, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 158, 201, 0.16);
+}
+
+.bento-ribbon > span::after,
+.bento-ribbon .sakura-toggle-state {
+  inline-size: 10px;
+  block-size: 10px;
+  flex: 0 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ribbon-dot);
+  box-shadow: var(--ribbon-dot-shadow);
+}
+
+.bento-ribbon > span::after {
+  content: "";
+}
+
+.bento-ribbon > .bento-ribbon-button {
+  appearance: none;
+  height: auto;
+  margin: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.9, 0.28, 1.12),
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+  transform:
+    translate(var(--ribbon-x), calc(var(--ribbon-y) + var(--ribbon-lift)))
+    rotate(calc(var(--ribbon-tilt) + var(--ribbon-hover-tilt)))
+    scale(var(--ribbon-scale));
+  transform-origin: 58% 52%;
+}
+
+.bento-ribbon > .bento-ribbon-button::before,
+.bento-ribbon > .bento-ribbon-button::after {
+  position: absolute;
+  z-index: 0;
+  content: "";
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease;
+}
+
+.bento-ribbon > .bento-ribbon-button::before {
+  inset-block: 4px 8px;
+  inset-inline-start: -8px;
+  inline-size: min(43%, 118px);
+  border-radius: 72% 28% 55% 64% / 62% 42% 72% 46%;
+  background:
+    radial-gradient(circle at 24% 20%, var(--ribbon-shine) 0 15%, transparent 16%),
+    radial-gradient(circle at 70% 70%, var(--ribbon-tail) 0 16%, transparent 17%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.26));
+  filter: blur(0.2px);
+  transform: rotate(-7deg);
+}
+
+.bento-ribbon > .bento-ribbon-button::after {
+  inset-block-start: 50%;
+  inset-inline-end: 8px;
+  inline-size: 58px;
+  block-size: 42px;
+  border-radius: 999px 56% 999px 48%;
+  background:
+    radial-gradient(circle at 18% 46%, rgba(255, 255, 255, 0.88) 0 3px, transparent 4px),
+    radial-gradient(circle at 42% 25%, rgba(255, 255, 255, 0.76) 0 2px, transparent 3px),
+    radial-gradient(circle at 70% 58%, var(--ribbon-bubble) 0 11px, transparent 12px),
+    radial-gradient(circle at 88% 30%, rgba(255, 255, 255, 0.58) 0 4px, transparent 5px);
+  opacity: 0.88;
+  transform: translateY(-50%) rotate(-10deg);
+}
+
+.bento-ribbon .bento-ribbon-label {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.78);
+  transform: translateY(-1px);
+}
+
+.bento-ribbon .sakura-toggle {
+  --ribbon-width: 318px;
+  --ribbon-x: -10px;
+  --ribbon-y: 0px;
+  --ribbon-tilt: -2.6deg;
+  --ribbon-accent: #df4f8e;
+  --ribbon-wash: rgba(255, 221, 237, 0.82);
+  --ribbon-bubble: rgba(255, 120, 170, 0.2);
+  --ribbon-dot: linear-gradient(135deg, #d7a8bd, var(--bento-mint));
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(157, 229, 207, 0.14),
+    0 0 14px rgba(157, 229, 207, 0.5);
+  --ribbon-radius: 999px 58px 999px 32px / 68% 48% 82% 58%;
+  justify-self: start;
+}
+
+.bento-ribbon .sakura-toggle.is-on {
+  --ribbon-accent: #d83f7d;
+  --ribbon-wash: rgba(255, 219, 235, 0.86);
+  --ribbon-bubble: rgba(255, 120, 170, 0.24);
+  --ribbon-dot: linear-gradient(135deg, var(--bento-strawberry), var(--bento-lemon));
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(255, 120, 170, 0.14),
+    0 0 16px rgba(255, 120, 170, 0.34);
+}
+
+.bento-ribbon .settings-toggle {
+  --ribbon-width: 304px;
+  --ribbon-x: 18px;
+  --ribbon-y: -5px;
+  --ribbon-tilt: 2.35deg;
+  --ribbon-accent: #d84891;
+  --ribbon-wash: rgba(223, 249, 255, 0.82);
+  --ribbon-bubble: rgba(145, 220, 243, 0.26);
+  --ribbon-dot: linear-gradient(135deg, var(--bento-blue), var(--bento-lavender));
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(145, 220, 243, 0.14),
+    0 0 16px rgba(145, 220, 243, 0.42);
+  --ribbon-radius: 44px 999px 42px 999px / 54% 70% 48% 82%;
+  justify-self: end;
+}
+
+.bento-ribbon .dashboard-toggle {
+  --ribbon-width: 306px;
+  --ribbon-accent: #418cab;
+  --ribbon-wash: rgba(224, 250, 255, 0.84);
+  --ribbon-bubble: rgba(157, 229, 207, 0.26);
+  --ribbon-dot: linear-gradient(135deg, var(--bento-mint), var(--bento-blue));
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(157, 229, 207, 0.14),
+    0 0 16px rgba(157, 229, 207, 0.4);
+}
+
+.bento-ribbon .sakura-toggle-state {
+  position: static;
+  inset: auto;
+  z-index: 1;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  box-sizing: content-box;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.bento-ribbon .sakura-toggle-state::before {
+  display: block;
+  inline-size: 4px;
+  block-size: 4px;
+  margin: 2px 0 0 2px;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.9);
+  content: "";
+}
+
+.bento-ribbon > .bento-ribbon-button:not(:disabled):hover {
+  --ribbon-lift: -4px;
+  --ribbon-hover-tilt: -0.7deg;
+  --ribbon-scale: 1.018;
+  border-color: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 18px 34px rgba(205, 89, 132, 0.18),
+    0 0 0 4px rgba(255, 255, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
+.bento-ribbon > .bento-ribbon-button:not(:disabled):hover::before {
+  transform: translateX(8px) rotate(-2deg) scale(1.06);
+}
+
+.bento-ribbon > .bento-ribbon-button:not(:disabled):hover::after {
+  opacity: 1;
+  transform: translateY(-50%) rotate(6deg) scale(1.08);
+}
+
+.bento-ribbon > .bento-ribbon-button:not(:disabled):hover .sakura-toggle-state {
+  transform: scale(1.18);
+}
+
+.bento-ribbon > .bento-ribbon-button:not(:disabled):active {
+  --ribbon-lift: 1px;
+  --ribbon-hover-tilt: 0deg;
+  --ribbon-scale: 0.99;
+}
+
+.bento-ribbon > .bento-ribbon-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  box-shadow:
+    var(--bento-focus),
+    var(--bento-shadow-soft),
+    var(--bento-glow);
+}
+
+.bento-ribbon > .bento-ribbon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+html[data-theme="dark"] .bento-ribbon > :is(span, .bento-ribbon-button) {
+  --ribbon-accent: #ffd2e4;
+  --ribbon-wash: rgba(72, 45, 61, 0.88);
+  --ribbon-bubble: rgba(255, 145, 189, 0.18);
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(255, 198, 224, 0.12),
+    0 0 18px rgba(255, 145, 189, 0.28);
+  border-color: rgba(255, 198, 224, 0.3);
+  background:
+    radial-gradient(circle at 19% 48%, rgba(255, 220, 236, 0.14) 0 25%, transparent 26%),
+    radial-gradient(circle at 88% 50%, var(--ribbon-bubble) 0 14%, transparent 15%),
+    linear-gradient(110deg, rgba(84, 51, 70, 0.92), var(--ribbon-wash) 58%, rgba(42, 28, 39, 0.86));
+  color: var(--ribbon-accent);
+  box-shadow:
+    0 18px 38px rgba(8, 3, 10, 0.38),
+    0 0 0 1px rgba(255, 198, 224, 0.08),
+    inset 0 1px 0 rgba(255, 228, 240, 0.18),
+    inset 0 -1px 0 rgba(255, 120, 170, 0.1);
+}
+
+html[data-theme="dark"] .bento-ribbon .sakura-toggle {
+  --ribbon-accent: #ffd3e6;
+  --ribbon-wash: rgba(82, 47, 67, 0.9);
+  --ribbon-bubble: rgba(255, 145, 189, 0.22);
+  --ribbon-dot: linear-gradient(135deg, #c98ba7, #9de5cf);
+}
+
+html[data-theme="dark"] .bento-ribbon .sakura-toggle.is-on {
+  --ribbon-accent: #ffc2dc;
+  --ribbon-wash: rgba(94, 48, 72, 0.92);
+  --ribbon-bubble: rgba(255, 120, 170, 0.28);
+  --ribbon-dot: linear-gradient(135deg, #ff78aa, #ffe07a);
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(255, 120, 170, 0.14),
+    0 0 20px rgba(255, 120, 170, 0.42);
+}
+
+html[data-theme="dark"] .bento-ribbon .settings-toggle {
+  --ribbon-accent: #c8f2ff;
+  --ribbon-wash: rgba(45, 57, 70, 0.9);
+  --ribbon-bubble: rgba(145, 220, 243, 0.22);
+  --ribbon-dot: linear-gradient(135deg, #91dcf3, #c9bcff);
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(145, 220, 243, 0.12),
+    0 0 18px rgba(145, 220, 243, 0.32);
+}
+
+html[data-theme="dark"] .bento-ribbon .dashboard-toggle {
+  --ribbon-accent: #c9ffe9;
+  --ribbon-wash: rgba(40, 62, 58, 0.9);
+  --ribbon-bubble: rgba(157, 229, 207, 0.22);
+  --ribbon-dot: linear-gradient(135deg, #9de5cf, #91dcf3);
+  --ribbon-dot-shadow:
+    0 0 0 4px rgba(157, 229, 207, 0.12),
+    0 0 18px rgba(157, 229, 207, 0.34);
+}
+
+html[data-theme="dark"] .bento-ribbon > .bento-ribbon-button::before {
+  background:
+    radial-gradient(circle at 24% 22%, rgba(255, 230, 241, 0.38) 0 16%, transparent 17%),
+    linear-gradient(135deg, rgba(255, 219, 235, 0.2), rgba(255, 198, 224, 0.08));
+}
+
+html[data-theme="dark"] .bento-ribbon > .bento-ribbon-button::after {
+  background:
+    radial-gradient(circle at 22% 42%, rgba(255, 235, 244, 0.48) 0 3px, transparent 4px),
+    radial-gradient(circle at 54% 30%, rgba(255, 235, 244, 0.34) 0 2px, transparent 3px),
+    radial-gradient(circle at 74% 58%, var(--ribbon-bubble) 0 9px, transparent 10px);
+  opacity: 0.68;
+}
+
+html[data-theme="dark"] .bento-ribbon .bento-ribbon-label {
+  text-shadow: 0 1px 8px rgba(10, 4, 12, 0.46);
+}
+
+html[data-theme="dark"] .bento-ribbon .sakura-toggle-state {
+  border-color: rgba(255, 224, 238, 0.42);
+}
+
+html[data-theme="dark"] .bento-ribbon > .bento-ribbon-button:not(:disabled):hover {
+  border-color: rgba(255, 218, 236, 0.48);
+  box-shadow:
+    0 22px 44px rgba(8, 3, 10, 0.46),
+    0 0 0 4px rgba(255, 198, 224, 0.1),
+    inset 0 1px 0 rgba(255, 228, 240, 0.24);
+}

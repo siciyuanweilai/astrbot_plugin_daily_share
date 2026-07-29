@@ -1,0 +1,82 @@
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent
+
+from ...config import NEWS_SOURCE_MAP, ShareType
+from ...database.keys import target_state_key
+from ...toolkit import format_exception
+from .artwork import TaskExecutorMediaService
+
+
+class TaskExecutorNewsService(TaskExecutorMediaService):
+    """分享新闻数据与新闻配图。"""
+
+    async def _load_execute_share_news(
+        self,
+        *,
+        uid: str,
+        stype: ShareType,
+        news_source: str | None = None,
+        event: AstrMessageEvent | None = None,
+        history_source: str,
+        progress_id: str,
+    ) -> tuple[bool, object]:
+        if stype != ShareType.NEWS:
+            return True, None
+
+        state = await self.db.get_share_state(target_state_key(uid), {})
+        last_news_source = state.get("last_news_source")
+        current_news_source = news_source or self.news_service.select_news_source(
+            excluded_source=last_news_source,
+        )
+        news_data = await self.news_service.get_hot_news(
+            current_news_source,
+            limit=self.services.snapshots.get_news_snapshot_limit(),
+        )
+        if news_data:
+            await self.db.update_share_state(
+                target_state_key(uid), {"last_news_source": news_data[1]}
+            )
+            return True, news_data
+
+        source_name = (
+            NEWS_SOURCE_MAP.get(current_news_source or "", {}).get("name") or "新闻源"
+        )
+        logger.warning(
+            f"[日常分享] 获取新闻失败: {source_name} ({current_news_source})"
+        )
+        await self.services.executor_helpers.record_share_failure(
+            target_id=uid,
+            share_type=stype.value,
+            message=f"获取新闻失败: {source_name}",
+            error_reason=f"获取新闻失败: {source_name}",
+            source_type=history_source,
+        )
+        if event:
+            await self.send_event(
+                event,
+                event.plain_result(f"获取【{source_name}】新闻失败，分享已取消。"),
+            )
+        self.services.progress.finish_share_progress(
+            progress_id, success=False, message="获取新闻失败"
+        )
+        return False, None
+
+    async def _maybe_attach_hot_news_image(
+        self, *, uid: str, stype: ShareType, news_data=None
+    ) -> str | None:
+        if stype != ShareType.NEWS or not self.image_conf.get(
+            "attach_hot_news_image", True
+        ):
+            return None
+        try:
+            state = await self.db.get_share_state(target_state_key(uid), {})
+            last_source = news_data[1] if news_data else state.get("last_news_source")
+            if not last_source:
+                return None
+            img_path, _ = self.news_service.get_hot_news_image_url(last_source)
+            return img_path
+        except Exception as e:
+            logger.warning(
+                f"[日常分享] 自动任务获取新闻图片失败: {format_exception(e)}"
+            )
+            return None

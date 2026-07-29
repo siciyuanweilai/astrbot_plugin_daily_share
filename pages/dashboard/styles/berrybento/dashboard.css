@@ -1,0 +1,397 @@
+.bento-board {
+  grid-template-columns:
+    minmax(250px, 0.68fr)
+    minmax(500px, 1.16fr)
+    minmax(380px, 1fr);
+  gap: clamp(16px, 2vw, 24px);
+  align-items: stretch;
+}
+
+.bento-board .primary-column,
+.bento-board .status-column,
+.bento-board .side-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-column: auto;
+  gap: clamp(16px, 2vw, 22px);
+}
+
+.bento-share-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.panel,
+.bento-card,
+.recent-action,
+.calendar-day,
+.target-carousel-card,
+.next-share-line,
+.share-progress,
+.settings-summary-item,
+.config-insight,
+.target-stats span,
+.share-progress-step,
+.qzone-account-card,
+.qzone-tabs,
+.qzone-target-field,
+.qzone-composer,
+.qzone-toolbar,
+.qzone-card,
+.qzone-loading,
+.qzone-feed .empty,
+.qzone-relation-card,
+.settings-section {
+  border-color: var(--bento-line);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(255, 249, 235, 0.64)),
+    var(--bento-card);
+  box-shadow: var(--bento-shadow-soft), var(--bento-glow);
+}
+
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .bento-card,
+html[data-theme="dark"] .recent-action,
+html[data-theme="dark"] .calendar-day,
+html[data-theme="dark"] .target-carousel-card,
+html[data-theme="dark"] .next-share-line,
+html[data-theme="dark"] .share-progress,
+html[data-theme="dark"] .settings-summary-item,
+html[data-theme="dark"] .config-insight,
+html[data-theme="dark"] .target-stats span,
+html[data-theme="dark"] .share-progress-step,
+html[data-theme="dark"] .qzone-account-card,
+html[data-theme="dark"] .qzone-tabs,
+html[data-theme="dark"] .qzone-target-field,
+html[data-theme="dark"] .qzone-composer,
+html[data-theme="dark"] .qzone-toolbar,
+html[data-theme="dark"] .qzone-card,
+html[data-theme="dark"] .qzone-loading,
+html[data-theme="dark"] .qzone-feed .empty,
+html[data-theme="dark"] .qzone-relation-card,
+html[data-theme="dark"] .settings-section {
+  background:
+    linear-gradient(145deg, rgba(66, 43, 58, 0.88), rgba(45, 31, 43, 0.78)),
+    var(--bento-card);
+}
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  border-width: 1px;
+  border-radius: var(--bento-radius-lg);
+  padding: clamp(18px, 2vw, 26px);
+  backdrop-filter: blur(16px);
+}
+
+.bento-card {
+  border: 1px solid rgba(255, 255, 255, 0.74);
+}
+
+.bento-card::before {
+  position: absolute;
+  inset-block-start: 15px;
+  inset-inline-end: 18px;
+  inline-size: 70px;
+  block-size: 18px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 14% 50%, var(--bento-strawberry) 0 12%, transparent 13%),
+    radial-gradient(circle at 42% 50%, var(--bento-lemon) 0 12%, transparent 13%),
+    radial-gradient(circle at 70% 50%, var(--bento-mint) 0 12%, transparent 13%),
+    rgba(255, 255, 255, 0.52);
+  content: "";
+  pointer-events: none;
+}
+
+.dashboard-card-share {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 224, 122, 0.36), transparent 26%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 233, 244, 0.72)),
+    var(--bento-card);
+}
+
+.dashboard-card-status {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(145, 220, 243, 0.3), transparent 28%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 247, 229, 0.7)),
+    var(--bento-card);
+}
+
+.dashboard-card-calendar {
+  position: sticky;
+  inset-block-start: 18px;
+  background:
+    radial-gradient(circle at 16% 8%, rgba(157, 229, 207, 0.3), transparent 28%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(232, 250, 255, 0.68)),
+    var(--bento-card);
+}
+
+.panel-head {
+  min-height: 36px;
+  align-items: center;
+  margin-block-end: 16px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  color: var(--bento-ink);
+  font-size: 1.75rem;
+  line-height: 1.08;
+}
+
+.panel-head h2::after {
+  display: inline-block;
+  inline-size: 0.54em;
+  block-size: 0.54em;
+  margin-inline-start: 0.46em;
+  border-radius: 42% 58% 48% 52%;
+  background: linear-gradient(135deg, var(--bento-strawberry), var(--bento-lemon));
+  box-shadow: 0 0 0 5px rgba(255, 120, 170, 0.13);
+  content: "";
+  vertical-align: 0.02em;
+}
+
+.run-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto minmax(76px, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.run-target-field,
+.bento-start-button {
+  grid-column: 1 / -1;
+}
+
+.bento-start-button {
+  align-self: center;
+  justify-self: center;
+  inline-size: min(88%, 288px);
+}
+
+.run-specific-target {
+  margin-block-start: 10px;
+}
+
+:where(select, input, textarea, .sweet-select-trigger, .sweet-combo input, .run-specific-target input) {
+  min-height: 48px;
+  border: 1px solid var(--bento-line-strong);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 17% 18%, rgba(255, 255, 255, 0.92) 0 13%, transparent 14%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 243, 233, 0.9));
+  color: var(--bento-ink);
+  box-shadow:
+    0 10px 20px rgba(126, 71, 96, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+html[data-theme="dark"] :where(select, input, textarea, .sweet-select-trigger, .sweet-combo input, .run-specific-target input) {
+  background:
+    radial-gradient(circle at 17% 18%, rgba(255, 220, 236, 0.1) 0 13%, transparent 14%),
+    linear-gradient(145deg, rgba(61, 40, 54, 0.96), rgba(39, 29, 42, 0.92));
+  color: var(--bento-ink);
+}
+
+:where(button, select, input, textarea, .sweet-select-trigger, .qzone-card-select, .settings-dock a):focus-visible {
+  outline: 3px solid rgba(145, 220, 243, 0.66);
+  outline-offset: 3px;
+}
+
+:where(select, input, textarea, .sweet-select-trigger, .sweet-combo input):focus {
+  border-color: var(--bento-strawberry);
+  box-shadow:
+    var(--bento-focus),
+    0 12px 22px rgba(126, 71, 96, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.setting-field > span,
+.setting-switch > span,
+.run-form label > span,
+.run-field-label {
+  color: var(--bento-ink-soft);
+  font-weight: 950;
+}
+
+button.primary,
+.primary {
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.88) 0 10%, transparent 11%),
+    linear-gradient(135deg, var(--bento-strawberry), var(--bento-peach) 56%, var(--bento-lemon));
+  color: #fff;
+  font-weight: 950;
+  box-shadow:
+    0 16px 30px rgba(216, 63, 125, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+button.primary:hover,
+.primary:hover {
+  filter: saturate(1.04) brightness(1.02);
+  transform: translateY(-2px);
+  box-shadow:
+    0 22px 38px rgba(216, 63, 125, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+button.primary:active,
+.primary:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.recent-actions {
+  margin-block-start: 20px;
+  padding-block-start: 18px;
+  border-block-start: 1px dashed var(--bento-line-strong);
+}
+
+.recent-actions-head {
+  color: var(--accent-strong);
+  font-weight: 950;
+}
+
+.recent-actions-list,
+.calendar-list,
+.config-insights,
+.settings-summary {
+  gap: 12px;
+}
+
+.recent-action,
+.calendar-day,
+.target-carousel-card,
+.next-share-line,
+.share-progress,
+.settings-summary-item,
+.config-insight,
+.target-stats span,
+.share-progress-step {
+  border-width: 1px;
+  border-radius: var(--bento-radius-md);
+}
+
+.target-carousel-card {
+  position: relative;
+  overflow: hidden;
+  color: var(--bento-ink);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.82), transparent 18%),
+    linear-gradient(135deg, rgba(255, 227, 239, 0.9), rgba(232, 250, 255, 0.86));
+}
+
+.target-carousel-card::after {
+  position: absolute;
+  inset-block: 18px;
+  inset-inline-end: 0;
+  inline-size: 5px;
+  border-radius: 999px 0 0 999px;
+  background: linear-gradient(180deg, var(--bento-strawberry), var(--bento-blue));
+  content: "";
+}
+
+.target-carousel-kind,
+.recent-action-status,
+.badge,
+.qzone-card-time,
+.qzone-card-badge {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bento-strawberry) 16%, white);
+  color: var(--accent-strong);
+}
+
+.qzone-card-time {
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 9px;
+  line-height: 1.25;
+}
+
+html[data-theme="dark"] :is(.qzone-card-time, .qzone-card-badge) {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 228, 240, 0.18) 0 16%, transparent 17%),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.2), rgba(145, 220, 243, 0.11));
+  color: #ffd8e8;
+  box-shadow: inset 0 1px 0 rgba(255, 228, 240, 0.12);
+}
+
+.recent-action.is-success .recent-action-status,
+.badge.ok,
+.share-progress-step.is-done {
+  background: color-mix(in oklab, var(--bento-mint) 24%, white);
+  color: #2f806b;
+}
+
+.recent-action.is-running .recent-action-status,
+.badge.warn,
+.share-progress-step.is-running {
+  background: color-mix(in oklab, var(--bento-lemon) 42%, white);
+  color: #94601b;
+}
+
+.recent-action.is-error .recent-action-status,
+.badge.error,
+.share-progress-step.is-error {
+  background: color-mix(in oklab, #e44f75 18%, white);
+  color: var(--danger);
+}
+
+.calendar-day {
+  position: relative;
+  overflow: hidden;
+}
+
+.calendar-day::before {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 20px;
+  block-size: 5px;
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(90deg, var(--bento-strawberry), var(--bento-lemon), var(--bento-mint), var(--bento-blue));
+  content: "";
+}
+
+.calendar-day strong {
+  overflow: hidden;
+  color: var(--bento-ink);
+  text-overflow: ellipsis;
+}
+
+.calendar-items {
+  column-gap: 14px;
+  row-gap: 7px;
+}
+
+.calendar-item {
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  min-height: 22px;
+  line-height: 1.25;
+}
+
+.calendar-item span:first-child {
+  color: var(--blue);
+  font-weight: 950;
+}
+
+.calendar-item span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+}

@@ -1,0 +1,761 @@
+import asyncio
+import importlib.util
+import json
+import sys
+import types
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_NAME = "daily_share_context_testpkg"
+CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
+CONFIG_MODULE_NAME = f"{CORE_PACKAGE_NAME}.config"
+PLATFORM_MODULE_NAME = f"{CORE_PACKAGE_NAME}.platform"
+CONTEXT_MODULE_NAME = f"{CORE_PACKAGE_NAME}.context"
+
+
+class _Logger:
+    def debug(self, *args, **kwargs):
+        return None
+
+    def info(self, *args, **kwargs):
+        return None
+
+    def warning(self, *args, **kwargs):
+        return None
+
+    def error(self, *args, **kwargs):
+        return None
+
+
+class _ConversationManager:
+    def __init__(self, history=None):
+        self.history = history or []
+        self.added_pairs = []
+        self.updated_conversations = []
+
+    async def get_curr_conversation_id(self, unified_msg_origin):
+        return "cid"
+
+    async def get_conversation(self, unified_msg_origin, conversation_id):
+        return types.SimpleNamespace(
+            history=json.dumps(self.history, ensure_ascii=False)
+        )
+
+    async def new_conversation(self, unified_msg_origin):
+        return "cid"
+
+    async def add_message_pair(self, cid, user_message, assistant_message):
+        self.added_pairs.append((cid, user_message, assistant_message))
+
+    async def update_conversation(
+        self, unified_msg_origin, conversation_id=None, history=None, **kwargs
+    ):
+        self.history = list(history or [])
+        self.updated_conversations.append(
+            {
+                "unified_msg_origin": unified_msg_origin,
+                "conversation_id": conversation_id,
+                "history": self.history,
+                **kwargs,
+            }
+        )
+
+
+class _PlatformHistoryManager:
+    def __init__(self, records_by_user=None):
+        self.records_by_user = records_by_user or {}
+        self.calls = []
+
+    async def get(self, platform_id, user_id, page=1, page_size=200):
+        self.calls.append(
+            {
+                "platform_id": platform_id,
+                "user_id": user_id,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
+        return list(self.records_by_user.get((platform_id, user_id), []))
+
+
+class _DailyLifePlugin:
+    def __init__(self):
+        self.activities = []
+
+    async def get_life_context(self, target_umo=""):
+        return {
+            "weather": "北京 晴 20°C",
+            "outfit": "浅蓝外套和白裙子",
+            "meta": {"theme": "慢生活日", "mood": "平静"},
+            "timeline": [
+                {"time": "00:00", "activity": "在窗边写手帐", "status": "专注"}
+            ],
+            "state": {
+                "energy": 35,
+                "mood": "有点累但心情还稳",
+                "busyness": 70,
+                "social": 25,
+                "sleep": {"quality": 42, "summary": "昨晚睡得浅"},
+                "summary": "今天偏累，不太想出门",
+            },
+            "subject": {
+                "can_interrupt_default": False,
+                "interrupt_reason": "正在专注",
+            },
+            "relationships": [
+                {
+                    "id": "u1",
+                    "name": "阿林",
+                    "persona_hint": "男生，死党",
+                    "interactions": 3,
+                    "memory_points": [{"content": "最近想去看展"}],
+                    "notes": [{"content": "聊到周末看展"}],
+                }
+            ],
+            "chat_summaries": [
+                {
+                    "date": "2026-05-24",
+                    "brief": "和阿林聊到周末看展",
+                    "keywords": ["看展", "书店"],
+                }
+            ],
+            "places": [{"name": "常去咖啡店", "visits": 2, "hint": "写手帐"}],
+            "events": [
+                {
+                    "date": "2026-05-24",
+                    "summary": "在常去咖啡店完成手帐",
+                    "place": "常去咖啡店",
+                }
+            ],
+            "commitments": [
+                {
+                    "content": "周末一起看展",
+                    "trigger_date": "2026-05-30",
+                    "trigger_time": "15:00",
+                }
+            ],
+            "schedule": "00:00 - 在窗边写手帐 [专注]",
+        }
+
+    async def record_external_activity(self, target_umo, content, **kwargs):
+        self.activities.append({"target_umo": target_umo, "content": content, **kwargs})
+        return True
+
+
+class _StarRef:
+    def __init__(self, root_dir_name, star_cls):
+        self.root_dir_name = root_dir_name
+        self.name = root_dir_name
+        self.display_name = root_dir_name
+        self.star_cls = star_cls
+        self.activated = True
+
+
+def _clear_modules():
+    for name in list(sys.modules):
+        if name.startswith(PACKAGE_NAME) or name.startswith("astrbot"):
+            sys.modules.pop(name, None)
+
+
+def _install_stub_module(name: str, **attrs):
+    module = types.ModuleType(name)
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    sys.modules[name] = module
+    return module
+
+
+def _load_module(name: str, path: Path):
+    package_locations = [str(path.parent)] if path.name == "__init__.py" else None
+    spec = importlib.util.spec_from_file_location(
+        name, path, submodule_search_locations=package_locations
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_context_module():
+    _clear_modules()
+
+    package = types.ModuleType(PACKAGE_NAME)
+    package.__path__ = [str(ROOT)]
+    sys.modules[PACKAGE_NAME] = package
+
+    core_package = types.ModuleType(CORE_PACKAGE_NAME)
+    core_package.__path__ = [str(ROOT / "core")]
+    sys.modules[CORE_PACKAGE_NAME] = core_package
+
+    _install_stub_module("astrbot", __path__=[])
+    _install_stub_module("astrbot.api", logger=_Logger())
+
+    _load_module(CONFIG_MODULE_NAME, ROOT / "core" / "config.py")
+    _load_module(PLATFORM_MODULE_NAME, ROOT / "core" / "platform.py")
+    return _load_module(CONTEXT_MODULE_NAME, ROOT / "core" / "context" / "__init__.py")
+
+
+def _service(history=None, context_conf=None, platform_records=None, stars=None):
+    context_module = _load_context_module()
+    context = types.SimpleNamespace(
+        conversation_manager=_ConversationManager(history),
+        message_history_manager=_PlatformHistoryManager(platform_records),
+        platform_manager=None,
+        get_all_stars=lambda: list(stars or []),
+    )
+    config = {"context_conf": context_conf or {}}
+    return context_module, context_module.ContextService(context, config)
+
+
+class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
+    async def test_onebot_action_uses_current_client_contract(self):
+        _, service = _service()
+
+        class Bot:
+            def __init__(self):
+                self.calls = []
+
+            async def call_action(self, **params):
+                self.calls.append(params)
+                return {"ok": True}
+
+        bot = Bot()
+        result = await service.call_onebot_action(bot, "get_login_info", user_id=10001)
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(bot.calls, [{"action": "get_login_info", "user_id": 10001}])
+
+    async def test_onebot_action_timeout_is_bounded(self):
+        context_module, service = _service()
+
+        class Bot:
+            async def call_action(self, **_params):
+                await asyncio.Future()
+
+        original_wait_for = asyncio.wait_for
+
+        async def immediate_timeout(awaitable, *, timeout):
+            awaitable.close()
+            self.assertEqual(timeout, context_module.ONEBOT_API_TIMEOUT_SECONDS)
+            raise TimeoutError
+
+        asyncio.wait_for = immediate_timeout
+        try:
+            with self.assertRaisesRegex(
+                TimeoutError, "OneBot 操作 get_login_info 超时"
+            ):
+                await service.call_onebot_action(Bot(), "get_login_info")
+        finally:
+            asyncio.wait_for = original_wait_for
+
+    async def test_history_router_calls_explicit_onebot_history_service(self):
+        _, service = _service(context_conf={"enable_chat_history": True})
+        bot = object()
+        calls = []
+
+        service.is_onebot_platform = lambda adapter_id: adapter_id == "aiocqhttp"
+        service.get_onebot_bot = lambda *args, **kwargs: bot
+
+        async def get_onebot_history(target_umo, real_id, is_group, current_bot):
+            calls.append((target_umo, real_id, is_group, current_bot))
+            return {"messages": [{"role": "user", "content": "测试消息"}]}
+
+        service.onebot_history._get_onebot_history_data = get_onebot_history
+
+        result = await service.get_history_data(
+            "aiocqhttp:FriendMessage:10001",
+            is_group=False,
+        )
+
+        self.assertEqual(result["messages"][0]["content"], "测试消息")
+        self.assertEqual(
+            calls,
+            [("aiocqhttp:FriendMessage:10001", "10001", False, bot)],
+        )
+
+    async def test_history_router_resolves_custom_onebot_adapter_id(self):
+        _, service = _service(context_conf={"enable_chat_history": True})
+        bot = object()
+        calls = []
+
+        class Platform:
+            def meta(self):
+                return types.SimpleNamespace(
+                    id="default",
+                    name="aiocqhttp",
+                    support_proactive_message=True,
+                )
+
+            def get_client(self):
+                return bot
+
+        service.context.platform_manager = types.SimpleNamespace(
+            get_insts=lambda: [Platform()]
+        )
+
+        async def get_onebot_history(target_umo, real_id, is_group, current_bot):
+            calls.append((target_umo, real_id, is_group, current_bot))
+            return {"messages": [{"role": "user", "content": "自定义实例历史"}]}
+
+        service.onebot_history._get_onebot_history_data = get_onebot_history
+        result = await service.get_history_data(
+            "default:FriendMessage:10001",
+            is_group=False,
+        )
+
+        self.assertEqual(result["messages"][0]["content"], "自定义实例历史")
+        self.assertEqual(
+            calls,
+            [("default:FriendMessage:10001", "10001", False, bot)],
+        )
+
+    def test_memory_prompt_is_chinese_without_square_brackets(self):
+        context_module, _ = _service()
+
+        self.assertEqual(context_module.DAILY_SHARE_MEMORY_PROMPT, "每日分享记录")
+        self.assertNotIn("[", context_module.DAILY_SHARE_MEMORY_PROMPT)
+        self.assertNotIn("]", context_module.DAILY_SHARE_MEMORY_PROMPT)
+
+    def test_get_bot_instance_requires_an_explicit_id_when_multiple_exist(self):
+        _, service = _service()
+        first = object()
+        second = object()
+        service.bot_map = {"V": first, "Swan": second}
+
+        self.assertIsNone(service.get_bot_instance(""))
+
+    async def test_init_bots_keeps_same_display_id_across_platforms(self):
+        _, service = _service()
+        qq_bot = object()
+        weixin_bot = object()
+
+        class Platform:
+            def __init__(self, platform_type, client):
+                self.platform_type = platform_type
+                self.client = client
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id="shared-name",
+                    name=self.platform_type,
+                    support_proactive_message=True,
+                )
+
+            def get_client(self):
+                return self.client
+
+        service.context.platform_manager = types.SimpleNamespace(
+            get_insts=lambda: [
+                Platform("aiocqhttp", qq_bot),
+                Platform("weixin_oc", weixin_bot),
+            ]
+        )
+
+        await service.init_bots()
+
+        self.assertEqual(
+            service.bot_map,
+            {
+                "aiocqhttp!shared-name": qq_bot,
+                "weixin_oc!shared-name": weixin_bot,
+            },
+        )
+        self.assertIs(service._onebot_bot_for_adapter("shared-name"), qq_bot)
+
+    def test_old_virtual_prompt_is_not_special_cased(self):
+        _, service = _service()
+
+        msg = service.normalize._normalize_conversation_history_item(
+            {
+                "role": "user",
+                "content": "请发送今天的每日分享内容。",
+            }
+        )
+
+        self.assertEqual(msg["role"], "user")
+        self.assertEqual(msg["content"], "请发送今天的每日分享内容。")
+        self.assertEqual(msg["source"], "chat")
+
+    def test_non_internal_user_text_is_plain_chat(self):
+        _, service = _service()
+
+        msg = service.normalize._normalize_conversation_history_item(
+            {
+                "role": "user",
+                "content": "普通用户历史",
+            }
+        )
+
+        self.assertEqual(msg["role"], "user")
+        self.assertEqual(msg["content"], "普通用户历史")
+        self.assertEqual(msg["source"], "chat")
+
+    def test_removed_active_share_prefix_is_not_special_cased(self):
+        _, service = _service()
+
+        msg = service.normalize._normalize_conversation_history_item(
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "愿此见闻温柔你的日常\n今天适合散步。",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(msg["source"], "chat")
+        self.assertEqual(msg["content"], "愿此见闻温柔你的日常\n今天适合散步。")
+        self.assertEqual(msg["timestamp"], "")
+
+    def test_plain_assistant_text_is_not_daily_share_without_internal_trigger(self):
+        _, service = _service()
+
+        msg = service.normalize._normalize_conversation_history_item(
+            {
+                "role": "assistant",
+                "content": "普通助手历史\n旧分享文本",
+            }
+        )
+
+        self.assertEqual(msg["source"], "chat")
+        self.assertEqual(msg["content"], "普通助手历史\n旧分享文本")
+
+    def test_structured_history_context_keeps_reply_media_and_at_metadata(self):
+        _, service = _service()
+
+        prompt = service.format_structured_history_context(
+            {
+                "is_group": True,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "给你看看",
+                        "timestamp": "2026-06-26T12:00:00",
+                        "name": "阿林",
+                        "media": "图片",
+                        "reply_to_name": "小舟",
+                        "reply_to_id": "123",
+                        "at_targets": [{"user_id": "456", "name": "小舟"}],
+                    }
+                ],
+            }
+        )
+
+        self.assertIn("<structured_history>", prompt)
+        self.assertIn("[12:00] 阿林 (图片 / 回复 小舟 / @小舟): 给你看看", prompt)
+
+    async def test_record_bot_reply_writes_daily_share_assistant_without_internal_trigger(
+        self,
+    ):
+        context_module, service = _service()
+        manager = service.context.conversation_manager
+
+        await service.record_bot_reply_to_history(
+            "aiocqhttp:FriendMessage:123",
+            "今天适合散步。",
+            image_desc="晴天小路",
+        )
+
+        self.assertEqual(manager.added_pairs, [])
+        self.assertEqual(len(manager.updated_conversations), 1)
+        history = manager.updated_conversations[0]["history"]
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["role"], "assistant")
+        self.assertEqual(history[0]["source"], context_module.DAILY_SHARE_SOURCE)
+        self.assertEqual(
+            history[0]["content"], "今天适合散步。\n\n[发送了一张配图: 晴天小路]"
+        )
+
+    async def test_saved_daily_share_source_is_preserved_without_internal_trigger(self):
+        context_module = _load_context_module()
+        service = context_module.ContextService(
+            types.SimpleNamespace(
+                conversation_manager=_ConversationManager(
+                    [
+                        {
+                            "role": "assistant",
+                            "content": "新分享内容",
+                            "source": context_module.DAILY_SHARE_SOURCE,
+                        },
+                    ]
+                ),
+                message_history_manager=_PlatformHistoryManager(),
+                platform_manager=None,
+            ),
+            {"context_conf": {"deep_history_max_count": 1}},
+        )
+
+        data = await service.conversation._get_conversation_history_data(
+            "aiocqhttp:GroupMessage:123",
+            is_group=True,
+        )
+
+        self.assertEqual(len(data["messages"]), 1)
+        self.assertEqual(
+            data["messages"][0]["source"], context_module.DAILY_SHARE_SOURCE
+        )
+        self.assertEqual(data["messages"][0]["content"], "新分享内容")
+
+    async def test_record_external_share_uses_daily_life_public_contract(self):
+        plugin = _DailyLifePlugin()
+        context_module, service = _service(
+            stars=[_StarRef("astrbot_plugin_daily_life", plugin)],
+            context_conf={"record_share_to_memory": True},
+        )
+
+        await service.record_external_share(
+            "aiocqhttp:FriendMessage:123",
+            "今天适合散步。",
+            "晴天小路",
+        )
+
+        self.assertEqual(len(plugin.activities), 1)
+        call = plugin.activities[0]
+        self.assertEqual(call["target_umo"], "aiocqhttp:FriendMessage:123")
+        self.assertEqual(call["content"], "今天适合散步。")
+        self.assertEqual(call["image_description"], "晴天小路")
+        self.assertEqual(call["reason"], context_module.DAILY_SHARE_MEMORY_PROMPT)
+        self.assertTrue(call["sync_memory"])
+
+    async def test_record_external_share_disables_only_memory_sync(self):
+        plugin = _DailyLifePlugin()
+        _, service = _service(
+            stars=[_StarRef("astrbot_plugin_daily_life", plugin)],
+            context_conf={"record_share_to_memory": False},
+        )
+
+        await service.record_external_share(
+            "aiocqhttp:FriendMessage:123",
+            "今天适合散步。",
+            "晴天小路",
+        )
+
+        self.assertEqual(len(plugin.activities), 1)
+        self.assertFalse(plugin.activities[0]["sync_memory"])
+
+    async def test_full_non_onebot_umo_does_not_fall_back_to_numeric_onebot(self):
+        _, service = _service(
+            [{"role": "user", "content": "这是一条普通历史。"}],
+            {"private_history_count": 5},
+        )
+
+        def fail_if_onebot_is_used(*args, **kwargs):
+            raise AssertionError("full non-OneBot UMO should not use OneBot")
+
+        service.get_onebot_bot = fail_if_onebot_is_used
+
+        data = await service.get_history_data("other:FriendMessage:123", is_group=False)
+
+        self.assertEqual(data["messages"][0]["content"], "这是一条普通历史。")
+
+    async def test_platform_history_tries_raw_webchat_session_id(self):
+        record = types.SimpleNamespace(
+            content={
+                "type": "user",
+                "message": [{"type": "plain", "text": "刚刚聊到散步。"}],
+            },
+            sender_id="alice",
+            sender_name="Alice",
+            created_at=None,
+        )
+        _, service = _service(
+            platform_records={("webchat", "session-1"): [record]},
+            context_conf={"private_history_count": 5},
+        )
+
+        data = await service.get_history_data(
+            "webchat:FriendMessage:webchat!alice!session-1",
+            is_group=False,
+        )
+
+        manager = service.context.message_history_manager
+        self.assertEqual(
+            [call["user_id"] for call in manager.calls],
+            ["webchat!alice!session-1", "session-1"],
+        )
+        self.assertEqual(data["messages"][0]["content"], "刚刚聊到散步。")
+        self.assertEqual(data["messages"][0]["role"], "user")
+
+    async def test_platform_history_daily_share_is_marked_from_conversation_history(
+        self,
+    ):
+        context_module = _load_context_module()
+        service = context_module.ContextService(
+            types.SimpleNamespace(
+                conversation_manager=_ConversationManager(
+                    [
+                        {
+                            "role": "assistant",
+                            "content": "今天适合散步。\n\n[发送了一张配图: 晴天小路]",
+                            "source": context_module.DAILY_SHARE_SOURCE,
+                        },
+                    ]
+                ),
+                message_history_manager=_PlatformHistoryManager(
+                    {
+                        (
+                            "webchat",
+                            "session-2",
+                        ): [
+                            types.SimpleNamespace(
+                                content={
+                                    "type": "bot",
+                                    "message": [
+                                        {"type": "plain", "text": "今天适合散步。"}
+                                    ],
+                                },
+                                sender_id="bot",
+                                sender_name="bot",
+                                created_at=None,
+                            )
+                        ]
+                    }
+                ),
+                platform_manager=None,
+            ),
+            {"context_conf": {"private_history_count": 5}},
+        )
+
+        data = await service.get_history_data(
+            "webchat:FriendMessage:webchat!alice!session-2",
+            is_group=False,
+        )
+
+        self.assertEqual(
+            data["messages"][0]["source"], context_module.DAILY_SHARE_SOURCE
+        )
+        prompt = service.format_structured_history_context(data, limit=6)
+        self.assertIn("<structured_history>", prompt)
+        self.assertIn("- 你(已分享): 今天适合散步。", prompt)
+
+    async def test_life_context_reads_daily_life_plugin(self):
+        _, service = _service(
+            stars=[_StarRef("astrbot_plugin_daily_life", _DailyLifePlugin())],
+        )
+
+        text = await service.get_life_context("aiocqhttp:FriendMessage:123")
+
+        self.assertIn("【今日天气】北京 晴 20°C", text)
+        self.assertIn("【当前状态】", text)
+        self.assertIn("体力: 35/100", text)
+        self.assertIn("今天偏累，不太想出门", text)
+        self.assertIn("【主动分享状态】暂不适合主动打扰（正在专注）", text)
+        self.assertIn("【关系档案】", text)
+        self.assertIn("阿林", text)
+        self.assertIn("人设线索：男生，死党", text)
+        self.assertIn("记忆点：最近想去看展", text)
+        self.assertIn("【聊天记忆摘要】", text)
+        self.assertIn("和阿林聊到周末看展", text)
+        self.assertIn("【地点记忆】", text)
+        self.assertIn("常去咖啡店", text)
+        self.assertIn("【近期事件】", text)
+        self.assertIn("完成手帐", text)
+        self.assertIn("【当前相关约定】", text)
+        self.assertIn("周末一起看展", text)
+
+    def test_private_life_context_includes_relationship_identity_rule(self):
+        _, service = _service()
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        context = "\n".join(
+            [
+                "【关系档案】",
+                "- 阿林：互动 3 次；人设线索：男生，死党；记忆点：最近想去看展",
+                "【今日完整时间轴及计划】",
+                "15:00 - 和阿林去展览馆 [期待]",
+            ]
+        )
+
+        prompt = service.format_life_context(
+            context,
+            config_module.ShareType.MOOD,
+            is_group=False,
+        )
+
+        self.assertIn("【日程人物与穿搭归属规则】", prompt)
+        self.assertIn(
+            "必须先对照【关系档案】中的人设线索、记忆点和最近备注原文", prompt
+        )
+        self.assertIn("原文没有明确写出的信息不要自行补全或改写", prompt)
+
+    def test_private_life_context_does_not_repeat_recipient_rule(self):
+        _, service = _service()
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        context = "\n".join(
+            [
+                "【关系档案】",
+                "- 阿林：互动 3 次；人设线索：男生，死党；记忆点：最近想去看展",
+                "【今日完整时间轴及计划】",
+                "15:00 - 和阿林去展览馆 [期待]",
+            ]
+        )
+
+        prompt = service.format_life_context(
+            context,
+            config_module.ShareType.MOOD,
+            is_group=False,
+        )
+
+        self.assertNotIn("【当前私聊对象身份规则】", prompt)
+        self.assertNotIn("当前私聊目标标识", prompt)
+
+    def test_private_life_context_keeps_outfit_on_protagonist(self):
+        _, service = _service()
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        context = "\n".join(
+            [
+                "【今日穿搭】浅蓝外套和白裙子",
+                "【关系档案】",
+                "- 阿林：互动 3 次；人设线索：男生，死党",
+                "【今日完整时间轴及计划】",
+                "15:00 - 和阿林去展览馆 [期待]",
+            ]
+        )
+
+        prompt = service.format_life_context(
+            context,
+            config_module.ShareType.MOOD,
+            is_group=False,
+        )
+
+        self.assertIn("【今日穿搭】只属于主角/你本人", prompt)
+        self.assertIn("不得把这套穿搭套用到对方身上", prompt)
+
+    def test_life_context_bridge_uses_exact_plugin_id(self):
+        _, service = _service()
+
+        self.assertIsNone(service.daily_life_bridge._plugin())
+
+    def test_voice_emotion_is_resolved_without_text_tags(self):
+        _, service = _service()
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+
+        self.assertEqual(
+            service.tts._resolve_voice_emotion(
+                config_module.ShareType.GREETING,
+                config_module.TimePeriod.MORNING,
+            ),
+            ("轻快的问候", "happy"),
+        )
+        self.assertEqual(
+            service.tts._resolve_voice_emotion(
+                config_module.ShareType.GREETING,
+                config_module.TimePeriod.LATE_NIGHT,
+            ),
+            ("安静的睡前问候", "neutral"),
+        )
+        self.assertEqual(
+            service.tts._resolve_voice_emotion(
+                config_module.ShareType.NEWS,
+                config_module.TimePeriod.AFTERNOON,
+            ),
+            ("自然讲述", "neutral"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

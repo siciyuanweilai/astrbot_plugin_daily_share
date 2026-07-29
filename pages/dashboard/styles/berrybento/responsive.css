@@ -1,0 +1,184 @@
+@media (max-width: 1180px) {
+  .bento-board {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-board .primary-column,
+  .bento-board .status-column,
+  .bento-board .side-column {
+    grid-column: auto;
+  }
+
+  .dashboard-card-calendar {
+    position: relative;
+    inset-block-start: auto;
+  }
+
+  .media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bento-settings-board {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-sticker-nav {
+    position: relative;
+    inset-block-start: auto;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  }
+
+  .bento-sticker-nav::before {
+    grid-column: 1 / -1;
+  }
+
+  .bento-sticker-nav a:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .bento-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    min-height: 0;
+    padding: 28px;
+  }
+
+  .bento-hero-copy,
+  .bento-ribbon {
+    width: 100%;
+  }
+
+  .bento-ribbon {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bento-ribbon > .bento-ribbon-button {
+    --ribbon-x: 0px;
+    width: 100%;
+    max-width: 360px;
+  }
+}
+
+@media (max-width: 760px) {
+  .bento-shell {
+    width: min(100% - 18px, 1580px);
+  }
+
+  .bento-hero {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    min-height: 0;
+    padding: 24px;
+    border-radius: 28px;
+  }
+
+  .bento-hero::after {
+    inline-size: 150px;
+    block-size: 78px;
+    inset-inline-end: 54px;
+  }
+
+  h1 {
+    font-size: 2.75rem;
+  }
+
+  .bento-ribbon {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-ribbon > .bento-ribbon-button {
+    --ribbon-x: 0px;
+    width: 100%;
+  }
+
+  .notice {
+    inset-block: auto 12px;
+    inset-inline: 9px;
+    width: auto;
+  }
+
+  .run-form {
+    grid-template-columns: 1fr;
+  }
+
+  .panel,
+  .settings-section,
+  .qzone-account-card,
+  .qzone-tabs,
+  .qzone-target-field,
+  .qzone-composer,
+  .qzone-toolbar,
+  .qzone-card {
+    border-radius: 22px;
+  }
+
+  .media-filterbar {
+    position: relative;
+    margin: 16px 0 14px;
+    border-radius: 20px;
+  }
+
+  .media-filter-controls {
+    justify-content: stretch;
+  }
+
+  .media-filter-controls > * {
+    flex: 1 1 100%;
+  }
+
+  .media-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .media-item {
+    transform: none;
+  }
+
+  .settings-section,
+  .settings-section[data-settings-section] {
+    grid-column: 1 / -1;
+  }
+
+  .setting-field,
+  .setting-switch,
+  .setting-field-wide,
+  .settings-section[data-settings-section] .setting-field,
+  .settings-section[data-settings-section] .setting-switch {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 420px) {
+  .bento-hero {
+    padding: 18px;
+  }
+
+  .bento-hero::before {
+    inset: 10px;
+  }
+
+  h1 {
+    font-size: 2.25rem;
+    line-height: 1.05;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .media-item,
+  button.primary,
+  .primary {
+    transform: none !important;
+  }
+}

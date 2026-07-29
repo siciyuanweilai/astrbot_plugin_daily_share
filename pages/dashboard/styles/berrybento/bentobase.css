@@ -1,0 +1,147 @@
+:root {
+  color-scheme: light;
+  --bento-font-body: "ChillRoundM", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --bento-font-display: "ChillRoundM", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --bento-ink: #3f2230;
+  --bento-ink-soft: #674355;
+  --bento-muted: #8f7080;
+  --bento-cream: #fff8e6;
+  --bento-milk: #fffdf9;
+  --bento-sugar: #fff1f7;
+  --bento-strawberry: #ff78aa;
+  --bento-berry: #d83f7d;
+  --bento-peach: #ffab8f;
+  --bento-lemon: #ffe07a;
+  --bento-mint: #9de5cf;
+  --bento-blue: #91dcf3;
+  --bento-lavender: #c9bcff;
+  --bento-line: rgba(92, 52, 72, 0.16);
+  --bento-line-strong: rgba(92, 52, 72, 0.28);
+  --bento-card: rgba(255, 255, 251, 0.84);
+  --bento-card-solid: #fffefa;
+  --bento-glass: rgba(255, 255, 255, 0.62);
+  --bento-shadow: 0 26px 72px rgba(205, 89, 132, 0.16);
+  --bento-shadow-soft: 0 14px 34px rgba(126, 71, 96, 0.1);
+  --bento-glow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  --bento-focus: 0 0 0 4px rgba(145, 220, 243, 0.28);
+  --bento-radius-xl: 36px;
+  --bento-radius-lg: 28px;
+  --bento-radius-md: 20px;
+  --bento-radius-sm: 14px;
+
+  --bg: #fff6df;
+  --page-bg:
+    radial-gradient(circle at 8% 8%, rgba(255, 120, 170, 0.2), transparent 26%),
+    radial-gradient(circle at 88% 10%, rgba(145, 220, 243, 0.24), transparent 28%),
+    radial-gradient(circle at 24% 92%, rgba(255, 224, 122, 0.22), transparent 30%),
+    linear-gradient(135deg, #fff7df 0%, #fff0f6 46%, #eefcff 100%);
+  --surface: var(--bento-card);
+  --surface-soft: #fff1f7;
+  --surface-warm: #fff4d8;
+  --text: var(--bento-ink);
+  --muted: var(--bento-muted);
+  --line: var(--bento-line);
+  --accent: var(--bento-strawberry);
+  --accent-strong: var(--bento-berry);
+  --accent-soft: #ffe2ee;
+  --blue: #408eac;
+  --blue-soft: #e6f9ff;
+  --mint: #3d927a;
+  --mint-soft: #e7f8ef;
+  --amber: #9f671f;
+  --amber-soft: #fff1c8;
+  --danger: #c84a68;
+  --danger-soft: #ffe5ec;
+  --shadow: var(--bento-shadow);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bento-ink: #fff0f6;
+  --bento-ink-soft: #efc7d8;
+  --bento-muted: #d7b5c6;
+  --bento-cream: #2d1d27;
+  --bento-milk: #261821;
+  --bento-sugar: #352030;
+  --bento-line: rgba(255, 198, 224, 0.22);
+  --bento-line-strong: rgba(255, 198, 224, 0.34);
+  --bento-card: rgba(47, 31, 42, 0.86);
+  --bento-card-solid: #312131;
+  --bento-glass: rgba(60, 40, 54, 0.64);
+  --bento-shadow: 0 26px 72px rgba(5, 2, 8, 0.42);
+  --bento-shadow-soft: 0 16px 36px rgba(5, 2, 8, 0.28);
+  --bento-focus: 0 0 0 4px rgba(145, 220, 243, 0.2);
+
+  --bg: #20151d;
+  --page-bg:
+    radial-gradient(circle at 8% 8%, rgba(255, 120, 170, 0.15), transparent 26%),
+    radial-gradient(circle at 88% 10%, rgba(145, 220, 243, 0.13), transparent 28%),
+    radial-gradient(circle at 24% 92%, rgba(255, 224, 122, 0.1), transparent 30%),
+    linear-gradient(135deg, #261823 0%, #1c1420 48%, #15272f 100%);
+  --surface: var(--bento-card);
+  --surface-soft: rgba(86, 48, 70, 0.72);
+  --surface-warm: rgba(85, 61, 34, 0.68);
+  --text: var(--bento-ink);
+  --muted: var(--bento-muted);
+  --line: var(--bento-line);
+  --accent: #ff91bd;
+  --accent-strong: #ffc0d8;
+  --accent-soft: rgba(255, 120, 170, 0.18);
+  --blue: #a0e3f5;
+  --blue-soft: rgba(145, 220, 243, 0.16);
+  --mint: #a7ecd7;
+  --mint-soft: rgba(157, 229, 207, 0.16);
+  --amber: #ffe18b;
+  --amber-soft: rgba(255, 224, 122, 0.16);
+  --danger: #ff9bb2;
+  --danger-soft: rgba(255, 132, 165, 0.16);
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+body {
+  font-family: var(--bento-font-body);
+  letter-spacing: 0;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+}
+
+:where(button, input, select, textarea, optgroup, option) {
+  font-family: inherit;
+}
+
+body::before {
+  background:
+    radial-gradient(circle at 18px 18px, rgba(255, 255, 255, 0.72) 0 2px, transparent 2.5px),
+    linear-gradient(rgba(255, 255, 255, 0.34) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.26) 1px, transparent 1px),
+    var(--page-bg);
+  background-size: 58px 58px, 38px 38px, 38px 38px, auto;
+}
+
+body::after {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  content: "";
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 26%, rgba(255, 120, 170, 0.12), transparent 18%),
+    radial-gradient(circle at 88% 78%, rgba(157, 229, 207, 0.15), transparent 20%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0 8px, transparent 8px 18px);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.92), transparent 86%);
+}
+
+html[data-theme="dark"] body::before {
+  background:
+    radial-gradient(circle at 18px 18px, rgba(255, 210, 230, 0.08) 0 2px, transparent 2.5px),
+    linear-gradient(rgba(255, 210, 230, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 210, 230, 0.04) 1px, transparent 1px),
+    var(--page-bg);
+  background-size: 58px 58px, 38px 38px, 38px 38px, auto;
+}
+

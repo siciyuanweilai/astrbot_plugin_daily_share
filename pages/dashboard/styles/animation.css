@@ -1,0 +1,132 @@
+.sakura-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+
+.sakura-petal {
+  position: absolute;
+  top: -12vh;
+  left: var(--sakura-left);
+  width: var(--sakura-size);
+  height: calc(var(--sakura-size) * 0.78);
+  z-index: var(--sakura-depth);
+  opacity: var(--sakura-opacity);
+  transform: translate3d(0, 0, 0) rotate(var(--sakura-rotate));
+  animation: sakuraFall var(--sakura-duration) linear var(--sakura-delay) infinite;
+  will-change: transform;
+}
+
+.sakura-petal-shape {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 70% 18% 72% 24%;
+  background:
+    radial-gradient(circle at 76% 22%, rgba(255, 255, 255, 0.78) 0 18%, transparent 19%),
+    linear-gradient(135deg, rgba(255, 222, 236, 0.96), rgba(244, 131, 178, 0.76));
+  box-shadow: 0 3px 8px rgba(207, 109, 151, 0.14);
+  animation: sakuraSway var(--sakura-sway-duration) ease-in-out var(--sakura-delay) infinite alternate;
+  transform-origin: 50% 35%;
+  will-change: transform;
+}
+
+.sakura-petal.is-far .sakura-petal-shape {
+  background:
+    radial-gradient(circle at 76% 22%, rgba(255, 255, 255, 0.7) 0 18%, transparent 19%),
+    linear-gradient(135deg, rgba(255, 232, 242, 0.82), rgba(244, 151, 190, 0.5));
+  box-shadow: none;
+}
+
+.sakura-petal.is-near .sakura-petal-shape {
+  background:
+    radial-gradient(circle at 76% 22%, rgba(255, 255, 255, 0.82) 0 18%, transparent 19%),
+    linear-gradient(135deg, rgba(255, 218, 234, 0.98), rgba(232, 99, 157, 0.82));
+  box-shadow: 0 4px 12px rgba(207, 109, 151, 0.18);
+}
+
+.sakura-petal-shape::after {
+  content: "";
+  position: absolute;
+  inset: 18% 20% 22% 44%;
+  border-radius: 999px;
+  border-left: 1px solid rgba(190, 67, 122, 0.28);
+  transform: rotate(18deg);
+}
+
+@keyframes sakuraFall {
+  0% {
+    transform: translate3d(0, -8vh, 0) rotate(var(--sakura-rotate));
+  }
+  24% {
+    transform: translate3d(var(--sakura-wind-a), 22vh, 0) rotate(calc(var(--sakura-rotate) + var(--sakura-spin-a)));
+  }
+  52% {
+    transform: translate3d(var(--sakura-wind-b), 54vh, 0) rotate(calc(var(--sakura-rotate) + var(--sakura-spin-b)));
+  }
+  76% {
+    transform: translate3d(var(--sakura-wind-c), 86vh, 0) rotate(calc(var(--sakura-rotate) + var(--sakura-spin-c)));
+  }
+  100% {
+    transform: translate3d(var(--sakura-drift), 124vh, 0) rotate(calc(var(--sakura-rotate) + var(--sakura-spin)));
+  }
+}
+
+@keyframes sakuraSway {
+  from {
+    transform: translate3d(calc(var(--sakura-sway) * -1), 0, 0) rotate(-10deg);
+  }
+  to {
+    transform: translate3d(var(--sakura-sway), 0, 0) rotate(14deg);
+  }
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button {
+  cursor: var(--cursor-action);
+}
+
+svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell {
+  position: relative;
+  z-index: 2;
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 26px;
+  overflow-x: clip;
+}
+
+.page-view[hidden] {
+  display: none !important;
+}
+

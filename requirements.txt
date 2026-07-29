@@ -1,0 +1,6 @@
+aiohttp>=3.9
+httpx[http2]>=0.27
+APScheduler>=3.10
+aiofiles>=23.2
+json5>=0.9
+Pillow>=10

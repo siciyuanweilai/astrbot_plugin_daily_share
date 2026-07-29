@@ -1,0 +1,373 @@
+.bento-settings-board {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: clamp(16px, 2vw, 24px);
+  align-items: start;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.bento-settings-board::before {
+  display: none;
+}
+
+.bento-sticker-nav {
+  position: sticky;
+  inset-block-start: 18px;
+  z-index: 35;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 26% 8%, rgba(255, 255, 255, 0.86) 0 12%, transparent 13%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 237, 246, 0.7)),
+    var(--bento-card);
+  box-shadow: var(--bento-shadow-soft), var(--bento-glow);
+}
+
+.bento-sticker-nav::before {
+  display: block;
+  margin-block-end: 2px;
+  color: var(--accent-strong);
+  content: "贴纸索引";
+  font-family: var(--bento-font-display);
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.bento-sticker-nav a {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 10px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px 7px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--bento-ink-soft);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 950;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease, border-color 160ms ease;
+}
+
+.bento-sticker-nav a::before {
+  inline-size: 30px;
+  block-size: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.9) 0 14%, transparent 15%),
+    linear-gradient(145deg, var(--bento-strawberry), var(--bento-peach));
+  color: #fff;
+  content: attr(data-code);
+  font-family: var(--bento-font-display);
+  font-size: 11px;
+  font-weight: 950;
+  box-shadow: 0 8px 16px rgba(205, 89, 132, 0.16);
+}
+
+.bento-sticker-nav a::after {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 999px;
+  background: rgba(103, 67, 85, 0.22);
+  content: "";
+}
+
+.bento-sticker-nav a:hover {
+  border-color: var(--bento-line);
+  background: rgba(255, 255, 255, 0.52);
+  color: var(--accent-strong);
+  transform: translateX(3px);
+}
+
+.bento-sticker-nav a.active,
+.bento-sticker-nav a[aria-current="true"] {
+  border-color: var(--bento-line-strong);
+  background:
+    radial-gradient(circle at 16% 20%, rgba(255, 255, 255, 0.84) 0 14%, transparent 15%),
+    linear-gradient(135deg, rgba(255, 226, 238, 0.82), rgba(232, 250, 255, 0.68));
+  color: var(--accent-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+html[data-theme="dark"] .bento-sticker-nav {
+  border-color: rgba(255, 198, 224, 0.26);
+  background:
+    radial-gradient(circle at 26% 8%, rgba(255, 220, 236, 0.16) 0 12%, transparent 13%),
+    linear-gradient(145deg, rgba(70, 43, 60, 0.88), rgba(42, 28, 40, 0.86)),
+    var(--bento-card);
+  box-shadow:
+    0 18px 38px rgba(8, 3, 10, 0.34),
+    inset 0 1px 0 rgba(255, 228, 240, 0.1);
+}
+
+html[data-theme="dark"] .bento-sticker-nav::before {
+  color: #ffc7de;
+  text-shadow: 0 1px 10px rgba(255, 120, 170, 0.22);
+}
+
+html[data-theme="dark"] .bento-sticker-nav a {
+  color: #f4cfdd;
+}
+
+html[data-theme="dark"] .bento-sticker-nav a::before {
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 238, 246, 0.62) 0 14%, transparent 15%),
+    linear-gradient(145deg, #ff78aa, #ff9a8b);
+  color: #fff8fb;
+  box-shadow:
+    0 8px 16px rgba(8, 3, 10, 0.28),
+    0 0 16px rgba(255, 120, 170, 0.24);
+}
+
+html[data-theme="dark"] .bento-sticker-nav a::after {
+  background: rgba(255, 198, 224, 0.28);
+}
+
+html[data-theme="dark"] .bento-sticker-nav a:hover {
+  border-color: rgba(255, 198, 224, 0.3);
+  background: rgba(255, 198, 224, 0.09);
+  color: #ffd7e8;
+}
+
+html[data-theme="dark"] .bento-sticker-nav a.active,
+html[data-theme="dark"] .bento-sticker-nav a[aria-current="true"] {
+  border-color: rgba(255, 198, 224, 0.42);
+  background:
+    radial-gradient(circle at 16% 20%, rgba(255, 220, 236, 0.16) 0 14%, transparent 15%),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.16), rgba(145, 220, 243, 0.1));
+  color: #ffe0ed;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 228, 240, 0.16),
+    0 0 0 1px rgba(255, 198, 224, 0.08);
+}
+
+.bento-settings-grid {
+  container-type: inline-size;
+  gap: clamp(16px, 2vw, 24px);
+  padding-block-end: 30px;
+}
+
+.bento-settings-grid .settings-section:nth-of-type(3n + 1) {
+  border-start-start-radius: 38px;
+}
+
+.bento-settings-grid .settings-section:nth-of-type(3n + 2) {
+  border-end-end-radius: 38px;
+}
+
+.bento-settings-grid .settings-section:nth-of-type(3n) {
+  border-start-end-radius: 38px;
+}
+
+.settings-section {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 92% 4%, var(--section-halo), transparent 24%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(255, 248, 231, 0.64)),
+    var(--section-soft);
+  box-shadow: var(--bento-shadow-soft), var(--bento-glow);
+  scroll-margin-top: 28px;
+}
+
+.settings-section.active {
+  box-shadow:
+    0 18px 42px rgba(205, 89, 132, 0.14),
+    var(--bento-focus),
+    var(--bento-glow);
+}
+
+.settings-section::before {
+  block-size: 6px;
+  background: linear-gradient(90deg, var(--section-accent), var(--bento-lemon), transparent);
+}
+
+.settings-section::after {
+  position: absolute;
+  inset-block-start: 16px;
+  inset-inline-end: 18px;
+  inline-size: 56px;
+  block-size: 16px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 16% 50%, var(--bento-strawberry) 0 12%, transparent 13%),
+    radial-gradient(circle at 50% 50%, var(--bento-lemon) 0 12%, transparent 13%),
+    radial-gradient(circle at 84% 50%, var(--bento-mint) 0 12%, transparent 13%),
+    rgba(255, 255, 255, 0.5);
+  content: "";
+  pointer-events: none;
+}
+
+.settings-section-title {
+  color: var(--bento-ink);
+  font-size: 1.75rem;
+  border-bottom-color: var(--bento-line);
+}
+
+.settings-section-title::before {
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 42% 58% 48% 52%;
+  background: linear-gradient(135deg, var(--section-accent), var(--bento-lemon));
+  box-shadow: 0 0 0 5px var(--section-halo);
+}
+
+.settings-section-note,
+.setting-hint {
+  color: var(--bento-muted);
+}
+
+.target-schema-guide article,
+.settings-target-editor,
+.setting-slider-control {
+  border-color: var(--bento-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(255, 255, 255, 0.9) 0 14%, transparent 15%),
+    rgba(255, 255, 255, 0.54);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.settings-section .setting-field,
+.settings-section .setting-switch {
+  border-radius: 18px;
+}
+
+.settings-section .setting-field {
+  align-content: start;
+}
+
+.settings-section .setting-field textarea {
+  min-block-size: 96px;
+  resize: vertical;
+}
+
+.settings-section .setting-field.setting-field-tall textarea {
+  min-block-size: 150px;
+}
+
+.settings-section .setting-field input,
+.settings-section .setting-field select,
+.settings-section .setting-field textarea,
+.settings-section .setting-field .sweet-select-trigger {
+  border-color: var(--bento-line-strong);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.94) 0 13%, transparent 14%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 249, 232, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 16px rgba(126, 71, 96, 0.06);
+}
+
+.setting-switch input {
+  border-color: var(--bento-line-strong);
+  background:
+    radial-gradient(circle at 28% 50%, #ffffff 0 25%, transparent 27%),
+    linear-gradient(135deg, #f4d7e6, #fff8dc);
+}
+
+.setting-switch input::after {
+  content: "";
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.92) 0 18%, transparent 19%),
+    linear-gradient(145deg, #fff, #ffe1ef);
+}
+
+.setting-switch input:checked {
+  border-color: rgba(216, 63, 125, 0.84);
+  background:
+    radial-gradient(circle at 72% 50%, rgba(255, 255, 255, 0.95) 0 25%, transparent 27%),
+    linear-gradient(135deg, var(--bento-strawberry), var(--bento-peach));
+}
+
+html[data-theme="dark"] .settings-section .setting-field input,
+html[data-theme="dark"] .settings-section .setting-field select,
+html[data-theme="dark"] .settings-section .setting-field textarea,
+html[data-theme="dark"] .settings-section .setting-field .sweet-select-trigger,
+html[data-theme="dark"] .settings-target-editor .target-field :is(input, select) {
+  border-color: rgba(255, 198, 224, 0.3);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 220, 236, 0.1) 0 13%, transparent 14%),
+    linear-gradient(180deg, rgba(60, 38, 54, 0.96), rgba(43, 29, 42, 0.92));
+  color: var(--bento-ink);
+  caret-color: #ffc7de;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 228, 240, 0.1),
+    0 8px 18px rgba(8, 3, 10, 0.18);
+}
+
+html[data-theme="dark"] .settings-section .setting-field input::placeholder,
+html[data-theme="dark"] .settings-section .setting-field textarea::placeholder,
+html[data-theme="dark"] .settings-target-editor .target-field input::placeholder {
+  color: rgba(239, 199, 216, 0.62);
+}
+
+html[data-theme="dark"] .settings-section .setting-field input:focus,
+html[data-theme="dark"] .settings-section .setting-field select:focus,
+html[data-theme="dark"] .settings-section .setting-field textarea:focus,
+html[data-theme="dark"] .settings-section .setting-field .sweet-select-trigger:focus-visible,
+html[data-theme="dark"] .settings-target-editor .target-field :is(input, select):focus {
+  border-color: rgba(255, 145, 189, 0.72);
+  box-shadow:
+    var(--bento-focus),
+    0 12px 24px rgba(8, 3, 10, 0.24),
+    inset 0 1px 0 rgba(255, 228, 240, 0.16);
+}
+
+html[data-theme="dark"] .target-schema-guide article,
+html[data-theme="dark"] .settings-target-editor,
+html[data-theme="dark"] .setting-slider-control,
+html[data-theme="dark"] .settings-target-editor .target-item,
+html[data-theme="dark"] .settings-target-editor .empty {
+  border-color: rgba(255, 198, 224, 0.22);
+  background:
+    radial-gradient(circle at 14% 8%, rgba(255, 220, 236, 0.1) 0 14%, transparent 15%),
+    linear-gradient(180deg, rgba(55, 35, 51, 0.84), rgba(42, 28, 40, 0.76));
+  box-shadow: inset 0 1px 0 rgba(255, 228, 240, 0.08);
+}
+
+html[data-theme="dark"] .target-field span {
+  color: var(--bento-muted);
+}
+
+html[data-theme="dark"] .target-title strong {
+  color: var(--bento-ink);
+}
+
+html[data-theme="dark"] .target-kind {
+  border-color: rgba(255, 198, 224, 0.3);
+  background: linear-gradient(135deg, rgba(255, 120, 170, 0.16), rgba(255, 224, 122, 0.1));
+  color: #ffd2e4;
+}
+
+html[data-theme="dark"] .setting-switch input {
+  border-color: rgba(255, 198, 224, 0.3);
+  background:
+    radial-gradient(circle at 28% 50%, rgba(255, 235, 244, 0.76) 0 25%, transparent 27%),
+    linear-gradient(135deg, rgba(74, 47, 70, 0.92), rgba(49, 32, 48, 0.92));
+}
+
+html[data-theme="dark"] .setting-switch input::after {
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 235, 244, 0.28) 0 18%, transparent 19%),
+    linear-gradient(145deg, #4b3048, #342435);
+}
+
+html[data-theme="dark"] .setting-switch input:checked {
+  border-color: rgba(255, 145, 189, 0.72);
+  background:
+    radial-gradient(circle at 72% 50%, rgba(255, 240, 246, 0.9) 0 25%, transparent 27%),
+    linear-gradient(135deg, rgba(255, 120, 170, 0.82), rgba(255, 171, 143, 0.76));
+}
