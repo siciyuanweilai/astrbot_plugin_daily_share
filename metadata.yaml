@@ -4,7 +4,7 @@ desc: 在恰好的时刻，循着时间、生活状态、聊天记忆与网络�
 version: 1.0.0
 author: 四次元未来
 repo: https://github.com/siciyuanweilai/astrbot_plugin_daily_share
-astrbot_version: ">=4.26"
+astrbot_version: ">=4.26.0"
 support_platforms:
     - aiocqhttp
     - weixin_oc
