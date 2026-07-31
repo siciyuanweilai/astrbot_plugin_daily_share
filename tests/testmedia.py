@@ -857,7 +857,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
             self.assertEqual(result["deleted"], 1)
             self.assertGreater(result["bytes"], 0)
 
-    def test_delete_local_media_file_skips_outside_plugin_data_dir(self):
+    def test_delete_record_owned_media_file_outside_plugin_data_dir(self):
         mod = _load_main_module()
 
         class Db(_DomainStateDb):
@@ -881,9 +881,9 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                 )
             )
 
-            self.assertTrue(outside_path.exists())
-            self.assertEqual(result["deleted"], 0)
-            self.assertEqual(result["skipped"], 1)
+            self.assertFalse(outside_path.exists())
+            self.assertEqual(result["deleted"], 1)
+            self.assertEqual(result["skipped"], 0)
 
     def test_delete_local_media_file_skips_still_referenced_file(self):
         mod = _load_main_module()
@@ -912,7 +912,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
             self.assertEqual(result["deleted"], 0)
             self.assertEqual(result["skipped"], 1)
 
-    def test_delete_other_plugin_generated_file_is_forbidden(self):
+    def test_delete_daily_life_generated_file_used_by_share(self):
         mod = _load_main_module()
 
         class Db(_DomainStateDb):
@@ -942,9 +942,9 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                 )
             )
 
-            self.assertTrue(daily_life_file.exists())
-            self.assertEqual(result["deleted"], 0)
-            self.assertEqual(result["skipped"], 1)
+            self.assertFalse(daily_life_file.exists())
+            self.assertEqual(result["deleted"], 1)
+            self.assertEqual(result["skipped"], 0)
 
     def test_delete_local_media_file_ignores_local_media_url(self):
         mod = _load_main_module()

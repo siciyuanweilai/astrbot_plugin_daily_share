@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 from astrbot.api import logger
 
+from ..panelcomponent import PanelComponent
+
 
 class DashboardMediaFileService(PanelComponent):
-    def _page_media_delete_roots(self) -> list[Path]:
-        return [self.data_dir]
-
-    def _page_resolve_media_path(self, media_path: str) -> Optional[Path]:
+    def _page_resolve_media_path(self, media_path: str) -> Path | None:
         media_path = self.media_kind._page_local_media_ref(media_path)
         if not media_path:
             return None
@@ -38,23 +34,8 @@ class DashboardMediaFileService(PanelComponent):
                 continue
         return None
 
-    def _page_safe_media_delete_path(self, media_ref: str) -> Optional[Path]:
-        path = self.media_files._page_resolve_media_path(media_ref)
-        if not path:
-            return None
-
-        try:
-            resolved = path.resolve(strict=False)
-            for root in self.media_files._page_media_delete_roots():
-                try:
-                    resolved.relative_to(root.resolve(strict=False))
-                    return resolved
-                except ValueError:
-                    continue
-        except Exception:
-            pass
-        logger.debug(f"[日常分享] 跳过非托管媒体文件删除: {path}")
-        return None
+    def _page_media_delete_path(self, media_ref: str) -> Path | None:
+        return self.media_files._page_resolve_media_path(media_ref)
 
     def _page_local_media_refs(self, item: dict) -> list[str]:
         refs = []
@@ -73,21 +54,19 @@ class DashboardMediaFileService(PanelComponent):
                 aliases.add(resolved.as_uri())
             except ValueError:
                 pass
-            for root in self.media_files._page_media_delete_roots():
-                try:
-                    relative = resolved.relative_to(root.resolve(strict=False))
-                except ValueError:
-                    continue
+            try:
+                relative = resolved.relative_to(self.data_dir.resolve(strict=False))
                 aliases.add(str(relative))
                 aliases.add(relative.as_posix())
-                if root == self.data_dir:
-                    temp_root = (self.data_dir / "Temp").resolve(strict=False)
-                    try:
-                        temp_relative = resolved.relative_to(temp_root)
-                    except ValueError:
-                        continue
-                    aliases.add(str(temp_relative))
-                    aliases.add(temp_relative.as_posix())
+            except ValueError:
+                pass
+            temp_root = (self.data_dir / "Temp").resolve(strict=False)
+            try:
+                temp_relative = resolved.relative_to(temp_root)
+                aliases.add(str(temp_relative))
+                aliases.add(temp_relative.as_posix())
+            except ValueError:
+                pass
         except Exception:
             pass
         return {alias for alias in aliases if alias}
@@ -117,7 +96,7 @@ class DashboardMediaFileService(PanelComponent):
             path = None
             for ref in refs:
                 path = await asyncio.to_thread(
-                    self.media_files._page_safe_media_delete_path, ref
+                    self.media_files._page_media_delete_path, ref
                 )
                 if path:
                     break

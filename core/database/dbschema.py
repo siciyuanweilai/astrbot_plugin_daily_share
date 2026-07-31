@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .keys import HISTORY_SHARE_BRIEFING
 
-
 BASELINE_SCHEMA_VERSION = 1
 CURRENT_SCHEMA_VERSION = 1
 
@@ -100,7 +99,7 @@ BASELINE_TABLE_COLUMNS = {
     ),
 }
 
-# 当前 1.0.0 与迁移基线相同。以后修改结构时保留基线，并更新当前定义。
+# 当前 1.0.x 与迁移基线相同。以后修改结构时保留基线，并更新当前定义。
 CURRENT_TABLE_COLUMNS = dict(BASELINE_TABLE_COLUMNS)
 CURRENT_INDEX_NAMES = tuple(
     statement.split(" ", 3)[2] for statement in INDEX_STATEMENTS

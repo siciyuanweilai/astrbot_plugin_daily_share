@@ -1,5 +1,5 @@
-import asyncio
 import ast
+import asyncio
 import gc
 import inspect
 import re
@@ -11,14 +11,13 @@ from types import SimpleNamespace
 from tests.testfailure import _load_tasks_module
 from tests.testmedia import _load_main_module
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class TaskArchitectureTests(unittest.TestCase):
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
-        self.assertIn('astrbot_version: ">=4.26"', metadata)
+        self.assertIn('astrbot_version: ">=4.26.0"', metadata)
 
         platform_source = (ROOT / "core" / "platform.py").read_text(encoding="utf-8")
         permission_source = (ROOT / "core" / "host" / "permission.py").read_text(
