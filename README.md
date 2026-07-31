@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.1-ef6f8f" alt="版本 1.0.1"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.2-ef6f8f" alt="版本 1.0.2"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -29,7 +29,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.1 已发布**：修复从仪表盘删除动态与媒体记录时未同步回收本地图片的问题。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.0.2 已发布**：收紧本地媒体删除范围，并补充符号链接越界防护和删除前路径复核。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -282,7 +282,7 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 - **总览**：自动分享状态、当前时段、接收目标、定时任务与生成进度；
 - **目标**：群聊、私聊、机器人实例、独立时间与独立类型序列；
 - **手动分享**：选择目标、分享类型与新闻源；
-- **动态与媒体**：查看文案、图片、视频和分享历史，支持单条或批量删除记录及其本地媒体文件；
+- **动态与媒体**：查看文案、图片、视频和分享历史，支持单条或批量删除记录及其受管本地媒体文件；
 - **QQ 空间**：查看动态、发布、点赞、评论、删除和查看详情；
 - **设置**：管理常用配置，并由 schema 补齐其他配置项；
 - **失败记录**：查看失败原因并按支持的任务类型重试。

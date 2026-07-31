@@ -8,7 +8,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = ROOT.parent
 
@@ -857,7 +856,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
             self.assertEqual(result["deleted"], 1)
             self.assertGreater(result["bytes"], 0)
 
-    def test_delete_record_owned_media_file_outside_plugin_data_dir(self):
+    def test_delete_local_media_file_skips_outside_managed_directories(self):
         mod = _load_main_module()
 
         class Db(_DomainStateDb):
@@ -881,9 +880,44 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                 )
             )
 
-            self.assertFalse(outside_path.exists())
-            self.assertEqual(result["deleted"], 1)
-            self.assertEqual(result["skipped"], 0)
+            self.assertTrue(outside_path.exists())
+            self.assertEqual(result["deleted"], 0)
+            self.assertEqual(result["skipped"], 1)
+
+    def test_delete_local_media_file_skips_symlink_escape(self):
+        mod = _load_main_module()
+
+        class Db(_DomainStateDb):
+            async def count_history_media_refs(self, _media_refs):
+                return 0
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "astrbot_plugin_daily_share"
+            temp_dir = data_dir / "Temp"
+            temp_dir.mkdir(parents=True)
+            outside_path = root / "outside.png"
+            outside_path.write_bytes(base64.b64decode(PNG_1X1))
+            symlink_path = temp_dir / "share.png"
+            try:
+                symlink_path.symlink_to(outside_path)
+            except OSError as exc:
+                self.skipTest(f"当前环境不支持符号链接测试: {exc}")
+
+            plugin = _new_dashboard_service(mod)
+            plugin.data_dir = data_dir
+            plugin.db = Db()
+
+            result = asyncio.run(
+                plugin.media_files._page_delete_local_media_files(
+                    [{"media_path": str(symlink_path)}]
+                )
+            )
+
+            self.assertTrue(symlink_path.exists())
+            self.assertTrue(outside_path.exists())
+            self.assertEqual(result["deleted"], 0)
+            self.assertEqual(result["skipped"], 1)
 
     def test_delete_local_media_file_skips_still_referenced_file(self):
         mod = _load_main_module()

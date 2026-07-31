@@ -14,28 +14,30 @@ class DashboardMediaFileService(PanelComponent):
         if not media_path:
             return None
 
-        candidates = [Path(media_path)]
         raw_path = Path(media_path)
-        if not raw_path.is_absolute():
-            candidates.extend(
-                [
-                    self.data_dir / raw_path,
-                    self.data_dir / "Temp" / raw_path,
-                    Path.cwd() / raw_path,
-                ]
-            )
+        candidates = (
+            [raw_path]
+            if raw_path.is_absolute()
+            else [self.data_dir / raw_path, self.data_dir / "Temp" / raw_path]
+        )
+        daily_life_data_dir = self.data_dir.parent / "astrbot_plugin_daily_life"
+        allowed_roots = [
+            (self.data_dir / "Temp").resolve(strict=False),
+            (daily_life_data_dir / "generated" / "images").resolve(strict=False),
+            (daily_life_data_dir / "generated" / "videos").resolve(strict=False),
+        ]
 
         for candidate in candidates:
             try:
                 resolved = candidate.resolve(strict=False)
+                if not any(resolved.is_relative_to(root) for root in allowed_roots):
+                    logger.debug(f"[日常分享] 跳过非托管媒体文件访问: {resolved}")
+                    continue
                 if resolved.is_file():
                     return resolved
             except Exception:
                 continue
         return None
-
-    def _page_media_delete_path(self, media_ref: str) -> Path | None:
-        return self.media_files._page_resolve_media_path(media_ref)
 
     def _page_local_media_refs(self, item: dict) -> list[str]:
         refs = []
@@ -74,10 +76,12 @@ class DashboardMediaFileService(PanelComponent):
     async def _page_count_media_file_refs(self, refs: set[str]) -> int:
         return await self.db.count_history_media_refs(sorted(refs))
 
-    @staticmethod
-    def _page_unlink_media_file(path: Path) -> int:
-        size = path.stat().st_size
-        path.unlink()
+    def _page_unlink_media_file(self, path: Path) -> int:
+        verified_path = self.media_files._page_resolve_media_path(str(path))
+        if verified_path is None or verified_path != path.resolve(strict=False):
+            raise PermissionError(f"拒绝删除非托管媒体文件: {path}")
+        size = verified_path.stat().st_size
+        verified_path.unlink()
         return size
 
     async def _page_delete_local_media_files(self, items: list) -> dict:
@@ -96,7 +100,7 @@ class DashboardMediaFileService(PanelComponent):
             path = None
             for ref in refs:
                 path = await asyncio.to_thread(
-                    self.media_files._page_media_delete_path, ref
+                    self.media_files._page_resolve_media_path, ref
                 )
                 if path:
                     break
