@@ -26,6 +26,12 @@
 
 </div>
 
+> [!IMPORTANT]
+> ### 四次元未来 AI 模型 API 服务平台
+> **语言模型 · 图像生成 · 多模型聚合 · 一站式接入**  
+> 低价稳定丨多模型可选丨按张计费丨快速生成  
+> **[立即体验：https://siciyuanweilai.com](https://siciyuanweilai.com)**
+
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
