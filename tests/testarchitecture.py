@@ -379,6 +379,50 @@ class TaskArchitectureTests(unittest.TestCase):
 
 
 class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_persist_config_prefers_framework_async_save(self):
+        mod = _load_main_module()
+
+        class Config(dict):
+            def __init__(self):
+                super().__init__()
+                self.save_calls = 0
+
+            async def save_config_async(self):
+                self.save_calls += 1
+
+        config = Config()
+        runtime = mod.RuntimeService(SimpleNamespace(config=config))
+
+        await runtime.persist_config()
+
+        self.assertEqual(config.save_calls, 1)
+
+    async def test_persist_config_supports_astrbot_426_sync_save(self):
+        mod = _load_main_module()
+
+        class Config(dict):
+            def __init__(self):
+                super().__init__()
+                self.save_calls = 0
+
+            def save_config(self):
+                self.save_calls += 1
+
+        config = Config()
+        runtime = mod.RuntimeService(SimpleNamespace(config=config))
+
+        await runtime.persist_config()
+
+        self.assertEqual(config.save_calls, 1)
+
+    def test_busy_query_does_not_create_target_lock(self):
+        mod = _load_main_module()
+        plugin = SimpleNamespace(_lock=asyncio.Lock(), _target_locks={})
+        runtime = mod.RuntimeService(plugin)
+
+        self.assertFalse(runtime.is_share_busy("target-without-job"))
+        self.assertEqual(plugin._target_locks, {})
+
     async def test_config_rollback_rebuilds_old_schedule_when_file_restore_fails(self):
         mod = _load_main_module()
         context = mod.Context()
@@ -499,6 +543,28 @@ class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(plugin.db.close_calls, 1)
             self.assertEqual(plugin.news_service.close_calls, 1)
             self.assertEqual(plugin.qzone_service.close_calls, 1)
+
+    async def test_initialize_secures_framework_config_file(self):
+        mod = _load_main_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config" / "daily-share.json"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text("{}", encoding="utf-8")
+            config_path.chmod(0o664)
+
+            class Config(dict):
+                pass
+
+            plugin = _LifecyclePlugin(root / "data")
+            plugin.config = Config()
+            plugin.config.config_path = str(config_path)
+            runtime = mod.RuntimeService(plugin)
+
+            await runtime.initialize()
+            await runtime.terminate()
+
+            self.assertEqual(config_path.stat().st_mode & 0o777, 0o600)
 
     async def test_concurrent_initialize_and_terminate_run_once(self):
         mod = _load_main_module()
@@ -791,7 +857,6 @@ class _LifecycleScheduler:
 class _LifecyclePlugin:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
-        self.config_file = data_dir / "config" / "daily_share.json"
         self.config = {}
         self.receiver_conf = {}
         self.db = _LifecycleDb()

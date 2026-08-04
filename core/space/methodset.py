@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
 
@@ -10,6 +9,8 @@ if TYPE_CHECKING:
 
         _session: Any
         _h2_session: Any
+        _session_lock: Any
+        _h2_session_lock: Any
         _session_timeout_seconds: int | None
         _h2_timeout_seconds: int | None
         _ctx: Any

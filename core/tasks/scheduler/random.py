@@ -1,6 +1,5 @@
 import random
 from datetime import datetime, timedelta
-from typing import Optional
 
 from astrbot.api import logger
 
@@ -24,13 +23,11 @@ class TaskSchedulerRandomService(SchedulerComponent):
         end_dt = base_dt.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
         return start_dt, end_dt
 
-    def _get_random_run_time(
-        self, base_dt: datetime, period_str: str
-    ) -> Optional[datetime]:
+    def _get_random_run_time(self, base_dt: datetime, period_str: str) -> datetime:
         start_dt, end_dt = self._parse_random_period(base_dt, period_str)
         total_seconds = int((end_dt - start_dt).total_seconds())
         if total_seconds <= 0:
-            return None
+            raise ValueError("结束时间必须晚于开始时间，随机时段不支持跨天")
 
         return start_dt + timedelta(seconds=random.randrange(total_seconds))
 

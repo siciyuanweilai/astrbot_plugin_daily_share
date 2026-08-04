@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from .methodset import QzoneMethodSet
-
-
 import asyncio
 import importlib.util
 import time
 from typing import Any
 
 import aiohttp
+
+from .methodset import QzoneMethodSet
 
 try:
     import httpx
@@ -23,14 +22,16 @@ from .parse import parse_qzone_response
 
 class QzoneClientGateway(QzoneMethodSet):
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-        if self._h2_session is not None:
-            await self._h2_session.aclose()
-        self._session = None
-        self._h2_session = None
-        self._session_timeout_seconds = None
-        self._h2_timeout_seconds = None
+        async with self._session_lock:
+            if self._session and not self._session.closed:
+                await self._session.close()
+            self._session = None
+            self._session_timeout_seconds = None
+        async with self._h2_session_lock:
+            if self._h2_session is not None:
+                await self._h2_session.aclose()
+            self._h2_session = None
+            self._h2_timeout_seconds = None
         self._h5_transport = ""
         self._h5_transport_logged = False
 
@@ -174,19 +175,20 @@ class QzoneClientGateway(QzoneMethodSet):
 
     async def _http(self) -> aiohttp.ClientSession:
         timeout_seconds = self._api_timeout_seconds()
-        if (
-            self._session
-            and not self._session.closed
-            and self._session_timeout_seconds != timeout_seconds
-        ):
-            await self._session.close()
-            self._session = None
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=timeout_seconds)
-            )
-            self._session_timeout_seconds = timeout_seconds
-        return self._session
+        async with self._session_lock:
+            if (
+                self._session
+                and not self._session.closed
+                and self._session_timeout_seconds != timeout_seconds
+            ):
+                await self._session.close()
+                self._session = None
+            if self._session is None or self._session.closed:
+                self._session = aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=timeout_seconds)
+                )
+                self._session_timeout_seconds = timeout_seconds
+            return self._session
 
     async def _h2_http(self):
         if httpx is None or importlib.util.find_spec("h2") is None:
@@ -198,21 +200,25 @@ class QzoneClientGateway(QzoneMethodSet):
             self._h5_transport = "HTTP/1.1"
             return None
         timeout_seconds = self._api_timeout_seconds()
-        if self._h2_session is not None and self._h2_timeout_seconds != timeout_seconds:
-            await self._h2_session.aclose()
-            self._h2_session = None
-            self._h2_timeout_seconds = None
-        if self._h2_session is None:
-            try:
-                self._h2_session = httpx.AsyncClient(
-                    http2=True,
-                    timeout=timeout_seconds,
-                    headers={"accept-encoding": "gzip"},
-                )
-                self._h2_timeout_seconds = timeout_seconds
-            except ImportError:
-                self._h5_transport = "HTTP/1.1"
-                return None
+        async with self._h2_session_lock:
+            if (
+                self._h2_session is not None
+                and self._h2_timeout_seconds != timeout_seconds
+            ):
+                await self._h2_session.aclose()
+                self._h2_session = None
+                self._h2_timeout_seconds = None
+            if self._h2_session is None:
+                try:
+                    self._h2_session = httpx.AsyncClient(
+                        http2=True,
+                        timeout=timeout_seconds,
+                        headers={"accept-encoding": "gzip"},
+                    )
+                    self._h2_timeout_seconds = timeout_seconds
+                except ImportError:
+                    self._h5_transport = "HTTP/1.1"
+                    return None
         if not self._h5_transport_logged:
             logger.info("[日常分享] QQ 空间 H5 上传已启用 HTTP/2。")
             self._h5_transport_logged = True

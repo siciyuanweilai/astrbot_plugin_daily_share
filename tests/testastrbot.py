@@ -5,7 +5,6 @@ import textwrap
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -22,6 +21,7 @@ class AstrBotContractTests(unittest.TestCase):
             import tempfile
             from pathlib import Path
 
+            from astrbot.api import AstrBotConfig
             from astrbot.api.star import Context, StarTools
             from astrbot_plugin_daily_share.main import DailySharePlugin
 
@@ -70,7 +70,11 @@ class AstrBotContractTests(unittest.TestCase):
                         None,
                     )
                     context.registered_web_apis.clear()
-                    plugin = DailySharePlugin(context, {})
+                    config = AstrBotConfig(
+                        config_path=str(Path(temp_dir) / "daily-share-config.json"),
+                        default_config={},
+                    )
+                    plugin = DailySharePlugin(context, config)
 
                     assert len(context.registered_web_apis) == 0
                     assert plugin.db.db_path.name == "daily_share.db"

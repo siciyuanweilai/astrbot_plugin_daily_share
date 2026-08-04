@@ -1,5 +1,3 @@
-from .supportcomponent import SupportComponent
-
 import re
 from datetime import datetime
 
@@ -18,6 +16,7 @@ from ..tasks.interact.tracker import (
     QZONE_AUTO_COMMENT_STATE_KEY,
     _mark_qzone_post_processed,
 )
+from .supportcomponent import SupportComponent
 
 
 def _qzone_tool_period_label(hour: int) -> str:
@@ -795,19 +794,62 @@ class PluginToolService(SupportComponent):
         if not used:
             return
 
-        result = event.get_result()
-        if not result or not result.chain:
-            return
-
         try:
-            original = result.get_plain_text()
+            result = event.get_result()
+            if not result or not result.chain:
+                return
+
+            plain_components = []
+            for component in result.chain:
+                component_type = getattr(component, "type", "")
+                type_name = getattr(component_type, "value", component_type)
+                if (
+                    type_name == "Plain" or component.__class__.__name__ == "Plain"
+                ) and hasattr(component, "text"):
+                    plain_components.append(component)
+            if not plain_components:
+                return
+
+            original = "".join(
+                str(getattr(component, "text", "") or "")
+                for component in plain_components
+            )
             cleaned = self.tool_context._strip_news_link_reference_tail(original)
             urls = event.get_extra("daily_share_news_link_urls", []) or []
             cleaned = self.tool_context._ensure_news_link_urls_in_reply(cleaned, urls)
             if cleaned != original:
-                event.set_result(event.plain_result(cleaned))
+                common_prefix = 0
+                for before, after in zip(original, cleaned):
+                    if before != after:
+                        break
+                    common_prefix += 1
+
+                offset = 0
+                updated = False
+                for component in plain_components:
+                    text = str(getattr(component, "text", "") or "")
+                    next_offset = offset + len(text)
+                    if next_offset <= common_prefix:
+                        offset = next_offset
+                        continue
+                    if not updated:
+                        keep = max(0, common_prefix - offset)
+                        component.text = f"{text[:keep]}{cleaned[common_prefix:]}"
+                        updated = True
+                    else:
+                        component.text = ""
+                    offset = next_offset
+
+                if not updated:
+                    plain_components[
+                        -1
+                    ].text = f"{plain_components[-1].text}{cleaned[common_prefix:]}"
                 logger.debug("[日常分享] 已在发送前清理新闻链接参考链接尾部")
-            event.set_extra("daily_share_news_link_used", None)
-            event.set_extra("daily_share_news_link_urls", None)
         except Exception as e:
             logger.warning(f"[日常分享] 发送前清理新闻链接参考链接失败: {e}")
+        finally:
+            try:
+                event.set_extra("daily_share_news_link_used", None)
+                event.set_extra("daily_share_news_link_urls", None)
+            except Exception as e:
+                logger.debug(f"[日常分享] 清理新闻链接事件标记失败: {e}")

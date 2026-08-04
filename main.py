@@ -1,25 +1,27 @@
 import asyncio
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from astrbot.api.star import Context, Star, StarTools
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api import AstrBotConfig
 
-from .core.news import NewsService
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star, StarTools
+
+from .core.commands import CommandHandler
 from .core.container import PluginServices
-from .core.image import ImageService
 from .core.content import ContentService
 from .core.context import ContextService
 from .core.db import DatabaseManager
-from .core.tasks import TaskManager
-from .core.commands import CommandHandler
-from .core.panel import DashboardService, PAGE_PREFERENCES_FILE
+from .core.host.lifecycle import RuntimeService
+from .core.host.model import LlmService
+from .core.image import ImageService
+from .core.news import NewsService
+from .core.panel import PAGE_PREFERENCES_FILE, DashboardService
 from .core.panel.common import (
     _PAGE_MEDIA_CACHE_SECONDS as _PAGE_MEDIA_CACHE_SECONDS,
 )
 from .core.space import QzoneService
-from .core.host.lifecycle import RuntimeService
-from .core.host.model import LlmService
 from .core.support import SupportService
+from .core.tasks import TaskManager
 
 
 class DailySharePlugin(Star):
@@ -63,9 +65,6 @@ class DailySharePlugin(Star):
         # 数据路径
         self.data_dir = StarTools.get_data_dir("astrbot_plugin_daily_share")
 
-        # 配置文件路径
-        config_dir = self.data_dir.parent.parent / "config"
-        self.config_file = config_dir / "astrbot_plugin_daily_share_config.json"
         self.page_preferences_file = self.data_dir / PAGE_PREFERENCES_FILE
 
         # 数据库初始化

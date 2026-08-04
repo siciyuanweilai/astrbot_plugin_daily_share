@@ -9,9 +9,6 @@ from typing import Any, cast
 
 from astrbot.api import logger
 
-from .models import QzoneComment as QzoneComment
-from .models import QzoneContext, QzonePost
-from .parse import parse_upload_result
 from .endpoints import QzoneServiceConstants
 from .feeds.detail import QzoneFeedDetailService
 from .feeds.extra import QzoneFeedExtraService
@@ -23,15 +20,18 @@ from .hfive.error import QzoneH5ErrorService
 from .hfive.packets import QzoneH5BaseService
 from .hfive.poster import QzoneH5RequestService
 from .merge import QzoneFeedMergeService
+from .models import QzoneComment as QzoneComment
+from .models import QzoneContext, QzonePost
+from .parse import parse_upload_result
 from .query.timeline import QzoneFeedQueryService
 from .remark.commenttools import QzoneCommentUtilService
 from .remark.delete import QzoneCommentDeleteService
 from .remark.publish import QzoneCommentPostService
 from .remark.threader import QzoneCommentReplyService
 from .reply.commentid import QzoneReplyIdentityService
-from .reply.replypayload import QzoneReplyPayloadService
 from .reply.plans import QzoneReplyPlanService
 from .reply.recipients import QzoneReplyTargetService
+from .reply.replypayload import QzoneReplyPayloadService
 from .reply.verify import QzoneReplyVerifyService
 from .transport.cookie import QzoneH5CookieService
 from .transport.header import QzoneHeaderService
@@ -164,6 +164,8 @@ class QzoneService:
         self._ctx_at = 0.0
         self._session = None
         self._h2_session = None
+        self._session_lock = asyncio.Lock()
+        self._h2_session_lock = asyncio.Lock()
         self._session_timeout_seconds: int | None = None
         self._h2_timeout_seconds: int | None = None
         self._h5_transport = ""

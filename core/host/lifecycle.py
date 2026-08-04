@@ -5,7 +5,6 @@ from pathlib import Path
 from astrbot.api import logger
 
 from ..toolkit import log_exception
-from ..jsonio import write_json_atomic
 
 
 class RuntimeService:
@@ -121,7 +120,11 @@ class RuntimeService:
             )
         if plugin._lock.locked():
             return True
-        return self.get_share_lock(target_uid).locked()
+        key = str(target_uid or "").strip()
+        if not key:
+            return False
+        lock = plugin._target_locks.get(key)
+        return bool(lock and lock.locked())
 
     def release_idle_share_lock(self, target_uid: str | None = None) -> None:
         plugin = self.plugin
@@ -143,11 +146,27 @@ class RuntimeService:
 
         self.set_runtime_state("initializing")
         try:
-            await asyncio.to_thread(
-                self._ensure_directories,
-                plugin.data_dir,
-                plugin.config_file.parent,
-            )
+            await asyncio.to_thread(self._ensure_directories, plugin.data_dir)
+            config_path_value = str(
+                getattr(plugin.config, "config_path", "") or ""
+            ).strip()
+            if config_path_value:
+                config_path = Path(config_path_value)
+                try:
+                    if await asyncio.to_thread(config_path.is_file):
+                        mode = (
+                            await asyncio.to_thread(config_path.stat)
+                        ).st_mode & 0o777
+                        if mode & 0o077:
+                            await asyncio.to_thread(config_path.chmod, 0o600)
+                            logger.info("[日常分享] 已收紧插件配置文件权限为 0600")
+                except OSError as exc:
+                    log_exception(
+                        "[日常分享] 收紧插件配置文件权限失败",
+                        exc,
+                        level="warning",
+                        with_traceback=False,
+                    )
             await plugin.db.initialize()
             await self._initialize_runtime()
         except BaseException as exc:
@@ -238,13 +257,17 @@ class RuntimeService:
             yield
 
     async def persist_config(self) -> None:
-        """在配置事务内原子写入当前配置。"""
+        """通过 AstrBot 配置对象持久化当前配置。"""
         try:
-            await asyncio.to_thread(
-                write_json_atomic,
-                self.plugin.config_file,
-                self.plugin.config,
-            )
+            config = self.plugin.config
+            save_async = getattr(config, "save_config_async", None)
+            if callable(save_async):
+                await save_async()
+            else:
+                save_sync = getattr(config, "save_config", None)
+                if not callable(save_sync):
+                    raise RuntimeError("AstrBot 配置对象不支持持久化")
+                await asyncio.to_thread(save_sync)
         except Exception as exc:
             log_exception("[日常分享] 保存配置失败", exc)
             raise
@@ -325,6 +348,5 @@ class RuntimeService:
             log_exception("[日常分享] 初始化机器人缓存失败", exc)
 
     @staticmethod
-    def _ensure_directories(data_dir: Path, config_dir: Path) -> None:
+    def _ensure_directories(data_dir: Path) -> None:
         data_dir.mkdir(parents=True, exist_ok=True)
-        config_dir.mkdir(parents=True, exist_ok=True)

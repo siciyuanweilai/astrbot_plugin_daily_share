@@ -1,16 +1,25 @@
-import sys
 import subprocess
+import sys
 import textwrap
 import types
 import unittest
 from pathlib import Path
-
+from unittest.mock import patch
 
 WORKSPACE = Path(__file__).resolve().parents[2]
 if str(WORKSPACE) not in sys.path:
     sys.path.insert(0, str(WORKSPACE))
 
-from astrbot_plugin_daily_share.core.integrations import DailyLifeBridge  # noqa: E402
+from astrbot_plugin_daily_share.core.integrations import (  # noqa: E402
+    dailylife as dailylife_module,
+)
+
+DailyLifeBridge = dailylife_module.DailyLifeBridge
+
+
+class _Logger:
+    def __getattr__(self, _name):
+        return lambda *args, **kwargs: None
 
 
 class _Runtime:
@@ -68,6 +77,13 @@ def _metadata(plugin, *, activated=True, plugin_id="astrbot_plugin_daily_life"):
 
 
 class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.logger_patcher = patch.object(dailylife_module, "logger", _Logger())
+        self.logger_patcher.start()
+
+    def tearDown(self):
+        self.logger_patcher.stop()
+
     def test_bridge_calls_real_daily_life_plugin_entry_in_isolated_runtime(self):
         script = textwrap.dedent(
             f"""

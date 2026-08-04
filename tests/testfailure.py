@@ -10,7 +10,6 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_tasks_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
@@ -1500,7 +1499,6 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             host = Host()
             host.data_dir = Path(temp_dir) / "data"
-            host.config_file = Path(temp_dir) / "config" / "plugin.json"
             runtime = lifecycle.RuntimeService(host)
 
             def track(coro):
@@ -3687,6 +3685,13 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(plugin.scheduler.jobs, [])
         self.assertNotIn("global", plugin.db.state)
+
+    async def test_random_period_rejects_cross_midnight_range(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+
+        with self.assertRaisesRegex(ValueError, "随机时段不支持跨天"):
+            manager.schedule.random._get_random_run_time(datetime.now(), "23:00-01:00")
 
     async def test_stale_smart_schedule_build_cannot_store_or_register_jobs(self):
         mod = _load_tasks_module()

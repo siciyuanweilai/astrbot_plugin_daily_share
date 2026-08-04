@@ -1,10 +1,9 @@
-import importlib.util
 import asyncio
+import importlib.util
 import sys
 import types
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 PERMISSION_MODULE_PATH = ROOT / "core" / "host" / "permission.py"
@@ -108,6 +107,12 @@ class _Event:
 
     def set_extra(self, key, value):
         self.extras[key] = value
+
+    def get_extra(self, key, default=None):
+        return self.extras.get(key, default)
+
+    def get_result(self):
+        return getattr(self, "result", None)
 
 
 class _EmojiBot:
@@ -286,6 +291,14 @@ class NewsLinkToolPermissionTests(unittest.IsolatedAsyncioTestCase):
                 _extract_news_link_urls=lambda result: (
                     ["https://example.com/news"] if "https://" in result else []
                 ),
+                _strip_news_link_reference_tail=lambda text: text.split(
+                    "\n参考链接", 1
+                )[0].rstrip(),
+                _ensure_news_link_urls_in_reply=lambda reply, urls: (
+                    reply
+                    if all(url in reply for url in urls)
+                    else f"{reply.rstrip()}\n" + "\n".join(urls)
+                ),
             ),
         )
         runtime._is_admin_event = runtime.permissions._is_admin_event
@@ -299,6 +312,31 @@ class NewsLinkToolPermissionTests(unittest.IsolatedAsyncioTestCase):
         runtime._extract_news_link_urls = runtime.tool_context._extract_news_link_urls
         self.host = tools_module.PluginToolService(runtime)
         runtime.tools = self.host
+
+    async def test_decorating_cleanup_preserves_non_plain_components(self):
+        plain = types.SimpleNamespace(
+            type="Plain",
+            text="正文\n参考链接\nhttps://model.example/reference",
+        )
+        image = types.SimpleNamespace(type="Image", file="daily-share.png")
+        result = types.SimpleNamespace(chain=[plain, image])
+        event = _Event(role="member")
+        event.result = result
+        event.extras.update(
+            {
+                "daily_share_news_link_used": True,
+                "daily_share_news_link_urls": ["https://example.com/news"],
+            }
+        )
+
+        await self.host.clean_news_link_decorating_references(event)
+
+        self.assertIs(event.result, result)
+        self.assertEqual(result.chain, [plain, image])
+        self.assertEqual(plain.text, "正文\nhttps://example.com/news")
+        self.assertEqual(image.file, "daily-share.png")
+        self.assertIsNone(event.extras["daily_share_news_link_used"])
+        self.assertIsNone(event.extras["daily_share_news_link_urls"])
 
     async def test_member_can_query_current_session_news_link(self):
         result = await self.host.query_news_link(_Event(role="member"), index="5")

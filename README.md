@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.2-ef6f8f" alt="版本 1.0.2"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.3-ef6f8f" alt="版本 1.0.3"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -26,10 +26,16 @@
 
 </div>
 
+> [!IMPORTANT]
+> ### 四次元未来 AI 模型 API 服务平台
+> **语言模型 · 图像生成 · 多模型聚合 · 一站式接入**  
+> 低价稳定丨多模型可选丨按张计费丨快速生成  
+> **[立即体验：https://siciyuanweilai.com](https://siciyuanweilai.com)**
+
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.2 已发布**：收紧本地媒体删除范围，并补充符号链接越界防护和删除前路径复核。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.0.3 已发布**：统一使用 AstrBot 原生配置持久化并收紧配置文件权限，同时修复富消息链清理、随机时段报错、目标锁增长和 QQ 空间会话并发问题。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -146,7 +152,7 @@
 | 独立目标定时 | 每个群聊或私聊可设置自己的时间和类型序列 |
 | QQ 空间定时 | 使用独立时间、类型序列和随机延迟 |
 
-普通分享、早报和 QQ 空间分别使用独立的随机延迟。随机时段与智能定时任务会写入数据库，插件重启后可恢复尚未完成的任务。
+普通分享、早报和 QQ 空间分别使用独立的随机延迟。随机时段的结束时间必须晚于开始时间，不支持跨天；智能定时的勿扰时段支持跨天。随机时段与智能定时任务会写入数据库，插件重启后可恢复尚未完成的任务。
 
 目标卡片规则：
 
@@ -341,6 +347,7 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 ## 🧪 开发与验证
 
 ~~~bash
+pytest
 python -m unittest discover -s tests
 python -m ruff check .
 python -m ruff format --check .

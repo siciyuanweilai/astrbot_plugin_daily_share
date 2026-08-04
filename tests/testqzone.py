@@ -1,11 +1,11 @@
+import asyncio
 import base64
-import unittest
 import importlib.util
 import sys
 import types
-from unittest.mock import patch
+import unittest
 from pathlib import Path
-
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_qzone_testpkg"
@@ -76,11 +76,30 @@ def _load_qzone_parser():
     return parser_module
 
 
-_parser_module = _load_qzone_parser()
-parse_feed_list = _parser_module.parse_feed_list
-parse_feedinfo_html = _parser_module.parse_feedinfo_html
-parse_home_feed_list = _parser_module.parse_home_feed_list
-parse_recent_feed_list = _parser_module.parse_recent_feed_list
+_parser_module = None
+
+
+def _parser():
+    global _parser_module
+    if _parser_module is None:
+        _parser_module = _load_qzone_parser()
+    return _parser_module
+
+
+def parse_feed_list(*args, **kwargs):
+    return _parser().parse_feed_list(*args, **kwargs)
+
+
+def parse_feedinfo_html(*args, **kwargs):
+    return _parser().parse_feedinfo_html(*args, **kwargs)
+
+
+def parse_home_feed_list(*args, **kwargs):
+    return _parser().parse_home_feed_list(*args, **kwargs)
+
+
+def parse_recent_feed_list(*args, **kwargs):
+    return _parser().parse_recent_feed_list(*args, **kwargs)
 
 
 async def _confirmed_reply_verification(*args, **kwargs):
@@ -183,6 +202,7 @@ def _new_qzone_service(service_module, plugin=None):
 
 
 def _load_qzone_host():
+    _load_qzone_parser()
     _install_stub_module(
         "astrbot", api=_install_stub_module("astrbot.api", logger=_Logger())
     )
@@ -198,7 +218,7 @@ def _load_qzone_host():
 
 class QzoneParserTests(unittest.TestCase):
     def test_parse_qzone_response_supports_sns_callback(self):
-        payload = _parser_module.parse_qzone_response(
+        payload = _parser().parse_qzone_response(
             'frameElement.callback({ret:0, code:0, msg:"succ"});'
         )
 
@@ -743,7 +763,7 @@ class QzoneParserTests(unittest.TestCase):
         )
 
     def test_feed_detail_extracts_video_vid_from_richval(self):
-        post = _parser_module.parse_feed_item(
+        post = _parser().parse_feed_item(
             {
                 "tid": "mood-video",
                 "uin": 100000001,
@@ -757,7 +777,7 @@ class QzoneParserTests(unittest.TestCase):
         self.assertEqual(post.videos, ["qzone://video/1075_0b53richvid"])
 
     def test_feed_detail_parses_liked_state(self):
-        post = _parser_module.parse_feed_item(
+        post = _parser().parse_feed_item(
             {
                 "tid": "liked-mood",
                 "uin": 100000001,
@@ -770,7 +790,7 @@ class QzoneParserTests(unittest.TestCase):
         self.assertTrue(post.liked)
 
     def test_feed_detail_extracts_video_vid_from_vvid_field(self):
-        post = _parser_module.parse_feed_item(
+        post = _parser().parse_feed_item(
             {
                 "tid": "mood-video",
                 "uin": 100000001,
@@ -2052,6 +2072,48 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNot(session, rebuilt)
                 self.assertTrue(session.closed)
                 self.assertEqual(rebuilt.timeout.total, 180)
+        finally:
+            await service.close()
+
+    async def test_http_rebuild_is_serialized_when_timeout_changes(self):
+        service_module = _load_qzone_service()
+        client_module = sys.modules[CLIENT_SERVICE_MODULE_NAME]
+        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
+        service = _new_qzone_service(service_module, plugin)
+        sessions = []
+
+        class FakeTimeout:
+            def __init__(self, *, total):
+                self.total = total
+
+        class FakeSession:
+            def __init__(self, *, timeout):
+                self.timeout = timeout
+                self.closed = False
+                sessions.append(self)
+
+            async def close(self):
+                await asyncio.sleep(0)
+                self.closed = True
+
+        fake_aiohttp = types.SimpleNamespace(
+            ClientSession=FakeSession, ClientTimeout=FakeTimeout
+        )
+
+        try:
+            with patch.object(client_module, "aiohttp", fake_aiohttp):
+                old_session = await service._http()
+                plugin.qzone_conf["qzone_api_timeout_seconds"] = 180
+
+                first, second = await asyncio.gather(
+                    service._http(),
+                    service._http(),
+                )
+
+                self.assertIs(first, second)
+                self.assertTrue(old_session.closed)
+                self.assertEqual(first.timeout.total, 180)
+                self.assertEqual(len(sessions), 2)
         finally:
             await service.close()
 
