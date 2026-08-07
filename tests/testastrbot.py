@@ -24,6 +24,10 @@ class AstrBotContractTests(unittest.TestCase):
             from astrbot.api import AstrBotConfig
             from astrbot.api.star import Context, StarTools
             from astrbot_plugin_daily_share.main import DailySharePlugin
+            from astrbot_plugin_daily_share.core.panel.revision import (
+                settings_config_revision,
+                target_config_revision,
+            )
 
 
             class Platform:
@@ -87,6 +91,7 @@ class AstrBotContractTests(unittest.TestCase):
                     runtime = plugin.dashboard_service.operations
 
                     target_body = {
+                        "target_revision": target_config_revision(plugin.config),
                         "groups": [
                             {
                                 "id": "",
@@ -123,15 +128,54 @@ class AstrBotContractTests(unittest.TestCase):
                     assert plugin.receiver_conf["groups"] == [expected]
                     assert plugin.extra_shares_conf["briefing_groups"] == [expected]
 
+                    stale_target_revision = target_body["target_revision"]
                     target_body = {
+                        "target_revision": stale_target_revision,
                         "groups": [],
                         "users": [],
                         "briefing_groups": [],
                         "briefing_users": [],
                     }
+                    try:
+                        await runtime.target_routes.page_targets_update()
+                    except RuntimeError as exc:
+                        assert "目标配置已在其他页面或运行过程中更新" in str(exc)
+                    else:
+                        raise AssertionError("旧目标配置版本未被拒绝")
+                    assert plugin.receiver_conf["groups"] == [expected]
+
+                    target_body["target_revision"] = target_config_revision(
+                        plugin.config
+                    )
                     result = await runtime.target_routes.page_targets_update()
                     assert result["ok"], result
                     assert plugin.receiver_conf == {"groups": [], "users": []}
+
+                    initial_settings_revision = settings_config_revision(plugin.config)
+                    config_body = {
+                        "settings_revision": initial_settings_revision,
+                        "sections": {"basic": {"llm_timeout": 90}},
+                    }
+
+                    async def config_page_body():
+                        return config_body
+
+                    runtime.server._page_json_body = config_page_body
+                    result = await runtime.config_routes.page_config()
+                    assert result["ok"], result
+                    assert plugin.basic_conf["llm_timeout"] == 90
+
+                    config_body = {
+                        "settings_revision": initial_settings_revision,
+                        "sections": {"basic": {"llm_timeout": 91}},
+                    }
+                    try:
+                        await runtime.config_routes.page_config()
+                    except RuntimeError as exc:
+                        assert "设置已在其他页面或运行过程中更新" in str(exc)
+                    else:
+                        raise AssertionError("旧设置版本未被拒绝")
+                    assert plugin.basic_conf["llm_timeout"] == 90
 
                     await plugin.terminate()
                     assert len(context.registered_web_apis) == 0

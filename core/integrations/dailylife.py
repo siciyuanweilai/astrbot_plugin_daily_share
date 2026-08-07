@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from astrbot.api import logger
 
-
 DAILY_LIFE_PLUGIN_ID = "astrbot_plugin_daily_life"
+_MEDIA_METHODS = {
+    "image": "generate_share_image",
+    "video": "generate_share_video",
+    "audio": "generate_share_voice",
+}
 
 
 class DailyLifeBridge:
@@ -14,6 +19,10 @@ class DailyLifeBridge:
     def __init__(self, context: Any):
         self.context = context
         self._search_notices: set[str] = set()
+        self._media_results: ContextVar[dict[str, tuple[str, str]]] = ContextVar(
+            f"daily_share_media_results_{id(self)}",
+            default={},
+        )
 
     def _plugin(self):
         try:
@@ -52,6 +61,29 @@ class DailyLifeBridge:
             if plugin
             else False
         )
+
+    def media_available(self, media_kind: str) -> bool:
+        """检查生活插件是否暴露指定媒体入口，不代表调用一定成功。"""
+
+        plugin = self._plugin()
+        method_name = _MEDIA_METHODS.get(str(media_kind or "").strip().lower())
+        return bool(
+            plugin and method_name and callable(getattr(plugin, method_name, None))
+        )
+
+    def media_result(self, media_kind: str) -> tuple[str, str]:
+        """读取当前任务最近一次媒体调用的状态与用户可读原因。"""
+
+        key = str(media_kind or "").strip().lower()
+        return self._media_results.get().get(key, ("", ""))
+
+    def _set_media_result(self, media_kind: str, status: str, reason: str = "") -> None:
+        key = str(media_kind or "").strip().lower()
+        if not key:
+            return
+        results = dict(self._media_results.get())
+        results[key] = (str(status or "").strip(), str(reason or "").strip())
+        self._media_results.set(results)
 
     def _log_search_notice(
         self, key: str, message: str, *, warning: bool = False
@@ -177,20 +209,51 @@ class DailyLifeBridge:
         )
 
     async def _call_media(self, method_name: str, label: str, *args, **kwargs) -> str:
+        media_kind = next(
+            (kind for kind, name in _MEDIA_METHODS.items() if name == method_name),
+            "",
+        )
+        self._set_media_result(media_kind, "")
         plugin = self._plugin()
         method = getattr(plugin, method_name, None) if plugin else None
         if not callable(method):
-            logger.warning(f"[日常分享] 生活插件默认{label}工具不可用")
+            self._set_media_result(
+                media_kind,
+                "unavailable",
+                "生活插件未安装、未启用或正在重载",
+            )
+            logger.warning(
+                f"[日常分享] 生活插件默认{label}工具不可用：未安装、未启用或正在重载"
+            )
             return ""
         try:
             result = await method(*args, **kwargs)
             value = str(result or "").strip()
             if not value:
+                self._set_media_result(
+                    media_kind,
+                    "empty",
+                    f"生活插件{label}能力未返回有效结果",
+                )
                 logger.warning(f"[日常分享] 生活插件默认{label}工具未返回有效结果")
+            else:
+                self._set_media_result(media_kind, "ok")
             return value
         except Exception as exc:
             detail = str(exc).strip()
             error_text = type(exc).__name__ + (f": {detail}" if detail else "")
+            if "尚未就绪或正在终止" in detail:
+                self._set_media_result(
+                    media_kind,
+                    "unavailable",
+                    "生活插件正在初始化、重载或停止",
+                )
+            else:
+                self._set_media_result(
+                    media_kind,
+                    "error",
+                    f"生活插件{label}接口调用失败",
+                )
             logger.warning(f"[日常分享] 生活插件默认{label}工具调用失败: {error_text}")
             return ""
 

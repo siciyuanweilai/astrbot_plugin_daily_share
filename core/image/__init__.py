@@ -1,21 +1,21 @@
 from datetime import datetime
-from typing import Optional
 
 from astrbot.api import logger
 
 from ..config import ShareType, TimePeriod
 from ..constants import share_type_label
 from ..toolkit import call_default_daily_life_media_tool
-from .motion import ImageVideoService
 from .composer import ImageVisualService
+from .motion import ImageVideoService
 from .result import GeneratedImage
 
 
 class ImageService(ImageVisualService, ImageVideoService):
-    def __init__(self, context, config, llm_func):
+    def __init__(self, context, config, llm_func, daily_life_bridge=None):
         self.context = context
         self.config = config
         self.call_llm = llm_func
+        self.daily_life_bridge = daily_life_bridge
 
         # 获取配置引用
         self.img_conf = self.config.get("image_conf", {})
@@ -52,7 +52,7 @@ class ImageService(ImageVisualService, ImageVideoService):
         life_context: str | None = None,
         target_umo: str | None = None,
         event=None,
-    ) -> Optional[GeneratedImage]:
+    ) -> GeneratedImage | None:
         """生成图片的入口函数"""
         if not self.img_conf.get("enable_ai_image", False):
             return None
@@ -118,6 +118,7 @@ class ImageService(ImageVisualService, ImageVideoService):
             prompt=prompt,
             event=event,
             contains_character=involves_self,
+            bridge=self.daily_life_bridge,
         )
         if not image_path:
             return None

@@ -348,6 +348,7 @@ async function loadStatus({ quiet = false } = {}) {
     const nextStatus = await apiGet("page/status", { _ts: Date.now() });
     if (state.targetsDirty && state.status?.targets) {
       nextStatus.targets = state.status.targets;
+      nextStatus.target_revision = state.status.target_revision;
     }
     state.status = nextStatus;
     if (!state.sakuraSaving) applySakuraPreferences(nextStatus.preferences);

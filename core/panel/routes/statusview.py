@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
-from ..common import _PAGE_RECENT_SHARE_LIMIT
 from ...config import NEWS_SOURCE_MAP
+from ..common import _PAGE_RECENT_SHARE_LIMIT
+from ..panelcomponent import PanelComponent
+from ..revision import target_config_revision
 
 
 class DashboardRouteStatusService(PanelComponent):
@@ -141,6 +141,7 @@ class DashboardRouteStatusService(PanelComponent):
                     ),
                 },
                 "targets": targets,
+                "target_revision": target_config_revision(self.config),
                 "target_platforms": [
                     option
                     for option in self.meta._page_adapter_options()

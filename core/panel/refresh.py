@@ -2,10 +2,9 @@ import copy
 
 from astrbot.api import logger
 
-from .panelcomponent import PanelComponent
-
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS
 from ..toolkit import format_exception
+from .panelcomponent import PanelComponent
 
 
 class DashboardConfigRefreshService(PanelComponent):
@@ -109,11 +108,14 @@ class DashboardConfigRefreshService(PanelComponent):
         *,
         clear_pending_when_disabled: bool = False,
         previous_config: dict | None = None,
+        precondition=None,
         mutation=None,
         rebuild_scheduler: bool = True,
     ):
         runtime = self.plugin.runtime_service
         async with runtime.config_transaction():
+            if precondition is not None:
+                precondition()
             backup = copy.deepcopy(
                 previous_config if previous_config is not None else dict(self.config)
             )

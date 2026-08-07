@@ -1,7 +1,6 @@
-from .shared import Optional, ShareType, TimePeriod, logger
-from .contextbase import ContextComponent
-
 from ..toolkit import call_default_daily_life_media_tool
+from .contextbase import ContextComponent
+from .shared import Optional, ShareType, TimePeriod, logger
 
 
 class ContextTtsService(ContextComponent):
@@ -59,4 +58,5 @@ class ContextTtsService(ContextComponent):
             emotion=target_emotion,
             emotion_category=target_category,
             event=event,
+            bridge=self.service.daily_life_bridge,
         )

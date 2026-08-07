@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..panelcomponent import PanelComponent
+from ..revision import require_current_revision, settings_config_revision
 
 
 class DashboardRouteConfigService(PanelComponent):
@@ -9,8 +10,22 @@ class DashboardRouteConfigService(PanelComponent):
             body = await self.server._page_json_body()
             saved = bool(body)
             if saved:
+                requested_revision = body.get("settings_revision")
+
+                def validate_revision() -> None:
+                    require_current_revision(
+                        requested_revision,
+                        settings_config_revision(self.config),
+                        conflict_message=(
+                            "设置已在其他页面或运行过程中更新，请重新加载设置后重试"
+                        ),
+                    )
+
+                def apply_config() -> None:
+                    self.apply._apply_page_config_payload(body)
+
                 await self.refresh.save_config_and_refresh_runtime(
-                    mutation=lambda: self.apply._apply_page_config_payload(body)
+                    precondition=validate_revision, mutation=apply_config
                 )
 
             data = self.payload._page_config_payload()

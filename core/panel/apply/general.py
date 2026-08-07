@@ -1,42 +1,16 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-from ..roster import apply_shared_target_bindings
-
 from ...constants import TYPE_CN_MAP
 from ...schedule import BRIEFING_SCHEDULE, GLOBAL_SCHEDULE
 from ..common import (
     _PAGE_BASIC_SEQUENCE_DEFAULTS,
 )
+from ..panelcomponent import PanelComponent
 
 
 class DashboardApplyBasicService(PanelComponent):
     def _page_apply_target_section(self, sections: dict) -> None:
-        target_body = apply_shared_target_bindings(
-            self.runtime.fields._page_payload_section(sections, "target")
-        )
-        receiver = self.config.setdefault("receiver", {})
-        extra = self.config.setdefault("extra_shares", {})
-        if "groups" in target_body:
-            receiver["groups"] = self.targets._normalize_page_target_list(
-                target_body.get("groups", []), expected_group=True
-            )
-        if "users" in target_body:
-            receiver["users"] = self.targets._normalize_page_target_list(
-                target_body.get("users", []), expected_group=False
-            )
-        if "briefing_groups" in target_body:
-            extra["briefing_groups"] = self.targets._normalize_page_target_list(
-                target_body.get("briefing_groups", []),
-                briefing=True,
-                expected_group=True,
-            )
-        if "briefing_users" in target_body:
-            extra["briefing_users"] = self.targets._normalize_page_target_list(
-                target_body.get("briefing_users", []),
-                briefing=True,
-                expected_group=False,
-            )
+        target_body = self.runtime.fields._page_payload_section(sections, "target")
         if "contact_aliases" in target_body:
             aliases = self.validation._page_contact_aliases_value(
                 target_body.get("contact_aliases")

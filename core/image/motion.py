@@ -1,12 +1,11 @@
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
 from ..toolkit import call_default_daily_life_media_tool, log_exception
 from .composer import _extract_json_object
-
 
 VIDEO_MOTION_FALLBACK = (
     "保持原图主体、人物五官、服装、场景、光线、构图重心、景别和主体位置一致；根据画面加入自然轻微镜头运动"
@@ -23,6 +22,7 @@ class ImageVideoService:
     if TYPE_CHECKING:
         context: Any
         img_conf: dict
+        daily_life_bridge: Any
 
         async def _call_llm(
             self, *args: Any, target_umo: str | None = None, **kwargs: Any
@@ -118,7 +118,7 @@ class ImageVideoService:
         image_description: str = "",
         target_umo: str | None = None,
         event=None,
-    ) -> Optional[str]:
+    ) -> str | None:
         """图片转视频"""
         if not self.img_conf.get("enable_ai_video", False):
             return None
@@ -144,6 +144,7 @@ class ImageVideoService:
                 prompt=video_prompt,
                 image_ref=image_path,
                 event=event,
+                bridge=self.daily_life_bridge,
             )
 
         except Exception as e:

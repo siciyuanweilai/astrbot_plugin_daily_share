@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, Optional
 
 from astrbot.api import logger
 
@@ -18,7 +17,15 @@ from .topic import ContentTopicService
 class ContentService:
     """聚合独立内容组件的统一生成服务。"""
 
-    def __init__(self, config: Dict, llm_func, context, db_manager, news_service=None):
+    def __init__(
+        self,
+        config: dict,
+        llm_func,
+        context,
+        db_manager,
+        news_service=None,
+        daily_life_bridge=None,
+    ):
         """
         初始化内容生成服务
         """
@@ -27,7 +34,7 @@ class ContentService:
         self.context = context
         self.db = db_manager
         self.news_service = news_service
-        self.daily_life_bridge = DailyLifeBridge(context)
+        self.daily_life_bridge = daily_life_bridge or DailyLifeBridge(context)
         self.support = ContentSupportService(self)
 
         self.content_lib_conf = self.config.get("content_library", {})
@@ -76,7 +83,7 @@ class ContentService:
         nickname: str = "",
         recent_dynamics: str = "",
         structured_history: str = "",
-    ) -> Optional[str]:
+    ) -> str | None:
         """统一生成入口"""
         # 获取人设信息
         persona_info = await self.get_persona_info()

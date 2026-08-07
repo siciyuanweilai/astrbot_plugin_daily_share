@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from .panelcomponent import PanelComponent
-
 from typing import Any
 
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS
 from .common import _PAGE_BASIC_SEQUENCE_DEFAULTS, _PAGE_QZONE_SEQUENCE_DEFAULTS
-
+from .panelcomponent import PanelComponent
+from .revision import settings_config_revision
 
 _FieldSpec = tuple[str, str, Any, bool]
 
@@ -205,7 +204,6 @@ class DashboardConfigPayloadService(PanelComponent):
         image = self.config.setdefault("image_conf", {})
         tts = self.config.setdefault("tts_conf", {})
         news = self.config.setdefault("news_conf", {})
-        receiver = self.config.setdefault("receiver", {})
         context_conf = self.config.setdefault("context_conf", {})
 
         media = self.payload._page_section_payload(
@@ -216,13 +214,10 @@ class DashboardConfigPayloadService(PanelComponent):
         )
 
         return {
+            "settings_revision": settings_config_revision(self.config),
             "enabled": bool(self.config.get("enable_auto_share", False)),
             "sections": {
                 "target": {
-                    "groups": list(receiver.get("groups") or []),
-                    "users": list(receiver.get("users") or []),
-                    "briefing_groups": list(extra.get("briefing_groups") or []),
-                    "briefing_users": list(extra.get("briefing_users") or []),
                     "contact_aliases": list(self.config.get("contact_aliases") or []),
                 },
                 "basic": self.payload._page_section_payload(

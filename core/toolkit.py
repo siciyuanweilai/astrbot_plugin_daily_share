@@ -1,5 +1,3 @@
-from typing import Optional
-
 from astrbot.api import logger
 
 from .integrations import DailyLifeBridge
@@ -22,7 +20,7 @@ def log_exception(
     exc: Exception,
     *,
     level: str = "error",
-    with_traceback: Optional[bool] = None,
+    with_traceback: bool | None = None,
 ) -> None:
     log_method = {
         "debug": logger.debug,
@@ -65,9 +63,10 @@ async def call_default_daily_life_media_tool(
     emotion_category: str = "",
     event=None,
     contains_character: bool = False,
-) -> Optional[str]:
+    bridge: DailyLifeBridge | None = None,
+) -> str | None:
     """直接调用生活插件媒体服务，只生成媒体，不在生成阶段发送。"""
-    bridge = DailyLifeBridge(context)
+    bridge = bridge or DailyLifeBridge(context)
     if media_kind == "image":
         return (
             await bridge.generate_image(

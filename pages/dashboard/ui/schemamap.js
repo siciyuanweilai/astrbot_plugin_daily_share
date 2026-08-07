@@ -149,7 +149,7 @@ export const settingsFieldSchema = {
 };
 
 export const settingsPayloadGroups = {
-  target: ["cfgContactAliases", "cfgTargetGroups", "cfgTargetUsers", "cfgBriefingGroups", "cfgBriefingUsers"],
+  target: ["cfgContactAliases"],
   basic: [
     "cfgBasicTriggerMode",
     "cfgBasicFixedTimes",

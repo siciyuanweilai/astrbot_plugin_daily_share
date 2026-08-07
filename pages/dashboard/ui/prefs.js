@@ -233,10 +233,6 @@ export function createSettingsConfig({
     const qzone = configSection("qzone");
     const news = configSection("news");
 
-    setInputValue(el.cfgTargetGroups, arrayToLines(target.groups));
-    setInputValue(el.cfgTargetUsers, arrayToLines(target.users));
-    setInputValue(el.cfgBriefingGroups, arrayToLines(target.briefing_groups));
-    setInputValue(el.cfgBriefingUsers, arrayToLines(target.briefing_users));
     setInputValue(el.cfgContactAliases, arrayToLines(target.contact_aliases));
 
     applyBoundSchemaValues(state.configData, el, syncSettingSlider);
@@ -272,6 +268,7 @@ export function createSettingsConfig({
   function collectConfigPayload() {
     normalizeSettingsSliders();
     const payload = {
+      settings_revision: state.configData?.settings_revision || "",
       enabled: Boolean(el.cfgEnabled?.checked),
       sections: {},
       schema_extra: { root: {}, sections: {} },

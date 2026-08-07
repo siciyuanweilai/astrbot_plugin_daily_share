@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 import sys
 import textwrap
@@ -61,6 +62,15 @@ class _PublicPlugin:
 
     async def search_share_evidence(self, query, **kwargs):
         return await self.runtime.search_share_evidence(query, **kwargs)
+
+    async def generate_share_image(self, event, prompt, *, contains_character=False):
+        return f"image:{prompt}:{contains_character}"
+
+    async def generate_share_video(self, event, prompt, *, reference_image=""):
+        return f"video:{prompt}:{reference_image}"
+
+    async def generate_share_voice(self, text, *, emotion="", emotion_category=""):
+        return f"voice:{text}:{emotion}:{emotion_category}"
 
 
 def _life_plugin(label: str) -> _PublicPlugin:
@@ -135,6 +145,18 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
                 search = Search()
 
+                class Voice:
+                    async def synthesize(self, text, **kwargs):
+                        return types.SimpleNamespace(path=f'voice://{{text}}')
+
+                media = types.SimpleNamespace(voice=Voice())
+
+                async def generate_life_image_asset(self, event, prompt, *args, **kwargs):
+                    return types.SimpleNamespace(path=f'image://{{prompt}}')
+
+                async def generate_life_video_asset(self, event, prompt, reference_image=''):
+                    return types.SimpleNamespace(url=f'video://{{prompt}}')
+
             async def run():
                 plugin = DailyLifePlugin(types.SimpleNamespace(), {{}})
                 plugin.runtime = Runtime()
@@ -162,6 +184,17 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     target_umo=target,
                 )
                 assert evidence['content'] == '跨插件搜索证据'
+                assert await bridge.generate_image(None, '配图提示词') == 'image://配图提示词'
+                assert await bridge.generate_video(
+                    None,
+                    '视频提示词',
+                    reference_image='image://first-frame',
+                ) == 'video://视频提示词'
+                assert await bridge.generate_voice(
+                    '语音文本',
+                    emotion='自然讲述',
+                    emotion_category='neutral',
+                ) == 'voice://语音文本'
 
             asyncio.run(run())
             """
@@ -300,6 +333,83 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             second.runtime.context_targets, ["bot-test:FriendMessage:user-test-b"]
         )
+
+    def test_bridge_reports_media_entry_availability(self):
+        plugin = _life_plugin("实例一")
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(plugin)])
+        )
+
+        self.assertTrue(bridge.media_available("image"))
+        self.assertTrue(bridge.media_available("video"))
+        self.assertTrue(bridge.media_available("audio"))
+        self.assertFalse(bridge.media_available("unknown"))
+
+    async def test_bridge_records_media_call_outcomes(self):
+        class Plugin:
+            async def generate_share_image(
+                self, event, prompt, *, contains_character=False
+            ):
+                if prompt == "重载":
+                    raise RuntimeError("日常生活插件尚未就绪或正在终止")
+                if prompt == "空结果":
+                    return ""
+                return f"image:{prompt}"
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+
+        self.assertEqual(await bridge.generate_image(None, "成功"), "image:成功")
+        self.assertEqual(bridge.media_result("image"), ("ok", ""))
+
+        self.assertEqual(await bridge.generate_image(None, "空结果"), "")
+        status, reason = bridge.media_result("image")
+        self.assertEqual(status, "empty")
+        self.assertIn("未返回有效结果", reason)
+
+        self.assertEqual(await bridge.generate_image(None, "重载"), "")
+        status, reason = bridge.media_result("image")
+        self.assertEqual(status, "unavailable")
+        self.assertIn("重载", reason)
+
+    async def test_bridge_records_missing_media_entry_as_unavailable(self):
+        bridge = DailyLifeBridge(types.SimpleNamespace(get_all_stars=lambda: []))
+
+        self.assertEqual(await bridge.generate_image(None, "测试"), "")
+        status, reason = bridge.media_result("image")
+
+        self.assertEqual(status, "unavailable")
+        self.assertIn("未安装", reason)
+
+    async def test_bridge_media_results_are_isolated_between_tasks(self):
+        class Plugin:
+            async def generate_share_image(
+                self, event, prompt, *, contains_character=False
+            ):
+                if prompt == "失败":
+                    raise RuntimeError("模拟接口失败")
+                return f"image:{prompt}"
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+        completed = []
+        both_completed = asyncio.Event()
+
+        async def invoke(prompt):
+            await bridge.generate_image(None, prompt)
+            completed.append(prompt)
+            if len(completed) == 2:
+                both_completed.set()
+            await both_completed.wait()
+            return bridge.media_result("image")
+
+        success, failure = await asyncio.gather(invoke("成功"), invoke("失败"))
+
+        self.assertEqual(success, ("ok", ""))
+        self.assertEqual(failure[0], "error")
+        self.assertIn("调用失败", failure[1])
 
 
 if __name__ == "__main__":

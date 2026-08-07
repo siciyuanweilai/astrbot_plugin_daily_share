@@ -519,6 +519,7 @@ export function createTargetsUi({
     let shouldQueueNextSave = false;
     try {
       const nextStatus = await apiPost("page/targets", {
+        target_revision: state.status?.target_revision || "",
         groups: targetPayloadList("groups"),
         users: targetPayloadList("users"),
         briefing_groups: targetPayloadList("briefing_groups"),

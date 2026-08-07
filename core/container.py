@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -35,6 +35,7 @@ class PluginServices:
     tts_conf: dict
     context_conf: dict
     receiver_conf: dict
+    daily_life_bridge: Any = None
 
 
 __all__ = ["PluginServices"]

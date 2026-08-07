@@ -2,31 +2,32 @@ import asyncio
 
 from astrbot.api import logger
 
-from .shared import (
-    DAILY_SHARE_MEMORY_PROMPT as DAILY_SHARE_MEMORY_PROMPT,
-    DAILY_SHARE_SOURCE as DAILY_SHARE_SOURCE,
-)
-from .memory import ContextMemoryService
-from .analysis import ContextHistoryAnalysisService
-from .normalize import ContextHistoryNormalizeService
-from .records.conversation import ContextHistoryConversationFetchService
-from .records.source import ContextHistoryPlatformFetchService
-from .records.onebot import ContextHistoryOnebotFetchService
-from .records.router import ContextHistoryFetchRouterService
-from .daily.narrate import ContextLifeFormatService
-from .daily.memos import ContextLifeMemoryService
-from .daily.parse import ContextLifeParseService
-from .daily.plugin import ContextLifePluginService
-from .tts import ContextTtsService
+from ..integrations import DailyLifeBridge
 from ..platform import (
     ONEBOT_PLATFORM_TYPES,
     find_platform_instance_by_types,
-    get_platform_client,
     get_platform_bindings,
+    get_platform_client,
     parse_platform_session,
 )
-from ..integrations import DailyLifeBridge
-
+from .analysis import ContextHistoryAnalysisService
+from .daily.memos import ContextLifeMemoryService
+from .daily.narrate import ContextLifeFormatService
+from .daily.parse import ContextLifeParseService
+from .daily.plugin import ContextLifePluginService
+from .memory import ContextMemoryService
+from .normalize import ContextHistoryNormalizeService
+from .records.conversation import ContextHistoryConversationFetchService
+from .records.onebot import ContextHistoryOnebotFetchService
+from .records.router import ContextHistoryFetchRouterService
+from .records.source import ContextHistoryPlatformFetchService
+from .shared import (
+    DAILY_SHARE_MEMORY_PROMPT as DAILY_SHARE_MEMORY_PROMPT,
+)
+from .shared import (
+    DAILY_SHARE_SOURCE as DAILY_SHARE_SOURCE,
+)
+from .tts import ContextTtsService
 
 ONEBOT_API_TIMEOUT_SECONDS = 30
 
@@ -34,7 +35,7 @@ ONEBOT_API_TIMEOUT_SECONDS = 30
 class ContextService:
     """聚合上下文、历史、生活状态和语音组件。"""
 
-    def __init__(self, context_obj, config):
+    def __init__(self, context_obj, config, daily_life_bridge=None):
         self.context = context_obj
         self.config = config
         self.bot_map = {}
@@ -47,7 +48,7 @@ class ContextService:
 
         self.image_conf = self.config.get("image_conf", {})
         self.tts_conf = self.config.get("tts_conf", {})
-        self.daily_life_bridge = DailyLifeBridge(context_obj)
+        self.daily_life_bridge = daily_life_bridge or DailyLifeBridge(context_obj)
 
         self.memory = ContextMemoryService(self)
         self.analysis = ContextHistoryAnalysisService(self)

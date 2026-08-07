@@ -7,6 +7,27 @@ from .sync import TaskHelperSyncService
 class TaskHelperMediaService(TaskHelperSyncService):
     """分享媒体生成步骤辅助。"""
 
+    def _media_failure_message(self, media_kind: str, default: str) -> str:
+        bridge = getattr(self.plugin, "daily_life_bridge", None)
+        media_result = getattr(bridge, "media_result", None)
+        if callable(media_result):
+            status, reason = media_result(media_kind)
+            if status in {"unavailable", "empty", "error"} and reason:
+                suffix = "继续发送文案" if media_kind == "image" else "继续发送其余内容"
+                return f"{reason}，{suffix}"
+
+        media_available = getattr(bridge, "media_available", None)
+        if (
+            bridge is None
+            or not callable(media_available)
+            or media_available(media_kind)
+        ):
+            return default
+        labels = {"image": "配图", "video": "视频", "audio": "语音"}
+        label = labels.get(media_kind, "媒体")
+        suffix = "继续发送文案" if media_kind == "image" else "继续发送其余内容"
+        return f"生活插件未安装、未启用或正在重载，无法使用{label}能力，{suffix}"
+
     async def generate_share_image_step(
         self,
         *,
@@ -44,7 +65,9 @@ class TaskHelperMediaService(TaskHelperSyncService):
             )
         else:
             self.services.progress.fail_share_progress_step(
-                progress_id, "image", fail_message
+                progress_id,
+                "image",
+                self._media_failure_message("image", fail_message),
             )
 
         send_img_path = (
@@ -83,7 +106,9 @@ class TaskHelperMediaService(TaskHelperSyncService):
             )
         else:
             self.services.progress.fail_share_progress_step(
-                progress_id, "video", "视频生成失败，继续发送"
+                progress_id,
+                "video",
+                self._media_failure_message("video", "视频生成失败，继续发送"),
             )
         return video_url
 
@@ -114,6 +139,8 @@ class TaskHelperMediaService(TaskHelperSyncService):
             )
         else:
             self.services.progress.fail_share_progress_step(
-                progress_id, "audio", "语音生成失败，继续发送"
+                progress_id,
+                "audio",
+                self._media_failure_message("audio", "语音生成失败，继续发送"),
             )
         return audio_path

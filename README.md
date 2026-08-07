@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.3-ef6f8f" alt="版本 1.0.3"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.4-ef6f8f" alt="版本 1.0.4"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -35,7 +35,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.3 已发布**：统一使用 AstrBot 原生配置持久化并收紧配置文件权限，同时修复富消息链清理、随机时段报错、目标锁增长和 QQ 空间会话并发问题。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.0.4 已发布**：修复仪表盘长期未刷新、多标签页并行操作或配置被指令修改后，旧页面可能覆盖目标独立定时、独立序列及其他设置的问题。目标列表与普通设置现已独立校验版本，发生冲突时会保留当前配置并提示重新加载。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -293,6 +293,8 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 - **设置**：管理常用配置，并由 schema 补齐其他配置项；
 - **失败记录**：查看失败原因并按支持的任务类型重试。
 
+目标列表与普通设置分别保存并独立校验配置版本。AstrBot 重启不会主动清空目标；如果长期未刷新的页面、多标签页或指令已经修改了同一类配置，仪表盘会拒绝旧页面继续保存并提示重新加载，避免独立定时、独立序列或其他设置被静默覆盖。
+
 <a id="configuration"></a>
 
 ## ⚙️ 配置分组
@@ -310,6 +312,8 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 | <code>image_conf</code> | 配图、新闻长图、视频和个人微信图片处理 |
 | <code>tts_conf</code> | 语音生成、允许类型和仅发送语音 |
 | <code>qzone_conf</code> | QQ 空间实例、定时、序列、配图与自动互动 |
+
+四组目标列表只由仪表盘目标管理或 `/分享` 目标指令维护，普通设置保存不会改写它们。重新进入设置页时会自动读取最新配置；存在未保存修改时不会强制刷新，发生版本冲突后可使用重新加载按钮取回当前配置。
 
 推荐起步方式：
 
@@ -331,7 +335,7 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 | 活动回传 | 成功发送后更新生活节奏 |
 | MemOS | 按生活插件设置同步长期记忆 |
 
-生活插件未安装、未启用、未完成初始化、正在重载或调用失败时，对应增强会自动跳过，不影响插件基础能力。
+生活插件未安装、未启用、未完成初始化、正在重载或调用失败时，对应增强会自动跳过，不影响插件基础能力；媒体进度会区分“生活插件不可用”“未返回有效结果”和“生成调用失败”，并按当前异步任务隔离状态，便于定位配置或接口问题。
 
 ## 🗃️ 数据与升级
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 from typing import Any
+
+from ..panelcomponent import PanelComponent
+from ..revision import is_target_config_field
 
 
 class DashboardApplyFieldService(PanelComponent):
@@ -134,6 +135,8 @@ class DashboardApplyFieldService(PanelComponent):
             target = {}
             self.config[section_key] = target
         for field_key, value in values.items():
+            if is_target_config_field(section_key, field_key):
+                continue
             item = section_items.get(field_key)
             if not isinstance(item, dict):
                 continue

@@ -14,6 +14,7 @@ from .core.db import DatabaseManager
 from .core.host.lifecycle import RuntimeService
 from .core.host.model import LlmService
 from .core.image import ImageService
+from .core.integrations import DailyLifeBridge
 from .core.news import NewsService
 from .core.panel import PAGE_PREFERENCES_FILE, DashboardService
 from .core.panel.common import (
@@ -71,7 +72,8 @@ class DailySharePlugin(Star):
         self.db = DatabaseManager(self.data_dir, initialize=False)
 
         # 初始化服务层
-        self.ctx_service = ContextService(context, config)
+        self.daily_life_bridge = DailyLifeBridge(context)
+        self.ctx_service = ContextService(context, config, self.daily_life_bridge)
         self.qzone_service = QzoneService(self)
         self.news_service = NewsService(config)
         self.llm_service = LlmService(
@@ -79,11 +81,18 @@ class DailySharePlugin(Star):
             self.basic_conf,
             lambda: self._is_terminated,
         )
-        self.image_service = ImageService(context, config, self.llm_service.call)
+        self.image_service = ImageService(
+            context, config, self.llm_service.call, self.daily_life_bridge
+        )
 
         # 初始化内容服务
         self.content_service = ContentService(
-            config, self.llm_service.call, context, self.db, self.news_service
+            config,
+            self.llm_service.call,
+            context,
+            self.db,
+            self.news_service,
+            self.daily_life_bridge,
         )
 
         self.services = PluginServices(
@@ -103,6 +112,7 @@ class DailySharePlugin(Star):
             tts_conf=self.tts_conf,
             context_conf=self.context_conf,
             receiver_conf=self.receiver_conf,
+            daily_life_bridge=self.daily_life_bridge,
         )
 
         # 核心逻辑解耦器

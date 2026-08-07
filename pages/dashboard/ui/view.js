@@ -32,7 +32,7 @@ export function createViewController({
   async function openSettingsPage() {
     setActiveView("settings");
     setSettingsTab("target", { scroll: false });
-    if (!state.configData) {
+    if (!state.configDirty && !state.configSaving) {
       await loadConfig({ quiet: true });
     }
     window.setTimeout(updateSettingsTabFromScroll, 220);

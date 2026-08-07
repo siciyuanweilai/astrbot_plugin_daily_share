@@ -1,6 +1,8 @@
 import ast
 import asyncio
+import copy
 import gc
+import importlib.util
 import inspect
 import re
 import tempfile
@@ -8,10 +10,24 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from tests.testfailure import _load_tasks_module
-from tests.testmedia import _load_main_module
+if __package__:
+    from .testfailure import _load_tasks_module
+    from .testmedia import _load_main_module
+else:
+    from testfailure import _load_tasks_module
+    from testmedia import _load_main_module
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_panel_revision_module():
+    spec = importlib.util.spec_from_file_location(
+        "daily_share_panel_revision", ROOT / "core" / "panel" / "revision.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
 
 
 class TaskArchitectureTests(unittest.TestCase):
@@ -69,6 +85,53 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIs(plugin.command_handler.qzone_conf, plugin.qzone_conf)
         self.assertEqual(registered_routes, [])
 
+    def test_main_plugin_shares_one_daily_life_bridge_across_services(self):
+        mod = _load_main_module()
+        context = mod.Context()
+        context.register_web_api = lambda *args: None
+
+        plugin = mod.DailySharePlugin(context, {})
+
+        self.assertIs(plugin.ctx_service.daily_life_bridge, plugin.daily_life_bridge)
+        self.assertIs(
+            plugin.content_service.daily_life_bridge, plugin.daily_life_bridge
+        )
+        self.assertIs(plugin.image_service.daily_life_bridge, plugin.daily_life_bridge)
+        self.assertIs(plugin.services.daily_life_bridge, plugin.daily_life_bridge)
+        self.assertEqual(
+            plugin.task_manager.executor_helpers._media_failure_message(
+                "image", "配图生成失败"
+            ),
+            "生活插件未安装、未启用或正在重载，无法使用配图能力，继续发送文案",
+        )
+
+        context.get_all_stars = lambda: [
+            SimpleNamespace(
+                name="astrbot_plugin_daily_life",
+                root_dir_name="astrbot_plugin_daily_life",
+                activated=True,
+                star_cls=SimpleNamespace(generate_share_image=lambda: None),
+            )
+        ]
+        self.assertEqual(
+            plugin.task_manager.executor_helpers._media_failure_message(
+                "image", "配图生成失败"
+            ),
+            "配图生成失败",
+        )
+
+        plugin.daily_life_bridge._set_media_result(
+            "image",
+            "unavailable",
+            "生活插件正在初始化、重载或停止",
+        )
+        self.assertEqual(
+            plugin.task_manager.executor_helpers._media_failure_message(
+                "image", "配图生成失败"
+            ),
+            "生活插件正在初始化、重载或停止，继续发送文案",
+        )
+
     def test_main_plugin_exposes_contact_alias_service_contract(self):
         mod = _load_main_module()
         context = mod.Context()
@@ -107,6 +170,125 @@ class TaskArchitectureTests(unittest.TestCase):
         )
         self.assertEqual(plugin.config["basic_conf"]["llm_timeout"], 90)
         self.assertNotIn("llm_conf", plugin.config)
+
+    def test_panel_config_revisions_isolate_targets_from_other_settings(self):
+        revision = _load_panel_revision_module()
+        config = {
+            "enable_auto_share": True,
+            "receiver": {
+                "groups": ["bot-main:GroupMessage:group-001:0 8 * * *:新闻"],
+                "users": [],
+            },
+            "extra_shares": {
+                "briefing_groups": [],
+                "briefing_users": ["bot-main:FriendMessage:user-001"],
+                "enable_ai_news": True,
+            },
+            "basic_conf": {"llm_timeout": 90},
+        }
+
+        target_revision = revision.target_config_revision(config)
+        settings_revision = revision.settings_config_revision(config)
+
+        target_changed = copy.deepcopy(config)
+        target_changed["receiver"]["groups"] = []
+        self.assertNotEqual(
+            revision.target_config_revision(target_changed), target_revision
+        )
+        self.assertEqual(
+            revision.settings_config_revision(target_changed), settings_revision
+        )
+
+        settings_changed = copy.deepcopy(config)
+        settings_changed["basic_conf"]["llm_timeout"] = 120
+        self.assertEqual(
+            revision.target_config_revision(settings_changed), target_revision
+        )
+        self.assertNotEqual(
+            revision.settings_config_revision(settings_changed), settings_revision
+        )
+
+    def test_panel_settings_payload_cannot_overwrite_target_lists(self):
+        mod = _load_main_module()
+        context = mod.Context()
+        context.register_web_api = lambda *args: None
+        plugin = mod.DailySharePlugin(
+            context,
+            {
+                "receiver": {
+                    "groups": ["bot-main:GroupMessage:group-001"],
+                    "users": ["bot-main:FriendMessage:user-001"],
+                },
+                "extra_shares": {
+                    "briefing_groups": ["bot-main:GroupMessage:group-001"],
+                    "briefing_users": ["bot-main:FriendMessage:user-001"],
+                },
+            },
+        )
+
+        plugin.dashboard_service.operations.apply._apply_page_config_payload(
+            {
+                "sections": {
+                    "target": {
+                        "groups": [],
+                        "users": [],
+                        "briefing_groups": [],
+                        "briefing_users": [],
+                        "contact_aliases": ["user-001:测试用户"],
+                    }
+                },
+                "schema_extra": {
+                    "sections": {
+                        "receiver": {"groups": [], "users": []},
+                        "extra_shares": {
+                            "briefing_groups": [],
+                            "briefing_users": [],
+                        },
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(
+            plugin.config["receiver"]["groups"],
+            ["bot-main:GroupMessage:group-001"],
+        )
+        self.assertEqual(
+            plugin.config["receiver"]["users"],
+            ["bot-main:FriendMessage:user-001"],
+        )
+        self.assertEqual(
+            plugin.config["extra_shares"]["briefing_groups"],
+            ["bot-main:GroupMessage:group-001"],
+        )
+        self.assertEqual(
+            plugin.config["extra_shares"]["briefing_users"],
+            ["bot-main:FriendMessage:user-001"],
+        )
+        self.assertEqual(plugin.config["contact_aliases"], ["user-001:测试用户"])
+
+    def test_dashboard_frontend_submits_and_preserves_config_revisions(self):
+        app = (ROOT / "pages" / "dashboard" / "app.js").read_text(encoding="utf-8")
+        targets = (ROOT / "pages" / "dashboard" / "ui" / "targets.js").read_text(
+            encoding="utf-8"
+        )
+        prefs = (ROOT / "pages" / "dashboard" / "ui" / "prefs.js").read_text(
+            encoding="utf-8"
+        )
+        view = (ROOT / "pages" / "dashboard" / "ui" / "view.js").read_text(
+            encoding="utf-8"
+        )
+        schema_map = (ROOT / "pages" / "dashboard" / "ui" / "schemamap.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("nextStatus.target_revision = state.status.target_revision", app)
+        self.assertIn('target_revision: state.status?.target_revision || ""', targets)
+        self.assertIn(
+            'settings_revision: state.configData?.settings_revision || ""', prefs
+        )
+        self.assertIn("!state.configDirty && !state.configSaving", view)
+        self.assertIn('target: ["cfgContactAliases"]', schema_map)
 
     def test_panel_event_broadcast_keeps_bound_runtime_clients(self):
         mod = _load_main_module()
