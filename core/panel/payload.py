@@ -81,6 +81,8 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
 
 _PAGE_MEDIA_FIELDS: tuple[_FieldSpec, ...] = (
     _field("enable_ai_image", "bool", False),
+    _field("daily_life_text_image_model", "str", ""),
+    _field("daily_life_edit_image_model", "str", ""),
     _field("attach_hot_news_image", "bool", True),
     _field("news_image_cleanup_max_count", "int", 200),
     _field("priority_text_over_schedule", "bool", True),
@@ -94,7 +96,6 @@ _PAGE_MEDIA_FIELDS: tuple[_FieldSpec, ...] = (
     _field("separate_text_and_image", "bool", True),
     _field("separate_send_delay", "str", "1.0-2.0"),
     _field("record_image_description", "bool", True),
-    _field("appearance_prompt", "str", ""),
     _field("image_always_include_self", "bool", False),
     _field("image_never_include_self", "bool", False),
 )

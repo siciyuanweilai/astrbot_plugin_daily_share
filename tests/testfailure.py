@@ -97,7 +97,18 @@ class _DailyLifePublicPlugin:
     def __init__(self, runtime):
         self.runtime = runtime
 
-    async def generate_share_image(self, event, prompt, *, contains_character=False):
+    async def generate_share_image(
+        self,
+        event,
+        prompt,
+        *,
+        model="",
+        text_model="",
+        edit_model="",
+        contains_character=False,
+    ):
+        text_model = str(text_model or "").strip() or str(model or "").strip()
+        edit_model = str(edit_model or "").strip() or str(model or "").strip()
         result = await self.runtime.generate_life_image_asset(
             event,
             prompt,
@@ -105,6 +116,8 @@ class _DailyLifePublicPlugin:
             contains_character=contains_character,
             preserve_reference_ratio=False,
             trusted_identity=contains_character,
+            text_model=text_model,
+            edit_model=edit_model,
         )
         if isinstance(result, dict):
             return str(result.get("path") or "")
@@ -739,6 +752,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 contains_character=False,
                 preserve_reference_ratio=True,
                 trusted_identity=False,
+                text_model="",
+                edit_model="",
             ):
                 raise RuntimeError()
 
@@ -798,6 +813,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 contains_character=False,
                 preserve_reference_ratio=True,
                 trusted_identity=False,
+                text_model="",
+                edit_model="",
             ):
                 return types.SimpleNamespace(path="")
 
@@ -856,6 +873,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 contains_character=False,
                 preserve_reference_ratio=True,
                 trusted_identity=False,
+                text_model="",
+                edit_model="",
             ):
                 calls.append(
                     (
@@ -866,6 +885,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                         contains_character,
                         preserve_reference_ratio,
                         trusted_identity,
+                        text_model,
+                        edit_model,
                     )
                 )
                 return types.SimpleNamespace(path="directed-image.jpg")
@@ -892,7 +913,20 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, "directed-image.jpg")
         self.assertEqual(
-            calls, [("directed", event, "图片提示词", "", False, False, False)]
+            calls,
+            [
+                (
+                    "directed",
+                    event,
+                    "图片提示词",
+                    "",
+                    False,
+                    False,
+                    False,
+                    "",
+                    "",
+                )
+            ],
         )
 
     async def test_daily_life_image_requires_runtime_directed_prompt_generator(self):
@@ -3030,6 +3064,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 contains_character=False,
                 preserve_reference_ratio=True,
                 trusted_identity=False,
+                text_model="",
+                edit_model="",
             ):
                 calls.append(
                     (
@@ -3039,6 +3075,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                         contains_character,
                         preserve_reference_ratio,
                         trusted_identity,
+                        text_model,
+                        edit_model,
                     )
                 )
                 return types.SimpleNamespace(path="daily-life-image.jpg")
@@ -3061,6 +3099,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             {
                 "image_conf": {
                     "enable_ai_image": True,
+                    "daily_life_text_image_model": "gpt-image-text",
+                    "daily_life_edit_image_model": "gpt-image-edit",
                 },
             },
             lambda *args, **kwargs: asyncio.sleep(0, result=""),
@@ -3087,7 +3127,21 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.path, "daily-life-image.jpg")
         self.assertEqual(result.description, "图片提示词")
-        self.assertEqual(calls, [(event, "图片提示词", "", True, False, True)])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    event,
+                    "图片提示词",
+                    "",
+                    True,
+                    False,
+                    True,
+                    "gpt-image-text",
+                    "gpt-image-edit",
+                )
+            ],
+        )
         self.assertEqual(event.sent, [])
 
     async def test_execute_share_generates_visual_media_before_audio(self):

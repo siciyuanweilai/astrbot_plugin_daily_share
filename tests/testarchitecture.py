@@ -290,6 +290,53 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIn("!state.configDirty && !state.configSaving", view)
         self.assertIn('target: ["cfgContactAliases"]', schema_map)
 
+    def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
+        html = (ROOT / "pages" / "dashboard" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        elements = (ROOT / "pages" / "dashboard" / "ui" / "elements.js").read_text(
+            encoding="utf-8"
+        )
+        schema_map = (ROOT / "pages" / "dashboard" / "ui" / "schemamap.js").read_text(
+            encoding="utf-8"
+        )
+
+        for element_id, field in (
+            ("cfgDailyLifeTextImageModel", "daily_life_text_image_model"),
+            ("cfgDailyLifeEditImageModel", "daily_life_edit_image_model"),
+        ):
+            self.assertIn(f'id="{element_id}"', html)
+            self.assertIn(f'document.getElementById("{element_id}")', elements)
+            self.assertIn(f'field: "{field}"', schema_map)
+        self.assertNotIn("cfgAppearancePrompt", html + elements + schema_map)
+        self.assertNotIn('field: "appearance_prompt"', schema_map)
+
+        mod = _load_main_module()
+        context = mod.Context()
+        context.register_web_api = lambda *args: None
+        plugin = mod.DailySharePlugin(context, {})
+        plugin.dashboard_service.operations.apply._apply_page_config_payload(
+            {
+                "sections": {
+                    "media": {
+                        "daily_life_text_image_model": "gpt-image-text",
+                        "daily_life_edit_image_model": "gpt-image-edit",
+                        "appearance_prompt": "不应保存",
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(
+            plugin.config["image_conf"]["daily_life_text_image_model"],
+            "gpt-image-text",
+        )
+        self.assertEqual(
+            plugin.config["image_conf"]["daily_life_edit_image_model"],
+            "gpt-image-edit",
+        )
+        self.assertNotIn("appearance_prompt", plugin.config["image_conf"])
+
     def test_panel_event_broadcast_keeps_bound_runtime_clients(self):
         mod = _load_main_module()
         context = mod.Context()

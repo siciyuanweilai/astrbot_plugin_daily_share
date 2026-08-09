@@ -380,12 +380,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         )
         service = image_module.ImageService(
             context,
-            {
-                "image_conf": {
-                    "enable_ai_image": True,
-                    "appearance_prompt": "黑发人物，清爽自然",
-                },
-            },
+            {"image_conf": {"enable_ai_image": True}},
             call_llm,
         )
 
@@ -426,12 +421,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         )
         service = image_module.ImageService(
             context,
-            {
-                "image_conf": {
-                    "enable_ai_image": True,
-                    "appearance_prompt": "黑发人物，清爽自然",
-                },
-            },
+            {"image_conf": {"enable_ai_image": True}},
             call_llm,
         )
 

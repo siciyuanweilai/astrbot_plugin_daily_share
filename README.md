@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.4-ef6f8f" alt="版本 1.0.4"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.5-ef6f8f" alt="版本 1.0.5"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -35,7 +35,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.4 已发布**：修复仪表盘长期未刷新、多标签页并行操作或配置被指令修改后，旧页面可能覆盖目标独立定时、独立序列及其他设置的问题。目标列表与普通设置现已独立校验版本，发生冲突时会保留当前配置并提示重新加载。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.0.5 已发布**：配图现在可分别指定 daily_life 的文生图与图生图模型，对应模型留空时保持该模式原有通道顺序；填写任一模型后需同步更新 daily_life。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -331,22 +331,13 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 | :--- | :--- |
 | 生活上下文 | 按当前目标读取当天状态、时间氛围与生活片段 |
 | 联网检索 | 由生活插件统一决定搜索策略、提供商与失败处理 |
-| 配图、视频、语音 | 复用生活插件媒体能力 |
+| 配图、视频、语音 | 复用生活插件媒体能力；配图可分别指定文生图与图生图模型 |
 | 活动回传 | 成功发送后更新生活节奏 |
 | MemOS | 按生活插件设置同步长期记忆 |
 
 生活插件未安装、未启用、未完成初始化、正在重载或调用失败时，对应增强会自动跳过，不影响插件基础能力；媒体进度会区分“生活插件不可用”“未返回有效结果”和“生成调用失败”，并按当前异步任务隔离状态，便于定位配置或接口问题。
 
-## 🗃️ 数据与升级
-
-首次启动创建 <code>daily_share.db</code>，当前结构包含：
-
-| 数据表 | 用途 |
-| :--- | :--- |
-| <code>sent_history</code> | 成功分享、媒体与发送结果 |
-| <code>news_snapshot_history</code> | 按目标和新闻源保存的新闻 JSON 快照 |
-| <code>plugin_state</code> | 调度、序列、焦点和运行状态 |
-| <code>topic_history</code> | 知识与推荐主题去重 |
+`image_conf.daily_life_text_image_model` 对应生活插件的文生图通道，`image_conf.daily_life_edit_image_model` 对应图生图通道。daily_life 真正取得角色参考图时使用图生图模型，否则使用文生图模型；每项留空时沿用对应模式的原有通道顺序，两项都留空时兼容未提供新参数的旧版 daily_life。填写后需同步更新 daily_life，且只选择模型名称完全一致的通道；同一模型配置多条线路时仍按原顺序依次容错，不会回退到其他模型。未找到对应模型或 daily_life 版本不支持时，分享会保留文案并给出明确的配图失败原因。
 
 ## 🧪 开发与验证
 

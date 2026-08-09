@@ -57,6 +57,8 @@ async def call_default_daily_life_media_tool(
     *,
     media_kind: str,
     prompt: str,
+    text_image_model: str = "",
+    edit_image_model: str = "",
     image_ref: str = "",
     text: str = "",
     emotion: str = "",
@@ -72,6 +74,8 @@ async def call_default_daily_life_media_tool(
             await bridge.generate_image(
                 event,
                 prompt,
+                text_model=str(text_image_model or "").strip(),
+                edit_model=str(edit_image_model or "").strip(),
                 contains_character=contains_character,
             )
             or None

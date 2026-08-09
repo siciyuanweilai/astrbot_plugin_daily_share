@@ -1,9 +1,8 @@
-import json
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -757,6 +756,16 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertNotIn("video_tool_name", image_items)
         self.assertNotIn("tts_tool_name", tts_items)
         self.assertNotIn("use_gitee_selfie_ref", image_items)
+        self.assertNotIn("daily_life_image_model", image_items)
+        self.assertNotIn("appearance_prompt", image_items)
+        for key, mode in (
+            ("daily_life_text_image_model", "文生图"),
+            ("daily_life_edit_image_model", "图生图"),
+        ):
+            self.assertIn(key, image_items)
+            self.assertEqual(image_items[key]["default"], "")
+            self.assertIn(mode, image_items[key]["description"])
+            self.assertIn("模型名称完全一致", image_items[key]["hint"])
         self.assertIn(
             "astrbot_plugin_daily_life", image_items["enable_ai_image"]["hint"]
         )

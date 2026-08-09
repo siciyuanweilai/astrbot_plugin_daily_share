@@ -11,9 +11,6 @@ class ImageVisualPersonaService(ImageVisualJudgeService):
 
     async def _get_appearance_keywords(self, target_umo: str | None = None) -> str:
         """获取人设外貌。"""
-        conf_p = self.img_conf.get("appearance_prompt", "").strip()
-        if conf_p:
-            return conf_p
         try:
             p_obj = await self.context.persona_manager.get_default_persona_v3()
             p_text = p_obj.get("prompt", "") if p_obj else ""

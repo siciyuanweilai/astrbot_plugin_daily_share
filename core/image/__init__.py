@@ -116,6 +116,12 @@ class ImageService(ImageVisualService, ImageVideoService):
             self.context,
             media_kind="image",
             prompt=prompt,
+            text_image_model=str(
+                self.img_conf.get("daily_life_text_image_model", "") or ""
+            ).strip(),
+            edit_image_model=str(
+                self.img_conf.get("daily_life_edit_image_model", "") or ""
+            ).strip(),
             event=event,
             contains_character=involves_self,
             bridge=self.daily_life_bridge,

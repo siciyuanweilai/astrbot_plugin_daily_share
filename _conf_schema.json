@@ -718,6 +718,18 @@
         "default": false,
         "hint": "开启后通过 astrbot_plugin_daily_life 生成图片。"
       },
+      "daily_life_text_image_model": {
+        "description": "生活插件文生图模型",
+        "type": "string",
+        "default": "",
+        "hint": "填写 astrbot_plugin_daily_life 文生图通道中的模型名称。留空时保持文生图通道原有顺序；填写后只使用模型名称完全一致的文生图通道，同一模型的多条线路仍会依次容错。"
+      },
+      "daily_life_edit_image_model": {
+        "description": "生活插件图生图模型",
+        "type": "string",
+        "default": "",
+        "hint": "填写 astrbot_plugin_daily_life 图生图通道中的模型名称。留空时保持图生图通道原有顺序；填写后只使用模型名称完全一致的图生图通道，同一模型的多条线路仍会依次容错。"
+      },
       "attach_hot_news_image": {
         "description": "新闻热搜附带长图",
         "type": "bool",
@@ -840,12 +852,6 @@
         "type": "bool",
         "default": true,
         "hint": "对话历史中会包含图片的中文描述。"
-      },
-      "appearance_prompt": {
-        "description": "生成配图的人设外貌提示词",
-        "type": "text",
-        "default": "",
-        "hint": "留空则从人设自动提取外貌特征。"
       },
       "image_always_include_self": {
         "description": "始终包含人物形象",

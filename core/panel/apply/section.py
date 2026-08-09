@@ -61,10 +61,14 @@ class DashboardApplySectionService(PanelComponent):
             image["separate_send_delay"] = self.validation._page_delay_range_value(
                 media_body.get("separate_send_delay"), "1.0-2.0"
             )
-        if "appearance_prompt" in media_body:
-            image["appearance_prompt"] = self.validation._page_clean_text(
-                media_body.get("appearance_prompt"), max_len=2000
-            )
+        for model_key in (
+            "daily_life_text_image_model",
+            "daily_life_edit_image_model",
+        ):
+            if model_key in media_body:
+                image[model_key] = self.validation._page_clean_text(
+                    media_body.get(model_key), max_len=500
+                )
         self.fields._page_apply_bool_fields(
             tts, media_body, ("enable_tts", "prefer_audio_only")
         )

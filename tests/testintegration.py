@@ -63,8 +63,10 @@ class _PublicPlugin:
     async def search_share_evidence(self, query, **kwargs):
         return await self.runtime.search_share_evidence(query, **kwargs)
 
-    async def generate_share_image(self, event, prompt, *, contains_character=False):
-        return f"image:{prompt}:{contains_character}"
+    async def generate_share_image(
+        self, event, prompt, *, model="", contains_character=False
+    ):
+        return f"image:{prompt}:{model}:{contains_character}"
 
     async def generate_share_video(self, event, prompt, *, reference_image=""):
         return f"video:{prompt}:{reference_image}"
@@ -127,6 +129,8 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             DailyLifeBridge = module.DailyLifeBridge
 
             class Runtime:
+                image_models = []
+
                 async def get_life_context(self, target_umo=''):
                     return {{'target': target_umo}}
 
@@ -152,6 +156,10 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 media = types.SimpleNamespace(voice=Voice())
 
                 async def generate_life_image_asset(self, event, prompt, *args, **kwargs):
+                    self.image_models.append((
+                        kwargs.get('text_model'),
+                        kwargs.get('edit_model'),
+                    ))
                     return types.SimpleNamespace(path=f'image://{{prompt}}')
 
                 async def generate_life_video_asset(self, event, prompt, reference_image=''):
@@ -184,7 +192,20 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     target_umo=target,
                 )
                 assert evidence['content'] == '跨插件搜索证据'
-                assert await bridge.generate_image(None, '配图提示词') == 'image://配图提示词'
+                assert await bridge.generate_image(
+                    None,
+                    '配图提示词',
+                    text_model='gpt-image-text',
+                    edit_model='gpt-image-edit',
+                ) == 'image://配图提示词'
+                assert await bridge.generate_image(
+                    None,
+                    '兼容配图提示词',
+                ) == 'image://兼容配图提示词'
+                assert plugin.runtime.image_models == [
+                    ('gpt-image-text', 'gpt-image-edit'),
+                    ('', ''),
+                ]
                 assert await bridge.generate_video(
                     None,
                     '视频提示词',
@@ -344,6 +365,78 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(bridge.media_available("video"))
         self.assertTrue(bridge.media_available("audio"))
         self.assertFalse(bridge.media_available("unknown"))
+
+    async def test_bridge_passes_separate_image_models(self):
+        calls = []
+
+        class Plugin:
+            async def generate_share_image(
+                self,
+                event,
+                prompt,
+                *,
+                text_model="",
+                edit_model="",
+                contains_character=False,
+            ):
+                calls.append(
+                    (event, prompt, text_model, edit_model, contains_character)
+                )
+                return "image:model-selected"
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+
+        result = await bridge.generate_image(
+            "event",
+            "配图提示词",
+            text_model="gpt-image-text",
+            edit_model="gpt-image-edit",
+            contains_character=True,
+        )
+
+        self.assertEqual(result, "image:model-selected")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "event",
+                    "配图提示词",
+                    "gpt-image-text",
+                    "gpt-image-edit",
+                    True,
+                )
+            ],
+        )
+
+    async def test_bridge_reports_old_daily_life_model_contract(self):
+        class Plugin:
+            async def generate_share_image(
+                self, event, prompt, *, contains_character=False
+            ):
+                return "old-image"
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+
+        self.assertEqual(
+            await bridge.generate_image(
+                None,
+                "配图提示词",
+                text_model="gpt-image-text",
+                edit_model="gpt-image-edit",
+            ),
+            "",
+        )
+        self.assertEqual(
+            bridge.media_result("image"),
+            (
+                "error",
+                "生活插件版本不支持分别指定文生图和图生图模型，请更新生活插件",
+            ),
+        )
 
     async def test_bridge_records_media_call_outcomes(self):
         class Plugin:

@@ -168,14 +168,23 @@ class DailyLifeBridge:
         event: Any,
         prompt: str,
         *,
+        text_model: str = "",
+        edit_model: str = "",
         contains_character: bool = False,
     ) -> str:
+        options = {"contains_character": contains_character}
+        text_model = str(text_model or "").strip()
+        edit_model = str(edit_model or "").strip()
+        if text_model:
+            options["text_model"] = text_model
+        if edit_model:
+            options["edit_model"] = edit_model
         return await self._call_media(
             "generate_share_image",
             "配图",
             event,
             prompt,
-            contains_character=contains_character,
+            **options,
         )
 
     async def generate_video(
@@ -248,6 +257,24 @@ class DailyLifeBridge:
                     "unavailable",
                     "生活插件正在初始化、重载或停止",
                 )
+            elif (
+                method_name == "generate_share_image"
+                and (
+                    str(kwargs.get("text_model") or "").strip()
+                    or str(kwargs.get("edit_model") or "").strip()
+                )
+                and (
+                    "unexpected keyword argument 'text_model'" in detail
+                    or "unexpected keyword argument 'edit_model'" in detail
+                )
+            ):
+                self._set_media_result(
+                    media_kind,
+                    "error",
+                    "生活插件版本不支持分别指定文生图和图生图模型，请更新生活插件",
+                )
+            elif method_name == "generate_share_image" and "指定的生图模型" in detail:
+                self._set_media_result(media_kind, "error", detail)
             else:
                 self._set_media_result(
                     media_kind,
