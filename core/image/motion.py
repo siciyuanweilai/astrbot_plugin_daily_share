@@ -1,5 +1,6 @@
 import asyncio
 import json
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
@@ -123,6 +124,7 @@ class ImageVideoService:
         if not self.img_conf.get("enable_ai_video", False):
             return None
 
+        started_at = monotonic()
         try:
             if not image_path:
                 return None
@@ -138,7 +140,7 @@ class ImageVideoService:
             logger.info(f"[日常分享] 声音设计提取：声音: {sound_prompt[:180]}...")
             logger.info(f"[日常分享] 最终视频提示词: {video_prompt[:180]}...")
 
-            return await call_default_daily_life_media_tool(
+            video_ref = await call_default_daily_life_media_tool(
                 self.context,
                 media_kind="video",
                 prompt=video_prompt,
@@ -146,7 +148,20 @@ class ImageVideoService:
                 event=event,
                 bridge=self.daily_life_bridge,
             )
+            elapsed = monotonic() - started_at
+            if video_ref:
+                logger.info(f"[日常分享] 视频生成完成，耗时 {elapsed:.1f} 秒")
+            else:
+                logger.warning(
+                    f"[日常分享] 视频生成未获得有效结果，耗时 {elapsed:.1f} 秒，继续发送其余内容"
+                )
+            return video_ref
 
         except Exception as e:
-            log_exception("[日常分享] 视频生成流程异常", e, with_traceback=False)
+            elapsed = monotonic() - started_at
+            log_exception(
+                f"[日常分享] 视频生成流程异常，耗时 {elapsed:.1f} 秒",
+                e,
+                with_traceback=False,
+            )
             return None

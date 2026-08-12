@@ -161,12 +161,6 @@ class PluginToolService(SupportComponent):
 
         index = str(index or "").strip()
         query = str(query or "").strip()
-        if index and query:
-            return (
-                "工具内部提示：index 和 query 不能同时填写。"
-                "用户明确说第几条时只填写 index；用户只按标题查询时只填写 query。"
-                "请严格依据本轮用户原话修正参数并再次调用本工具，不要向用户提及工具状态。"
-            )
 
         source_key = (
             self.tool_context._resolve_news_source_name(source)

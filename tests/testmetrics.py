@@ -1,5 +1,5 @@
-import importlib.util
 import asyncio
+import importlib.util
 import sqlite3
 import sys
 import tempfile
@@ -8,7 +8,6 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "core" / "db.py"
@@ -86,6 +85,43 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             state = await db.get_share_state("shared", {})
             self.assertEqual(state, {f"field_{index}": index for index in range(24)})
 
+    async def test_news_tool_context_reads_snapshot_and_focus_in_one_connection(self):
+        mod = _load_db_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db = mod.DatabaseManager(Path(tmp))
+            target = "aiocqhttp:GroupMessage:123"
+            focus_key = f"news_snapshot:{target}:focus"
+            await db.add_news_snapshot(
+                target,
+                "thepaper",
+                "澎湃热搜",
+                "",
+                [{"title": "第一条新闻", "url": "https://example.com/1"}],
+            )
+            await db.set_cache_state(
+                focus_key,
+                {"source_key": "thepaper", "index": 1},
+            )
+
+            connection_count = 0
+            original_connection = db._connection
+
+            def counted_connection(*args, **kwargs):
+                nonlocal connection_count
+                connection_count += 1
+                return original_connection(*args, **kwargs)
+
+            db._connection = counted_connection
+            snapshot, focus = await db.get_latest_news_snapshot_with_focus(
+                target,
+                focus_key,
+            )
+
+            self.assertEqual(connection_count, 1)
+            self.assertEqual(snapshot["source_key"], "thepaper")
+            self.assertEqual(snapshot["items"][0]["title"], "第一条新闻")
+            self.assertEqual(focus["index"], 1)
+
     async def test_database_close_is_concurrent_safe_and_rejects_new_work(self):
         mod = _load_db_module()
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,7 +149,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertEqual(
                     conn.execute("PRAGMA user_version").fetchone()[0],
-                    1,
+                    2,
                 )
             finally:
                 conn.close()
@@ -140,7 +176,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                 conn = sqlite3.connect(reopened.db_path)
                 try:
                     self.assertEqual(
-                        conn.execute("PRAGMA user_version").fetchone()[0], 1
+                        conn.execute("PRAGMA user_version").fetchone()[0], 2
                     )
                 finally:
                     conn.close()
@@ -179,11 +215,11 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             columns = dict(schema_module.CURRENT_TABLE_COLUMNS)
             columns["plugin_state"] = (*columns["plugin_state"], "marker")
             migration = migration_module.SchemaMigration(
-                version=2,
+                version=3,
                 statements=("ALTER TABLE plugin_state ADD COLUMN marker TEXT",),
             )
             with (
-                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 2),
+                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 3),
                 mock.patch.object(schema_module, "CURRENT_TABLE_COLUMNS", columns),
                 mock.patch.object(migration_module, "SCHEMA_MIGRATIONS", (migration,)),
             ):
@@ -195,7 +231,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                     conn = sqlite3.connect(upgraded.db_path)
                     try:
                         self.assertEqual(
-                            conn.execute("PRAGMA user_version").fetchone()[0], 2
+                            conn.execute("PRAGMA user_version").fetchone()[0], 3
                         )
                         column_names = {
                             row[1]
@@ -210,7 +246,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                     backup = sqlite3.connect(upgraded.backup_path)
                     try:
                         self.assertEqual(
-                            backup.execute("PRAGMA user_version").fetchone()[0], 1
+                            backup.execute("PRAGMA user_version").fetchone()[0], 2
                         )
                     finally:
                         backup.close()
@@ -230,14 +266,14 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             columns = dict(schema_module.CURRENT_TABLE_COLUMNS)
             columns["plugin_state"] = (*columns["plugin_state"], "transient")
             migration = migration_module.SchemaMigration(
-                version=2,
+                version=3,
                 statements=(
                     "ALTER TABLE plugin_state ADD COLUMN transient TEXT",
                     "INSERT INTO missing_table(value) VALUES (1)",
                 ),
             )
             with (
-                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 2),
+                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 3),
                 mock.patch.object(schema_module, "CURRENT_TABLE_COLUMNS", columns),
                 mock.patch.object(migration_module, "SCHEMA_MIGRATIONS", (migration,)),
             ):
@@ -250,7 +286,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
 
             conn = sqlite3.connect(data_dir / "daily_share.db")
             try:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
                 column_names = {
                     row[1]
                     for row in conn.execute(
@@ -265,6 +301,65 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("transient", column_names)
             self.assertIn('"kept": true', value)
             self.assertTrue((data_dir / "daily_share.backup.db").exists())
+
+    async def test_v1_database_migrates_degradation_fields_without_data_loss(self):
+        mod = _load_db_module()
+        schema_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.dbschema"]
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp)
+            db_path = data_dir / "daily_share.db"
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE sent_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        target_id TEXT,
+                        share_type TEXT,
+                        content TEXT,
+                        success INTEGER,
+                        error_reason TEXT,
+                        media_type TEXT,
+                        media_url TEXT,
+                        media_path TEXT,
+                        source_type TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                for statement in schema_module.TABLE_STATEMENTS[1:]:
+                    conn.execute(statement)
+                for statement in schema_module.INDEX_STATEMENTS:
+                    conn.execute(statement)
+                conn.execute(
+                    """
+                    INSERT INTO sent_history (
+                        target_id, share_type, content, success, source_type
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("group-1", "mood", "kept", 1, "scheduled"),
+                )
+                conn.execute("PRAGMA user_version = 1")
+                conn.commit()
+            finally:
+                conn.close()
+
+            db = mod.DatabaseManager(data_dir)
+            try:
+                history = await db.get_recent_history(limit=1)
+                self.assertEqual(history[0]["content"], "kept")
+                self.assertFalse(history[0]["degraded"])
+                self.assertEqual(history[0]["degradation_reason"], "")
+                conn = sqlite3.connect(db.db_path)
+                try:
+                    self.assertEqual(
+                        conn.execute("PRAGMA user_version").fetchone()[0], 2
+                    )
+                finally:
+                    conn.close()
+                self.assertTrue(db.backup_path.exists())
+            finally:
+                await db.close()
 
     async def test_database_indexes_are_created(self):
         mod = _load_db_module()
@@ -576,6 +671,8 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                 "mood",
                 "text only dynamic",
                 True,
+                degraded=True,
+                degradation_reason="视频生成失败，已改发文案",
             )
             await db.add_sent_history(
                 "group-1",
@@ -593,6 +690,10 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             summary = await db.get_history_summary()
 
             self.assertEqual(recent[0]["error_reason"], "upload failed")
+            self.assertTrue(recent[1]["degraded"])
+            self.assertEqual(
+                recent[1]["degradation_reason"], "视频生成失败，已改发文案"
+            )
             self.assertEqual(failures[0]["target_id"], "group-1")
             self.assertEqual(failures[0]["error_reason"], "upload failed")
             self.assertEqual(media[0]["media_type"], "image")
@@ -608,6 +709,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summary["total"], 3)
             self.assertEqual(summary["success"], 2)
             self.assertEqual(summary["failed"], 1)
+            self.assertEqual(summary["degraded"], 1)
             self.assertEqual(summary["today"], 2)
             self.assertEqual(summary["dynamic"], 2)
             self.assertEqual(summary["media"], 1)
@@ -757,6 +859,14 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             )
             await db.add_sent_history(
                 "group-1",
+                "mood",
+                "degraded text",
+                True,
+                degraded=True,
+                degradation_reason="视频生成超时，继续发送文案",
+            )
+            await db.add_sent_history(
+                "group-1",
                 "news",
                 "failed image",
                 False,
@@ -767,13 +877,19 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             text_items = await db.get_recent_dynamics(limit=10, media_kind="text")
             image_items = await db.get_recent_dynamics(limit=10, media_kind="image")
             video_items = await db.get_recent_dynamics(limit=10, media_kind="video")
+            degraded_items = await db.get_recent_dynamics(
+                limit=10, media_kind="degraded"
+            )
             news_images = await db.get_recent_dynamics(
                 limit=10,
                 media_kind="image",
                 share_type="news",
             )
 
-            self.assertEqual([item["content"] for item in text_items], ["text mood"])
+            self.assertEqual(
+                [item["content"] for item in text_items],
+                ["degraded text", "text mood"],
+            )
             self.assertEqual(
                 [item["content"] for item in image_items],
                 ["typed extension image", "typed image news"],
@@ -782,13 +898,17 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                 [item["content"] for item in video_items], ["typed video greeting"]
             )
             self.assertEqual(
+                [item["content"] for item in degraded_items], ["degraded text"]
+            )
+            self.assertEqual(
                 [item["content"] for item in news_images], ["typed image news"]
             )
 
             summary = await db.get_dashboard_dynamic_summary(days=0)
-            self.assertEqual(summary["text"], 1)
+            self.assertEqual(summary["text"], 2)
             self.assertEqual(summary["image"], 2)
             self.assertEqual(summary["video"], 1)
+            self.assertEqual(summary["degraded"], 1)
 
     async def test_target_stats_use_share_type_to_separate_briefing(self):
         mod = _load_db_module()

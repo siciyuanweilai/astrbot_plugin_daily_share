@@ -22,11 +22,23 @@ class ContextLifeParseService(ContextComponent):
             if availability:
                 parts.append(availability)
 
+            rhythm = self._format_physiological_rhythm(
+                data.get("state", {}).get("physiological_rhythm", {})
+                if isinstance(data.get("state"), dict)
+                else {}
+            )
+            if rhythm:
+                parts.append(rhythm)
+
             current_activity = self._current_life_activity(data.get("timeline", []))
             if current_activity:
                 parts.append(current_activity)
 
             self._append_life_memories(parts, data)
+
+            guidance = self._format_share_guidance(data.get("share_guidance", {}))
+            if guidance:
+                parts.append(guidance)
 
             schedule = data.get("schedule", "")
             if schedule:
@@ -103,6 +115,44 @@ class ContextLifeParseService(ContextComponent):
         if summary_text:
             state_items.append(f"整体: {summary_text}")
         return f"【当前状态】{' | '.join(state_items)}" if state_items else ""
+
+    def _format_physiological_rhythm(self, rhythm: dict) -> str:
+        if not isinstance(rhythm, dict) or not rhythm:
+            return ""
+        items = []
+        for key, label in (
+            ("energy_curve", "精力节奏"),
+            ("attention_state", "注意力"),
+            ("summary", "状态摘要"),
+        ):
+            value = self._compact_life_text(rhythm.get(key), 100)
+            if value:
+                items.append(f"{label}: {value}")
+        body = rhythm.get("body_condition", {})
+        if isinstance(body, dict):
+            label = self._compact_life_text(body.get("label"), 60)
+            intensity = body.get("intensity")
+            if label:
+                suffix = (
+                    f" {intensity}/100" if isinstance(intensity, (int, float)) else ""
+                )
+                items.append(f"身体状态: {label}{suffix}")
+        social = rhythm.get("social_battery")
+        if isinstance(social, (int, float)):
+            items.append(f"社交电量: {social}/100")
+        actions = rhythm.get("recovery_actions", [])
+        if isinstance(actions, list):
+            values = [
+                self._compact_life_text(value, 50) for value in actions[:4] if value
+            ]
+            if values:
+                items.append(f"恢复建议: {'、'.join(values)}")
+        optional = rhythm.get("optional_cycle", {})
+        if isinstance(optional, dict) and optional.get("enabled"):
+            label = self._compact_life_text(optional.get("label"), 60)
+            if label:
+                items.append(f"可选周期状态: {label}")
+        return f"【当前生理节律】{' | '.join(items)}" if items else ""
 
     @staticmethod
     def _format_share_availability(subject: dict) -> str:

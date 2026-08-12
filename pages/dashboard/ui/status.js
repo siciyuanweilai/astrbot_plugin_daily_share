@@ -19,6 +19,7 @@ const actionStatusLabels = {
   error: "失败",
   failed: "失败",
   failure: "失败",
+  warning: "降级",
 };
 
 const actionTargetLabels = {
@@ -73,6 +74,7 @@ export function createStatusView({
     const normalized = text(status).trim().toLowerCase();
     if (normalized === "running") return "running";
     if (["done", "success", "ok"].includes(normalized)) return "success";
+    if (normalized === "warning") return "warning";
     if (["error", "failed", "failure"].includes(normalized)) return "error";
     return "neutral";
   }
@@ -349,7 +351,7 @@ export function createStatusView({
     replaceChildren(el.shareProgressLine, [card]);
   }
 
-  function renderMediaStats({ dynamicCount, textCount, imageCount, videoCount, todayCount }) {
+  function renderMediaStats({ dynamicCount, textCount, imageCount, videoCount, degradedCount, todayCount }) {
     if (!el.mediaStats) return;
     const stats = [
       { key: "dynamic", label: "动态", value: `${dynamicCount}`, tone: "is-dynamic", mediaKind: "all" },
@@ -357,6 +359,7 @@ export function createStatusView({
       { key: "text", label: "文案", value: `${textCount}`, tone: "is-text", mediaKind: "text" },
       { key: "image", label: "图片", value: `${imageCount}`, tone: "is-image", mediaKind: "image" },
       { key: "video", label: "视频", value: `${videoCount}`, tone: "is-video", mediaKind: "video" },
+      { key: "degraded", label: "降级", value: `${degradedCount}`, tone: "is-degraded", mediaKind: "degraded" },
       { key: "qzone", label: ["QQ", "空间"], value: "", tone: "is-qzone", mediaKind: "qzone" },
     ];
     const toolbar = el.mediaStats.querySelector(".media-bulk-toolbar");
@@ -386,6 +389,7 @@ export function createStatusView({
     );
     const imageCount = Number(historySummary.image ?? 0);
     const videoCount = Number(historySummary.video ?? 0);
+    const degradedCount = Number(historySummary.degraded ?? 0);
     const todayCount = Number(historySummary.today ?? 0);
     const currentPeriod = `${periodLabels[status.period?.key] || status.period?.key || "--"} ${status.period?.range || ""}`.trim();
     const runtime = status.runtime || {};
@@ -424,7 +428,14 @@ export function createStatusView({
     ]);
     renderNextShareLine(nextJob);
     renderShareProgress();
-    renderMediaStats({ dynamicCount, textCount, imageCount, videoCount, todayCount });
+    renderMediaStats({
+      dynamicCount,
+      textCount,
+      imageCount,
+      videoCount,
+      degradedCount,
+      todayCount,
+    });
     if (el.configInsightList) {
       replaceChildren(el.configInsightList, []);
       el.configInsightList.hidden = true;

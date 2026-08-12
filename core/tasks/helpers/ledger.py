@@ -26,8 +26,24 @@ class TaskHelperRecordService(TaskHelperLockService):
         news_snapshot_data: dict | None = None,
         news_image_url: str | None = None,
         news_snapshot_targets: list[str] | None = None,
+        degradation_reason: str = "",
     ) -> None:
         visual = self._sent_visual_history_kwargs(media_result, image_ref, video_ref)
+        degradation_reasons = []
+        if success and str(degradation_reason or "").strip():
+            degradation_reasons.append(str(degradation_reason).strip())
+        if success:
+            for item in (media_result or {}).get("partial_errors", []):
+                if item.get("probable_sent"):
+                    continue
+                label = str(
+                    item.get("stage_label") or item.get("stage") or "媒体"
+                ).strip()
+                message = str(item.get("message") or "发送失败").strip()
+                reason = f"{label}发送失败：{message}"
+                if reason not in degradation_reasons:
+                    degradation_reasons.append(reason)
+        resolved_degradation_reason = "；".join(degradation_reasons)
         snapshot = self.services.snapshots.prepare_news_snapshot_record(
             news_snapshot_data,
             news_image_url,
@@ -37,6 +53,8 @@ class TaskHelperRecordService(TaskHelperLockService):
             "share_type": getattr(share_type, "value", share_type),
             "content": content,
             "source_type": source_type,
+            "degraded": bool(resolved_degradation_reason),
+            "degradation_reason": resolved_degradation_reason,
             **visual,
         }
         if success and snapshot:
@@ -61,6 +79,8 @@ class TaskHelperRecordService(TaskHelperLockService):
             success=success,
             error_reason=error_reason or None,
             source_type=source_type,
+            degraded=bool(resolved_degradation_reason),
+            degradation_reason=resolved_degradation_reason,
             **visual,
         )
 

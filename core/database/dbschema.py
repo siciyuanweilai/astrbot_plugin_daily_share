@@ -3,7 +3,7 @@ from __future__ import annotations
 from .keys import HISTORY_SHARE_BRIEFING
 
 BASELINE_SCHEMA_VERSION = 1
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 TABLE_STATEMENTS = (
     """
@@ -18,7 +18,9 @@ TABLE_STATEMENTS = (
         media_url TEXT,
         media_path TEXT,
         source_type TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        degraded INTEGER NOT NULL DEFAULT 0,
+        degradation_reason TEXT NOT NULL DEFAULT ''
     )
     """,
     """
@@ -99,8 +101,12 @@ BASELINE_TABLE_COLUMNS = {
     ),
 }
 
-# 当前 1.0.x 与迁移基线相同。以后修改结构时保留基线，并更新当前定义。
 CURRENT_TABLE_COLUMNS = dict(BASELINE_TABLE_COLUMNS)
+CURRENT_TABLE_COLUMNS["sent_history"] = (
+    *BASELINE_TABLE_COLUMNS["sent_history"],
+    "degraded",
+    "degradation_reason",
+)
 CURRENT_INDEX_NAMES = tuple(
     statement.split(" ", 3)[2] for statement in INDEX_STATEMENTS
 )
@@ -109,7 +115,8 @@ _DYNAMIC_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"
 _DYNAMIC_VIDEO_EXTS = (".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv")
 _HISTORY_SELECT_COLUMNS = """
     id, created_at, target_id, share_type, content, success,
-    error_reason, media_type, media_url, media_path, source_type
+    error_reason, media_type, media_url, media_path, source_type,
+    degraded, degradation_reason
 """
 _MEDIA_REF_SQL = "LOWER(COALESCE(media_path, '') || ' ' || COALESCE(media_url, ''))"
 _HAS_MEDIA_SQL = "(COALESCE(media_path, '') <> '' OR COALESCE(media_url, '') <> '')"

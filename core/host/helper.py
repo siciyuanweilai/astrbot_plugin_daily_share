@@ -1,12 +1,11 @@
-from .supportcomponent import SupportComponent
-
-import time
 import re
+import time
 
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
 from ..constants import SOURCE_CN_MAP
+from .supportcomponent import SupportComponent
 
 
 class PluginToolContextService(SupportComponent):
@@ -82,18 +81,19 @@ class PluginToolContextService(SupportComponent):
             return ""
 
         try:
-            snapshot = await db.get_latest_news_snapshot(target)
+            focus_key = snapshot_store._news_snapshot_focus_key(target)
+            snapshot, focus = await db.get_latest_news_snapshot_with_focus(
+                target,
+                focus_key,
+            )
             if not snapshot_store._is_news_snapshot(snapshot):
                 return ""
 
             items = snapshot.get("items") or []
             source_name = snapshot.get("source_name") or "新闻热搜"
             source_key = snapshot.get("source_key") or ""
-            focus = await db.get_cache_state(
-                snapshot_store._news_snapshot_focus_key(target), {}
-            )
             focus_index = snapshot_store._coerce_news_tool_index(
-                (focus or {}).get("index")
+                (focus or {}).get("index") if isinstance(focus, dict) else None
             )
             lines = [
                 self.tool_context._NEWS_LINK_CONTEXT_MARKER,

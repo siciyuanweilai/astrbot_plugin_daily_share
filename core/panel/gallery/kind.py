@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 import mimetypes
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from ...config import ShareType
 from ..common import _PAGE_IMAGE_EXTS, _PAGE_VIDEO_EXTS
+from ..panelcomponent import PanelComponent
 
 
 class DashboardMediaKindService(PanelComponent):
@@ -64,7 +63,8 @@ class DashboardMediaKindService(PanelComponent):
     @staticmethod
     def _page_dynamic_media_kind(value: str) -> str:
         raw = str(value or "all").strip().lower()
-        return raw if raw in {"all", "today", "text", "image", "video"} else "all"
+        allowed = {"all", "today", "text", "image", "video", "degraded"}
+        return raw if raw in allowed else "all"
 
     @staticmethod
     def _page_dynamic_share_type(value: str) -> str:

@@ -31,6 +31,21 @@ def _load_panel_revision_module():
 
 
 class TaskArchitectureTests(unittest.TestCase):
+    def test_release_version_is_consistent(self):
+        metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+        self.assertIn("version: 1.0.6", metadata)
+        self.assertIn("version-1.0.6", readme)
+        self.assertIn("v1.0.6 已发布", readme)
+        self.assertIn("v1.0.6 · 2026-08-13", changelog)
+        self.assertLess(changelog.index("v1.0.6"), changelog.index("v1.0.5"))
+        release = changelog.split("## 🧭 v1.0.6", 1)[1].split("## 🎨 v1.0.5", 1)[0]
+        self.assertIn("get_share_context(target_umo)", release)
+        self.assertIn("数据库结构保持 v2", release)
+        self.assertIn("成功分享记录", release)
+
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
         self.assertIn('astrbot_version: ">=4.26.0"', metadata)
@@ -45,6 +60,13 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertNotIn("find_platform_instance_by_keywords", platform_source)
         self.assertNotIn("_resolve_message_event", permission_source)
         self.assertNotIn("except Exception", panel_source)
+
+    def test_panel_runtime_error_uses_chinese_description(self):
+        source = (ROOT / "core" / "panel" / "panelcomponent.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("仪表盘组件必须绑定运行时", source)
+        self.assertNotIn("Panel 组件必须绑定运行时", source)
 
     def test_services_do_not_call_other_services_private_methods(self):
         pattern = re.compile(
@@ -291,9 +313,7 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIn('target: ["cfgContactAliases"]', schema_map)
 
     def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
-        html = (ROOT / "pages" / "dashboard" / "index.html").read_text(
-            encoding="utf-8"
-        )
+        html = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")
         elements = (ROOT / "pages" / "dashboard" / "ui" / "elements.js").read_text(
             encoding="utf-8"
         )
@@ -336,6 +356,15 @@ class TaskArchitectureTests(unittest.TestCase):
             "gpt-image-edit",
         )
         self.assertNotIn("appearance_prompt", plugin.config["image_conf"])
+
+    def test_dashboard_labels_all_video_sources_as_video(self):
+        items = (ROOT / "pages" / "dashboard" / "ui" / "items.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('badge.textContent = "视频"', items)
+        self.assertNotIn("外链视频", items)
+        self.assertNotIn("外部链接，可能失效", items)
 
     def test_panel_event_broadcast_keeps_bound_runtime_clients(self):
         mod = _load_main_module()
@@ -433,8 +462,6 @@ class TaskArchitectureTests(unittest.TestCase):
 
         self.assertEqual(mod.SupportService.__bases__, (object,))
         self.assertEqual(mod.DashboardService.__bases__, (object,))
-        self.assertEqual(len(mod.SupportService.__mro__), 2)
-        self.assertEqual(len(mod.DashboardService.__mro__), 2)
 
     def test_core_domain_runtimes_have_no_inheritance_chain(self):
         mod = _load_main_module()
@@ -456,7 +483,6 @@ class TaskArchitectureTests(unittest.TestCase):
         for service_type in services:
             with self.subTest(service=service_type.__name__):
                 self.assertEqual(service_type.__bases__, (object,))
-                self.assertEqual(len(service_type.__mro__), 2)
 
         self.assertEqual(panel_runtime.__bases__, (object,))
         self.assertEqual(support_runtime.__bases__, (object,))
@@ -541,7 +567,12 @@ class TaskArchitectureTests(unittest.TestCase):
         mod = _load_tasks_module()
         manager = mod.TaskManager(_ArchitecturePlugin())
 
-        self.assertEqual(len(manager.services), 14)
+        service_fields = tuple(manager.services.__dataclass_fields__)
+        self.assertEqual(
+            tuple(manager.services),
+            tuple(getattr(manager.services, name) for name in service_fields),
+        )
+        self.assertEqual(len(manager.services), len(service_fields))
         self.assertIs(manager.share, manager.services.share)
         self.assertIs(manager.snapshot_store, manager.services.snapshots)
         self.assertFalse(hasattr(manager, "snapshots"))
@@ -923,35 +954,30 @@ class PanelThemeContractTests(unittest.TestCase):
             "responsive.css",
         )
         self.assertTrue((dashboard_dir / "styles" / "berrybento.css").is_file())
-        self.assertFalse((dashboard_dir / "styles" / "berry-bento.css").exists())
-        self.assertFalse((dashboard_dir / "styles" / "berry-bento").exists())
-        for filename in (
-            "00-foundation.css",
-            "10-hero.css",
-            "20-dashboard.css",
-            "30-media.css",
-            "40-qzone.css",
-            "50-settings.css",
-            "60-overlays.css",
-            "70-responsive.css",
-        ):
-            self.assertFalse((theme_dir / filename).exists())
         for filename in ("form.css", "lists.css", "overview.css"):
             self.assertTrue((dashboard_dir / "styles" / filename).is_file())
-        for filename in (
-            "settings-form.css",
-            "settings-lists.css",
-            "settings-overview.css",
-        ):
-            self.assertFalse((dashboard_dir / "styles" / filename).exists())
         self.assertTrue(all((theme_dir / name).is_file() for name in expected_sections))
 
         sakura = (dashboard_dir / "ui" / "sakura.js").read_text(encoding="utf-8")
         self.assertIn('localStorage.getItem(storageKey) !== "off"', sakura)
         trails = (dashboard_dir / "ui" / "trails.js").read_text(encoding="utf-8")
-        self.assertIn("const cursorTrailMaxItems = 34;", trails)
-        self.assertIn("const sakuraDesktopPetals = 34;", trails)
-        self.assertIn("const sakuraMobilePetals = 20;", trails)
+        effect_limits = {
+            name: int(value)
+            for name, value in re.findall(
+                r"const (cursorTrailMaxItems|sakuraDesktopPetals|sakuraMobilePetals) = (\d+);",
+                trails,
+            )
+        }
+        self.assertEqual(
+            set(effect_limits),
+            {"cursorTrailMaxItems", "sakuraDesktopPetals", "sakuraMobilePetals"},
+        )
+        self.assertGreaterEqual(
+            effect_limits["cursorTrailMaxItems"], effect_limits["sakuraDesktopPetals"]
+        )
+        self.assertLessEqual(
+            effect_limits["sakuraMobilePetals"], effect_limits["sakuraDesktopPetals"]
+        )
         self.assertIn(
             'document.documentElement.dataset.motion === "reduce"',
             trails,

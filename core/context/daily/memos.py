@@ -130,3 +130,103 @@ class ContextLifeMemoryService(ContextComponent):
             )
             lines.append(f"- {trigger + '：' if trigger else ''}{content}")
         return "\n".join(lines)
+
+    def _format_share_guidance(self, guidance) -> str:
+        if not isinstance(guidance, dict) or not guidance:
+            return ""
+        sections = []
+
+        episodes = []
+        for item in guidance.get("episodes", [])[:3]:
+            if not isinstance(item, dict):
+                continue
+            title = self._compact_life_text(item.get("title"), 100)
+            summary = self._compact_life_text(item.get("summary"), 180)
+            if not title and not summary:
+                continue
+            date = self._compact_life_text(item.get("date"), 20)
+            impact = self._compact_life_text(item.get("impact"), 100)
+            body = "：".join(value for value in (title, summary) if value)
+            suffix = f"；影响：{impact}" if impact else ""
+            episodes.append(f"- {date + ' ' if date else ''}{body}{suffix}")
+        if episodes:
+            sections.append("【近期相关经历】\n" + "\n".join(episodes))
+
+        rhythm_trend = self._compact_life_text(guidance.get("rhythm_trend"), 240)
+        if rhythm_trend:
+            sections.append(f"【近期节律趋势】{rhythm_trend}")
+
+        focus = []
+        for item in guidance.get("focus", [])[:4]:
+            if not isinstance(item, dict):
+                continue
+            label = self._compact_life_text(item.get("label"), 80)
+            reason = self._compact_life_text(item.get("reason"), 100)
+            if label:
+                focus.append(f"- {label}" + (f"：{reason}" if reason else ""))
+        if focus:
+            sections.append("【近期关注】\n" + "\n".join(focus))
+
+        expression = guidance.get("expression", {})
+        if isinstance(expression, dict):
+            lines = []
+            for key, label in (
+                ("tones", "语气"),
+                ("habits", "习惯"),
+                ("avoid", "避免"),
+                ("temporary", "临时状态"),
+            ):
+                values = expression.get(key, [])
+                if not isinstance(values, list):
+                    continue
+                clean = [
+                    self._compact_life_text(value, 100) for value in values[:4] if value
+                ]
+                if clean:
+                    lines.append(f"- {label}：{'；'.join(clean)}")
+            if lines:
+                sections.append("【当前目标表达偏好】\n" + "\n".join(lines))
+
+        behavior = []
+        for item in guidance.get("behavior", [])[:4]:
+            if not isinstance(item, dict):
+                continue
+            scene = self._compact_life_text(item.get("scene"), 80)
+            preferred = self._compact_life_text(item.get("preferred"), 100)
+            avoid = self._compact_life_text(item.get("avoid"), 100)
+            outcome = self._compact_life_text(item.get("outcome"), 100)
+            details = []
+            if preferred:
+                details.append(f"适合：{preferred}")
+            if avoid:
+                details.append(f"避免：{avoid}")
+            if outcome:
+                details.append(f"效果：{outcome}")
+            if scene or details:
+                behavior.append(
+                    f"- {scene or '当前场景'}"
+                    + (f"；{'；'.join(details)}" if details else "")
+                )
+        if behavior:
+            sections.append("【互动方式建议】\n" + "\n".join(behavior))
+
+        interaction = guidance.get("interaction", {})
+        if isinstance(interaction, dict):
+            summary = self._compact_life_text(interaction.get("summary"), 160)
+            if summary:
+                sections.append(f"【近期互动反馈】{summary}")
+
+        terms = []
+        for item in guidance.get("terms", [])[:3]:
+            if not isinstance(item, dict):
+                continue
+            term = self._compact_life_text(item.get("term"), 50)
+            meaning = self._compact_life_text(item.get("meaning"), 100)
+            scene = self._compact_life_text(item.get("scene"), 70)
+            if term and meaning:
+                suffix = f"；场景：{scene}" if scene else ""
+                terms.append(f"- {term}：{meaning}{suffix}")
+        if terms:
+            sections.append("【当前目标熟悉用语】\n" + "\n".join(terms))
+
+        return "\n\n".join(sections)

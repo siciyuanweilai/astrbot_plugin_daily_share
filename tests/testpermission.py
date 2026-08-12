@@ -346,15 +346,17 @@ class NewsLinkToolPermissionTests(unittest.IsolatedAsyncioTestCase):
             self.host.task_manager.calls[0][0], "aiocqhttp:FriendMessage:10001"
         )
 
-    async def test_news_link_rejects_index_and_query_together(self):
-        result = await self.host.query_news_link(
+    async def test_news_link_forwards_index_and_query_for_deterministic_resolution(
+        self,
+    ):
+        await self.host.query_news_link(
             _Event(role="member"),
             index="5",
             query="第五条新闻标题",
         )
 
-        self.assertIn("index 和 query 不能同时填写", result)
-        self.assertEqual(self.host.task_manager.calls, [])
+        self.assertEqual(self.host.task_manager.calls[0][1]["index"], "5")
+        self.assertEqual(self.host.task_manager.calls[0][1]["query"], "第五条新闻标题")
 
     async def test_news_link_ignores_source_without_explicit_flag(self):
         await self.host.query_news_link(

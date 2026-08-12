@@ -1,5 +1,4 @@
 import json
-
 from datetime import datetime
 from typing import Any
 
@@ -82,6 +81,35 @@ class DatabaseNewsSnapshotService(DatabaseRepository):
         row = self._fetch_one(sql, params)
         return self._news_snapshot_row(row) if row else None
 
+    def _sync_get_latest_news_snapshot_with_focus(
+        self,
+        target_id: str,
+        focus_key: str,
+    ) -> tuple[dict[str, Any] | None, Any]:
+        with self._connection() as conn:
+            snapshot_row = conn.execute(
+                """
+                SELECT id, target_id, source_key, source_name, image_url, items, created_at
+                FROM news_snapshot_history
+                WHERE target_id = ?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (target_id,),
+            ).fetchone()
+            focus_row = conn.execute(
+                "SELECT value FROM plugin_state WHERE domain = 'cache' AND key = ?",
+                (focus_key,),
+            ).fetchone()
+
+        focus: Any = {}
+        if focus_row:
+            try:
+                focus = json.loads(focus_row[0])
+            except (TypeError, json.JSONDecodeError):
+                focus = focus_row[0]
+        snapshot = self._news_snapshot_row(snapshot_row) if snapshot_row else None
+        return snapshot, focus
+
     @staticmethod
     def _news_snapshot_row(row) -> dict[str, Any]:
         if not row:
@@ -124,4 +152,15 @@ class DatabaseNewsSnapshotService(DatabaseRepository):
     ) -> dict[str, Any] | None:
         return await self._execute(
             self._sync_get_latest_news_snapshot, target_id, source_key
+        )
+
+    async def get_latest_news_snapshot_with_focus(
+        self,
+        target_id: str,
+        focus_key: str,
+    ) -> tuple[dict[str, Any] | None, Any]:
+        return await self._execute(
+            self._sync_get_latest_news_snapshot_with_focus,
+            target_id,
+            focus_key,
         )

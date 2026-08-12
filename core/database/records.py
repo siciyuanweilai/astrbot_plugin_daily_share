@@ -1,9 +1,7 @@
 from datetime import datetime
-from typing import Dict, List, Optional
-
-from .repository import DatabaseRepository
 
 from .dbschema import _HISTORY_SELECT_COLUMNS
+from .repository import DatabaseRepository
 
 
 class DatabaseHistoryService(DatabaseRepository):
@@ -20,15 +18,18 @@ class DatabaseHistoryService(DatabaseRepository):
         media_url="",
         media_path="",
         source_type="",
+        degraded=False,
+        degradation_reason="",
     ):
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._execute_write(
             """
             INSERT INTO sent_history (
                 target_id, share_type, content, success, created_at,
-                error_reason, media_type, media_url, media_path, source_type
+                error_reason, media_type, media_url, media_path, source_type,
+                degraded, degradation_reason
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 str(target_id),
@@ -41,6 +42,8 @@ class DatabaseHistoryService(DatabaseRepository):
                 str(media_url or ""),
                 str(media_path or ""),
                 str(source_type or ""),
+                1 if degraded else 0,
+                str(degradation_reason or ""),
             ),
         )
 
@@ -56,6 +59,8 @@ class DatabaseHistoryService(DatabaseRepository):
         media_url: str = "",
         media_path: str = "",
         source_type: str = "",
+        degraded: bool = False,
+        degradation_reason: str = "",
     ):
         await self._execute(
             self._sync_add_history,
@@ -68,9 +73,11 @@ class DatabaseHistoryService(DatabaseRepository):
             media_url,
             media_path,
             source_type,
+            degraded,
+            degradation_reason,
         )
 
-    def _history_item_from_row(self, row) -> Dict:
+    def _history_item_from_row(self, row) -> dict:
         return {
             "id": row[0],
             "timestamp": row[1],
@@ -83,9 +90,11 @@ class DatabaseHistoryService(DatabaseRepository):
             "media_url": row[8] or "",
             "media_path": row[9] or "",
             "source_type": row[10] or "",
+            "degraded": bool(row[11]),
+            "degradation_reason": row[12] or "",
         }
 
-    def _sync_get_recent_history(self, limit: int) -> List[Dict]:
+    def _sync_get_recent_history(self, limit: int) -> list[dict]:
         rows = self._fetch_all(
             f"""
             SELECT {_HISTORY_SELECT_COLUMNS}
@@ -101,7 +110,7 @@ class DatabaseHistoryService(DatabaseRepository):
 
     def _sync_get_recent_history_by_target(
         self, target_id: str, limit: int
-    ) -> List[Dict]:
+    ) -> list[dict]:
         rows = self._fetch_all(
             f"""
             SELECT {_HISTORY_SELECT_COLUMNS}
@@ -118,7 +127,7 @@ class DatabaseHistoryService(DatabaseRepository):
             self._sync_get_recent_history_by_target, target_id, limit
         )
 
-    def _sync_get_history_by_id(self, history_id: int) -> Optional[Dict]:
+    def _sync_get_history_by_id(self, history_id: int) -> dict | None:
         row = self._fetch_one(
             f"""
             SELECT {_HISTORY_SELECT_COLUMNS}
@@ -132,7 +141,7 @@ class DatabaseHistoryService(DatabaseRepository):
     async def get_history_by_id(self, history_id: int):
         return await self._execute(self._sync_get_history_by_id, history_id)
 
-    def _sync_get_history_by_ids(self, history_ids: List[int]) -> List[Dict]:
+    def _sync_get_history_by_ids(self, history_ids: list[int]) -> list[dict]:
         ids = [int(item) for item in history_ids if int(item) > 0]
         if not ids:
             return []
@@ -148,7 +157,7 @@ class DatabaseHistoryService(DatabaseRepository):
         )
         return [self._history_item_from_row(r) for r in rows]
 
-    async def get_history_by_ids(self, history_ids: List[int]):
+    async def get_history_by_ids(self, history_ids: list[int]):
         return await self._execute(self._sync_get_history_by_ids, history_ids)
 
     def _sync_count_history_media_path_refs(self, media_path: str) -> int:
@@ -165,7 +174,7 @@ class DatabaseHistoryService(DatabaseRepository):
     async def count_history_media_path_refs(self, media_path: str) -> int:
         return await self._execute(self._sync_count_history_media_path_refs, media_path)
 
-    def _sync_count_history_media_refs(self, media_refs: List[str]) -> int:
+    def _sync_count_history_media_refs(self, media_refs: list[str]) -> int:
         refs = sorted(
             {str(item or "").strip() for item in media_refs if str(item or "").strip()}
         )
@@ -183,10 +192,10 @@ class DatabaseHistoryService(DatabaseRepository):
         )
         return int(row[0] or 0)
 
-    async def count_history_media_refs(self, media_refs: List[str]) -> int:
+    async def count_history_media_refs(self, media_refs: list[str]) -> int:
         return await self._execute(self._sync_count_history_media_refs, media_refs)
 
-    def _sync_delete_history_by_ids(self, history_ids: List[int]) -> int:
+    def _sync_delete_history_by_ids(self, history_ids: list[int]) -> int:
         ids = [int(item) for item in history_ids if int(item) > 0]
         if not ids:
             return 0
@@ -197,10 +206,10 @@ class DatabaseHistoryService(DatabaseRepository):
             tuple(ids),
         )
 
-    async def delete_history_by_ids(self, history_ids: List[int]) -> int:
+    async def delete_history_by_ids(self, history_ids: list[int]) -> int:
         return await self._execute(self._sync_delete_history_by_ids, history_ids)
 
-    def _sync_get_recent_failures(self, limit: int) -> List[Dict]:
+    def _sync_get_recent_failures(self, limit: int) -> list[dict]:
         rows = self._fetch_all(
             f"""
             SELECT {_HISTORY_SELECT_COLUMNS}

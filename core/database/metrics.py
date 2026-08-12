@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-
-from .repository import DatabaseRepository
+from typing import Any
 
 from .dbschema import (
     _BRIEFING_HISTORY_SQL,
@@ -11,16 +9,17 @@ from .dbschema import (
     _HISTORY_SELECT_COLUMNS,
     _MEDIA_REF_SQL,
 )
+from .repository import DatabaseRepository
 
 
 class DatabaseDashboardService(DatabaseRepository):
-    def _history_item_from_row(self, row) -> Dict:
+    def _history_item_from_row(self, row) -> dict:
         return self.manager.history._history_item_from_row(row)
 
     """仪表盘动态、媒体和目标统计。"""
 
     @staticmethod
-    def _days_cutoff(days: Optional[int]) -> str:
+    def _days_cutoff(days: int | None) -> str:
         try:
             days_int = int(days or 0)
         except Exception:
@@ -40,6 +39,8 @@ class DatabaseDashboardService(DatabaseRepository):
     @staticmethod
     def _media_kind_clause(media_kind: str) -> tuple:
         kind = str(media_kind or "").strip().lower()
+        if kind == "degraded":
+            return "degraded = 1", []
         if kind == "text":
             return (
                 """COALESCE(media_path, '') = ''
@@ -87,7 +88,7 @@ class DatabaseDashboardService(DatabaseRepository):
         clause = "".join(f"\n              AND {item}" for item in clauses)
         return clause, params
 
-    def _sync_get_recent_media(self, limit: int, days: int = 0) -> List[Dict]:
+    def _sync_get_recent_media(self, limit: int, days: int = 0) -> list[dict]:
         params: list[Any] = []
         days_clause = ""
         cutoff = self._days_cutoff(days)
@@ -118,7 +119,7 @@ class DatabaseDashboardService(DatabaseRepository):
         media_kind: str = "",
         share_type: str = "",
         today_only: bool = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         filter_clause, params = self._dynamic_filter_clause(
             days, media_kind, share_type, today_only
         )
@@ -152,7 +153,7 @@ class DatabaseDashboardService(DatabaseRepository):
             today_only,
         )
 
-    def _sync_get_dashboard_dynamic_summary(self, days: int = 0) -> Dict:
+    def _sync_get_dashboard_dynamic_summary(self, days: int = 0) -> dict:
         params = []
         days_clause = ""
         cutoff = self._days_cutoff(days)
@@ -177,27 +178,29 @@ class DatabaseDashboardService(DatabaseRepository):
                 ) AS media_count,
                 SUM(CASE WHEN {text_clause} THEN 1 ELSE 0 END) AS text_count,
                 SUM(CASE WHEN {image_clause} THEN 1 ELSE 0 END) AS image_count,
-                SUM(CASE WHEN {video_clause} THEN 1 ELSE 0 END) AS video_count
+                SUM(CASE WHEN {video_clause} THEN 1 ELSE 0 END) AS video_count,
+                SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded_count
             FROM sent_history
             WHERE success = 1
               {days_clause}
         """,
             tuple(params),
         )
-        row = row or (0, 0, 0, 0, 0)
-        dynamic, media, text, image, video = row
+        row = row or (0, 0, 0, 0, 0, 0)
+        dynamic, media, text, image, video, degraded = row
         return {
             "dynamic": int(dynamic or 0),
             "media": int(media or 0),
             "text": int(text or 0),
             "image": int(image or 0),
             "video": int(video or 0),
+            "degraded": int(degraded or 0),
         }
 
     async def get_dashboard_dynamic_summary(self, days: int = 0):
         return await self._execute(self._sync_get_dashboard_dynamic_summary, days)
 
-    def _sync_get_history_summary(self) -> Dict:
+    def _sync_get_history_summary(self) -> dict:
         today_start = (
             datetime.now()
             .replace(hour=0, minute=0, second=0, microsecond=0)
@@ -209,6 +212,7 @@ class DatabaseDashboardService(DatabaseRepository):
                 COUNT(*) AS total_count,
                 SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
                 SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed_count,
+                SUM(CASE WHEN success = 1 AND degraded = 1 THEN 1 ELSE 0 END) AS degraded_count,
                 SUM(CASE WHEN success = 1 AND created_at >= ? THEN 1 ELSE 0 END) AS today_count,
                 SUM(
                     CASE
@@ -221,12 +225,13 @@ class DatabaseDashboardService(DatabaseRepository):
         """,
             (today_start,),
         )
-        row = row or (0, 0, 0, 0, 0)
-        total, success, failed, today, media = row
+        row = row or (0, 0, 0, 0, 0, 0)
+        total, success, failed, degraded, today, media = row
         return {
             "total": int(total or 0),
             "success": int(success or 0),
             "failed": int(failed or 0),
+            "degraded": int(degraded or 0),
             "today": int(today or 0),
             "dynamic": int(success or 0),
             "media": int(media or 0),
@@ -235,14 +240,14 @@ class DatabaseDashboardService(DatabaseRepository):
     async def get_history_summary(self):
         return await self._execute(self._sync_get_history_summary)
 
-    def _target_stats_scope_clause(self, briefing: Optional[bool]) -> str:
+    def _target_stats_scope_clause(self, briefing: bool | None) -> str:
         if briefing is True:
             return f"WHERE {_BRIEFING_HISTORY_SQL}"
         if briefing is False:
             return f"WHERE NOT {_BRIEFING_HISTORY_SQL}"
         return ""
 
-    def _target_stats_type_scope_clause(self, briefing: Optional[bool]) -> str:
+    def _target_stats_type_scope_clause(self, briefing: bool | None) -> str:
         if briefing is True:
             return f"AND {_BRIEFING_HISTORY_SQL}"
         if briefing is False:
@@ -250,8 +255,8 @@ class DatabaseDashboardService(DatabaseRepository):
         return ""
 
     def _sync_get_target_stats(
-        self, days: int = 30, briefing: Optional[bool] = None
-    ) -> List[Dict]:
+        self, days: int = 30, briefing: bool | None = None
+    ) -> list[dict]:
         cutoff = (datetime.now() - timedelta(days=max(1, int(days)))).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
@@ -321,5 +326,5 @@ class DatabaseDashboardService(DatabaseRepository):
 
         return result
 
-    async def get_target_stats(self, days: int = 30, briefing: Optional[bool] = None):
+    async def get_target_stats(self, days: int = 30, briefing: bool | None = None):
         return await self._execute(self._sync_get_target_stats, days, briefing)

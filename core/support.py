@@ -1,43 +1,39 @@
-from .host.tools import PluginToolService as _SupportComponent1
-from .host.helper import PluginToolContextService as _SupportComponent2
-from .host.permission import PluginPermissionService as _SupportComponent3
-from .host.manual import PluginManualShareService as _SupportComponent4
-from .host.job import PluginShareJobService as _SupportComponent5
-from .host.outbox.news import ImageNewsShareService as _SupportComponent6
-from .host.outbox.broadcast import ImageDeliveryShareService as _SupportComponent7
-from .host.outbox.static import ImageStaticShareService as _SupportComponent8
-from .host.routing.bulletin import (
-    PluginShareBriefingRouteService as _SupportComponent10,
-)
-from .host.routing.start import PluginShareStartRouteService as _SupportComponent11
-from .host.routing.typed import PluginShareTypedRouteService as _SupportComponent12
-from .host.routing.share import PluginShareMainRouteService as _SupportComponent13
-from .host.space import PluginQzoneService as _SupportComponent16
-from .host.alias import PluginAliasService as _SupportComponent17
 from .eventdelivery import send_event_message
+from .host.alias import PluginAliasService
+from .host.helper import PluginToolContextService
+from .host.job import PluginShareJobService
+from .host.manual import PluginManualShareService
+from .host.outbox.broadcast import ImageDeliveryShareService
+from .host.outbox.news import ImageNewsShareService
+from .host.outbox.static import ImageStaticShareService
+from .host.permission import PluginPermissionService
+from .host.routing.bulletin import PluginShareBriefingRouteService
+from .host.routing.share import PluginShareMainRouteService
+from .host.routing.start import PluginShareStartRouteService
+from .host.routing.typed import PluginShareTypedRouteService
+from .host.space import PluginQzoneService
+from .host.tools import PluginToolService
 
 
 class SupportRuntime:
     """聚合命令、工具、权限、别名和 QQ 空间操作组件。"""
 
-    """SupportService 使用的内部操作实现。"""
-
     def __init__(self, plugin) -> None:
         self.plugin = plugin
-        self.tools = _SupportComponent1(self)
-        self.tool_context = _SupportComponent2(self)
-        self.permissions = _SupportComponent3(self)
-        self.manual = _SupportComponent4(self)
-        self.jobs = _SupportComponent5(self)
-        self.news_outbox = _SupportComponent6(self)
-        self.delivery_outbox = _SupportComponent7(self)
-        self.static_outbox = _SupportComponent8(self)
-        self.briefing_route = _SupportComponent10(self)
-        self.start_route = _SupportComponent11(self)
-        self.typed_route = _SupportComponent12(self)
-        self.main_route = _SupportComponent13(self)
-        self.qzone = _SupportComponent16(self)
-        self.aliases = _SupportComponent17(self)
+        self.tools = PluginToolService(self)
+        self.tool_context = PluginToolContextService(self)
+        self.permissions = PluginPermissionService(self)
+        self.manual = PluginManualShareService(self)
+        self.jobs = PluginShareJobService(self)
+        self.news_outbox = ImageNewsShareService(self)
+        self.delivery_outbox = ImageDeliveryShareService(self)
+        self.static_outbox = ImageStaticShareService(self)
+        self.briefing_route = PluginShareBriefingRouteService(self)
+        self.start_route = PluginShareStartRouteService(self)
+        self.typed_route = PluginShareTypedRouteService(self)
+        self.main_route = PluginShareMainRouteService(self)
+        self.qzone = PluginQzoneService(self)
+        self.aliases = PluginAliasService(self)
 
     async def send_event(self, event, chain) -> None:
         await send_event_message(event, chain)

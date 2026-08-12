@@ -336,6 +336,7 @@ html[data-theme="dark"] :is(.qzone-card-time, .qzone-card-badge) {
 }
 
 .recent-action.is-running .recent-action-status,
+.recent-action.is-warning .recent-action-status,
 .badge.warn,
 .share-progress-step.is-running {
   background: color-mix(in oklab, var(--bento-lemon) 42%, white);

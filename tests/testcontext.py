@@ -84,7 +84,7 @@ class _DailyLifePlugin:
     def __init__(self):
         self.activities = []
 
-    async def get_life_context(self, target_umo=""):
+    async def get_share_context(self, target_umo=""):
         return {
             "weather": "北京 晴 20°C",
             "outfit": "浅蓝外套和白裙子",
@@ -99,6 +99,13 @@ class _DailyLifePlugin:
                 "social": 25,
                 "sleep": {"quality": 42, "summary": "昨晚睡得浅"},
                 "summary": "今天偏累，不太想出门",
+                "physiological_rhythm": {
+                    "energy_curve": "午后偏低",
+                    "attention_state": "适合轻量整理",
+                    "body_condition": {"label": "稍有疲惫", "intensity": 35},
+                    "social_battery": 28,
+                    "recovery_actions": ["喝水", "短暂休息"],
+                },
             },
             "subject": {
                 "can_interrupt_default": False,
@@ -136,6 +143,34 @@ class _DailyLifePlugin:
                     "trigger_time": "15:00",
                 }
             ],
+            "share_guidance": {
+                "version": 1,
+                "episodes": [
+                    {
+                        "date": "2026-05-23",
+                        "title": "看展话题",
+                        "summary": "和阿林聊到周末看展",
+                        "impact": "后续推荐可以延续展览主题",
+                    }
+                ],
+                "rhythm_trend": "最近几天午后精力偏低",
+                "focus": [{"label": "周末看展", "reason": "已经聊过具体安排"}],
+                "expression": {
+                    "tones": ["自然熟悉"],
+                    "habits": ["简短回应"],
+                    "avoid": ["连续追问"],
+                },
+                "behavior": [
+                    {
+                        "scene": "日常分享",
+                        "preferred": "先说结论",
+                        "avoid": "铺垫过长",
+                        "outcome": "更容易继续对话",
+                    }
+                ],
+                "interaction": {"summary": "近期互动反馈整体积极"},
+                "terms": [{"term": "约饭", "meaning": "约好一起吃饭"}],
+            },
             "schedule": "00:00 - 在窗边写手帐 [专注]",
         }
 
@@ -645,6 +680,8 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("体力: 35/100", text)
         self.assertIn("今天偏累，不太想出门", text)
         self.assertIn("【主动分享状态】暂不适合主动打扰（正在专注）", text)
+        self.assertIn("【当前生理节律】", text)
+        self.assertIn("精力节奏: 午后偏低", text)
         self.assertIn("【关系档案】", text)
         self.assertIn("阿林", text)
         self.assertIn("人设线索：男生，死党", text)
@@ -657,6 +694,14 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("完成手帐", text)
         self.assertIn("【当前相关约定】", text)
         self.assertIn("周末一起看展", text)
+        self.assertIn("【近期相关经历】", text)
+        self.assertIn("后续推荐可以延续展览主题", text)
+        self.assertIn("【近期节律趋势】最近几天午后精力偏低", text)
+        self.assertIn("【近期关注】", text)
+        self.assertIn("【当前目标表达偏好】", text)
+        self.assertIn("【互动方式建议】", text)
+        self.assertIn("【近期互动反馈】近期互动反馈整体积极", text)
+        self.assertIn("【当前目标熟悉用语】", text)
 
     def test_private_life_context_includes_relationship_identity_rule(self):
         _, service = _service()

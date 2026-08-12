@@ -129,6 +129,9 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             news_snapshot_data=news_snapshot_data,
             news_image_url=news_image_url,
             image_description=image_description,
+            degradation_reason=self.services.progress.share_progress_degradation_reason(
+                progress_id
+            ),
         )
         self.services.executor_helpers.log_partial_send_errors(target_umo, media_result)
         await self.services.executor_helpers.notify_partial_send_errors(

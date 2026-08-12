@@ -89,7 +89,7 @@ class PanelComponent:
 
     def __init__(self, runtime) -> None:
         if runtime is None:
-            raise TypeError("Panel 组件必须绑定运行时")
+            raise TypeError("仪表盘组件必须绑定运行时")
         self.runtime = runtime
 
     def get_contact_alias(self, target_id: str) -> str:

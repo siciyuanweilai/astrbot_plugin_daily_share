@@ -42,9 +42,9 @@ class DailyLifeBridge:
             return metadata.star_cls
         return None
 
-    async def get_life_context(self, target_umo: str) -> dict:
+    async def get_share_context(self, target_umo: str) -> dict:
         plugin = self._plugin()
-        method = getattr(plugin, "get_life_context", None) if plugin else None
+        method = getattr(plugin, "get_share_context", None) if plugin else None
         if not callable(method):
             return {}
         try:
@@ -275,6 +275,12 @@ class DailyLifeBridge:
                 )
             elif method_name == "generate_share_image" and "指定的生图模型" in detail:
                 self._set_media_result(media_kind, "error", detail)
+            elif method_name == "generate_share_video" and "视频任务超时" in detail:
+                self._set_media_result(
+                    media_kind,
+                    "error",
+                    "生活插件视频生成超时",
+                )
             else:
                 self._set_media_result(
                     media_kind,

@@ -130,6 +130,8 @@ export function createMediaGalleryController({
         text(item.preview_url).trim(),
         text(item.media_url).trim(),
         text(item.media_path).trim(),
+        item.degraded ? "degraded" : "normal",
+        text(item.degradation_reason).trim(),
         text(item.timestamp).trim(),
         text(item.target_label || item.target_id).trim(),
         text(item.type).trim(),

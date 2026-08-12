@@ -1,10 +1,3 @@
-from .panelcomponent import PanelComponent
-
-from .common import (
-    _PAGE_RECENT_ACTION_LIMIT,
-    _PAGE_RECENT_SHARE_LIMIT,
-    _PAGE_SHARE_SOURCE_LABELS,
-)
 from ..database.keys import (
     BRIEFING_STATE_KEY,
     BRIEFING_TARGET_ALIASES,
@@ -14,7 +7,12 @@ from ..database.keys import (
     QZONE_STATE_KEY,
     QZONE_TARGET_ID,
 )
-
+from .common import (
+    _PAGE_RECENT_ACTION_LIMIT,
+    _PAGE_RECENT_SHARE_LIMIT,
+    _PAGE_SHARE_SOURCE_LABELS,
+)
+from .panelcomponent import PanelComponent
 
 _PAGE_STATE_KEYS = (GLOBAL_STATE_KEY, QZONE_STATE_KEY, BRIEFING_STATE_KEY)
 
@@ -39,7 +37,8 @@ class DashboardActivityService(PanelComponent):
 
     def _page_history_share_message(self, item: dict) -> str:
         success = bool(item.get("success"))
-        suffix = "成功" if success else "失败"
+        degraded = success and bool(item.get("degraded"))
+        suffix = "成功（已降级）" if degraded else "成功" if success else "失败"
         target_id = str(item.get("target_id") or "").strip()
         share_type = str(item.get("type") or "").strip()
         kind = str(item.get("kind") or "").strip().lower()
@@ -63,6 +62,7 @@ class DashboardActivityService(PanelComponent):
 
     def _page_history_share_action(self, item: dict) -> dict:
         success = bool(item.get("success"))
+        degraded = success and bool(item.get("degraded"))
         source_type = str(item.get("source_type") or "").strip()
         return {
             "id": f"history-{item.get('id', '')}",
@@ -73,12 +73,14 @@ class DashboardActivityService(PanelComponent):
             "kind": item.get("kind", ""),
             "share_type": item.get("type") or "auto",
             "news_source": "",
-            "status": "success" if success else "error",
+            "status": "warning" if degraded else "success" if success else "error",
             "message": self.activity._page_history_share_message(item),
             "started_at": item.get("timestamp", ""),
             "finished_at": item.get("timestamp", ""),
             "content": item.get("content", ""),
             "error_reason": item.get("error_reason", ""),
+            "degraded": degraded,
+            "degradation_reason": item.get("degradation_reason", ""),
             "media_type": item.get("media_type", ""),
             "source_type": source_type,
             "source_label": _PAGE_SHARE_SOURCE_LABELS.get(source_type, ""),

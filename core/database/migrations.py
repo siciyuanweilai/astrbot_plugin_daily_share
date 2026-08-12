@@ -26,8 +26,15 @@ class SchemaMigration:
             self.transform(conn)
 
 
-# 当前版本就是迁移基线，后续升级在这里按目标版本连续追加。
-SCHEMA_MIGRATIONS: tuple[SchemaMigration, ...] = ()
+SCHEMA_MIGRATIONS: tuple[SchemaMigration, ...] = (
+    SchemaMigration(
+        version=2,
+        statements=(
+            "ALTER TABLE sent_history ADD COLUMN degraded INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE sent_history ADD COLUMN degradation_reason TEXT NOT NULL DEFAULT ''",
+        ),
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,11 +115,17 @@ def schema_requires_backup(conn: sqlite3.Connection) -> bool:
         return False
     if 0 < version < schema.CURRENT_SCHEMA_VERSION:
         return True
-    return bool(
+    if not (
         version == 0
         and _user_tables(conn)
         and schema.CURRENT_SCHEMA_VERSION > schema.BASELINE_SCHEMA_VERSION
-    )
+    ):
+        return False
+    try:
+        _validate_tables(conn, schema.CURRENT_TABLE_COLUMNS)
+        return False
+    except DatabaseMigrationError:
+        return True
 
 
 def _create_current_schema(conn: sqlite3.Connection) -> None:
@@ -154,8 +167,12 @@ def initialize_schema(conn: sqlite3.Connection) -> SchemaInitializationResult:
             current_version = target_version
             conn.execute(f"PRAGMA user_version = {target_version}")
         elif adopted_baseline:
-            _validate_tables(conn, schema.BASELINE_TABLE_COLUMNS)
-            current_version = schema.BASELINE_SCHEMA_VERSION
+            try:
+                _validate_tables(conn, schema.CURRENT_TABLE_COLUMNS)
+                current_version = target_version
+            except DatabaseMigrationError:
+                _validate_tables(conn, schema.BASELINE_TABLE_COLUMNS)
+                current_version = schema.BASELINE_SCHEMA_VERSION
             conn.execute(f"PRAGMA user_version = {current_version}")
 
         migrations = _migration_map()

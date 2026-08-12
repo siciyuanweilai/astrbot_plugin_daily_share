@@ -201,6 +201,7 @@ html[data-theme="dark"] .share-progress-step {
 }
 
 html[data-theme="dark"] .recent-action.is-running,
+html[data-theme="dark"] .recent-action.is-warning,
 html[data-theme="dark"] .share-progress-step.is-running {
   border-color: rgba(255, 194, 138, 0.42);
   background: linear-gradient(135deg, rgba(100, 66, 42, 0.7), rgba(62, 39, 39, 0.82));
@@ -232,6 +233,7 @@ html[data-theme="dark"] .share-progress-step.is-done {
 
 html[data-theme="dark"] .badge.warn,
 html[data-theme="dark"] .recent-action.is-running .recent-action-status,
+html[data-theme="dark"] .recent-action.is-warning .recent-action-status,
 html[data-theme="dark"] .config-insight.is-busy strong,
 html[data-theme="dark"] .share-progress-step.is-running {
   color: var(--amber);

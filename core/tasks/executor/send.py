@@ -46,6 +46,7 @@ class TaskExecutorSendService(TaskExecutorFlowService):
         news_snapshot_data: dict | None = None,
         news_image_url: str | None = None,
         image_description: str = "",
+        degradation_reason: str = "",
     ) -> None:
         await self.ctx_service.record_bot_reply_to_history(
             uid, content, image_desc=image_description
@@ -77,4 +78,5 @@ class TaskExecutorSendService(TaskExecutorFlowService):
             video_ref=video_ref,
             news_snapshot_data=news_snapshot_data,
             news_image_url=news_image_url,
+            degradation_reason=degradation_reason,
         )

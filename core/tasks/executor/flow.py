@@ -83,6 +83,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             news_snapshot_data: dict | None,
             news_image_url: str | None,
             image_description: str,
+            degradation_reason: str,
         ) -> None: ...
 
     async def _prepare_execute_share_target(
@@ -306,6 +307,9 @@ class TaskExecutorFlowService(TaskServiceBase):
             news_snapshot_data=news_snapshot_data,
             news_image_url=news_image_url,
             image_description=image_description,
+            degradation_reason=self.services.progress.share_progress_degradation_reason(
+                progress_id
+            ),
         )
         self.services.executor_helpers.log_partial_send_errors(uid, media_result)
         if event and tool_event:

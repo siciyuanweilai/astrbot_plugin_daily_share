@@ -64,7 +64,7 @@ class TaskProgressService(TaskServiceBase):
         known = {
             GLOBAL_TARGET_ID: "全局",
             QZONE_TARGET_ID: "QQ 空间",
-            **{key: "早报" for key in BRIEFING_TARGET_ALIASES},
+            **dict.fromkeys(BRIEFING_TARGET_ALIASES, "早报"),
         }
         if raw in known:
             return known[raw]
@@ -161,7 +161,11 @@ class TaskProgressService(TaskServiceBase):
             progress.update(extra)
 
         self.update_share_progress_steps(
-            progress, stage, step_status, mark_previous_done=mark_previous_done
+            progress,
+            stage,
+            step_status,
+            message=message,
+            mark_previous_done=mark_previous_done,
         )
 
         self.state.share_progress = progress
@@ -175,7 +179,12 @@ class TaskProgressService(TaskServiceBase):
 
     @staticmethod
     def update_share_progress_steps(
-        progress: dict, stage: str, step_status: str, *, mark_previous_done: bool
+        progress: dict,
+        stage: str,
+        step_status: str,
+        *,
+        message: str = "",
+        mark_previous_done: bool,
     ) -> None:
         step_keys = [item["key"] for item in progress.get("steps", [])]
         if stage not in step_keys:
@@ -188,6 +197,8 @@ class TaskProgressService(TaskServiceBase):
                 step["status"] = "done"
             elif index == current_pos:
                 step["status"] = step_status
+                if message:
+                    step["message"] = message
 
     def skip_share_progress_step(
         self, job_id: str, stage: str, message: str = ""
@@ -202,6 +213,8 @@ class TaskProgressService(TaskServiceBase):
         for step in progress.get("steps", []):
             if step.get("key") == stage:
                 step["status"] = "skipped"
+                if message:
+                    step["message"] = message
                 break
         progress["updated_at"] = self._progress_now()
         if message:
@@ -222,6 +235,8 @@ class TaskProgressService(TaskServiceBase):
         for step in progress.get("steps", []):
             if step.get("key") == stage and step.get("status") != "skipped":
                 step["status"] = "done"
+                if message:
+                    step["message"] = message
                 break
         progress["updated_at"] = self._progress_now()
         if message:
@@ -239,6 +254,23 @@ class TaskProgressService(TaskServiceBase):
             step_status="error",
             mark_previous_done=False,
         )
+
+    def share_progress_degradation_reason(self, job_id: str) -> str:
+        progress = self._active_share_progress(job_id)
+        if progress is None:
+            return ""
+        reasons = []
+        for step in progress.get("steps", []):
+            if step.get("status") != "error":
+                continue
+            label = str(step.get("label") or step.get("key") or "媒体").strip()
+            message = str(step.get("message") or "").strip()
+            reason = message or f"{label}处理失败"
+            if label and not reason.startswith(label):
+                reason = f"{label}：{reason}"
+            if reason not in reasons:
+                reasons.append(reason)
+        return "；".join(reasons)
 
     def finish_share_progress(
         self, job_id: str = "", *, success: bool = True, message: str = ""

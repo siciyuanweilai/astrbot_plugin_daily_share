@@ -71,5 +71,8 @@ class TaskQzonePublishService(TaskQzoneFlowService):
             news_image_url=(
                 target_local_img if sent_media_type == MEDIA_IMAGE else None
             ),
+            degradation_reason=self.services.progress.share_progress_degradation_reason(
+                progress_id
+            ),
         )
         return sent_media_type

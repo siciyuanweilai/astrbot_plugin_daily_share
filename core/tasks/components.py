@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
-from .taskbase import TaskConfigState, TaskServiceBase, TaskSharedState
 from .briefing import TaskBriefingService
 from .cache import TaskNewsCacheService
 from .cachemedia import TaskDeliveryAssetsService
 from .command import TaskCommandShareService
-from .taskdelivery import TaskDeliveryService
 from .executor import TaskExecutorService
 from .helpers import TaskExecutorHelperService
 from .moments import TaskQzoneService
@@ -17,6 +15,8 @@ from .runtime import TaskRuntime
 from .scheduler import TaskSchedulerService
 from .selector import TaskTypeSelectorService
 from .targets import TaskTargetService
+from .taskbase import TaskConfigState, TaskServiceBase, TaskSharedState
+from .taskdelivery import TaskDeliveryService
 from .weixin import TaskDeliveryWeixinService
 
 
@@ -49,7 +49,7 @@ class TaskServices:
         runtime: TaskRuntime,
         config: TaskConfigState,
         state: TaskSharedState,
-    ) -> "TaskServices":
+    ) -> TaskServices:
         args = (runtime, config, state)
         services = cls(
             snapshots=TaskNewsCacheService(*args),
@@ -72,23 +72,11 @@ class TaskServices:
         return services
 
     def __iter__(self):
-        yield self.snapshots
-        yield self.targets
-        yield self.schedule
-        yield self.progress
-        yield self.qzone_interaction
-        yield self.executor_helpers
-        yield self.type_selector
-        yield self.briefing
-        yield self.qzone_share
-        yield self.command_share
-        yield self.share
-        yield self.delivery_assets
-        yield self.weixin_delivery
-        yield self.delivery
+        for field in fields(self):
+            yield getattr(self, field.name)
 
     def __len__(self) -> int:
-        return 14
+        return len(fields(self))
 
 
 __all__ = [

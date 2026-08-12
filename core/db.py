@@ -162,6 +162,16 @@ class DatabaseManager:
     ):
         return await self.snapshots.get_latest_news_snapshot(target_id, source_key)
 
+    async def get_latest_news_snapshot_with_focus(
+        self,
+        target_id: str,
+        focus_key: str,
+    ):
+        return await self.snapshots.get_latest_news_snapshot_with_focus(
+            target_id,
+            focus_key,
+        )
+
     async def add_sent_history(
         self,
         target_id: str,
@@ -173,6 +183,8 @@ class DatabaseManager:
         media_url: str = "",
         media_path: str = "",
         source_type: str = "",
+        degraded: bool = False,
+        degradation_reason: str = "",
     ):
         return await self.history.add_sent_history(
             target_id,
@@ -184,6 +196,8 @@ class DatabaseManager:
             media_url=media_url,
             media_path=media_path,
             source_type=source_type,
+            degraded=degraded,
+            degradation_reason=degradation_reason,
         )
 
     async def get_recent_history(self, limit: int = 5):
@@ -277,8 +291,9 @@ class DatabaseManager:
                 """
                 INSERT INTO sent_history (
                     target_id, share_type, content, success, created_at,
-                    error_reason, media_type, media_url, media_path, source_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    error_reason, media_type, media_url, media_path, source_type,
+                    degraded, degradation_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(history.get("target_id") or ""),
@@ -291,6 +306,8 @@ class DatabaseManager:
                     str(history.get("media_url") or ""),
                     str(history.get("media_path") or ""),
                     str(history.get("source_type") or ""),
+                    1 if history.get("degraded") else 0,
+                    str(history.get("degradation_reason") or ""),
                 ),
             )
             snapshot_ids = []

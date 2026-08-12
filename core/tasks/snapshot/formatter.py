@@ -6,7 +6,6 @@ from astrbot.api import logger
 
 from .focus import TaskNewsCacheFocusService
 
-
 NEWS_SHORT_URL_CACHE_KEY = "news_short_url_cache"
 NEWS_SHORT_URL_CACHE_MAX_ITEMS = 256
 
@@ -92,7 +91,7 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
         )
         return (
             f"工具内部提示：当前可查新闻列表为【{snapshot.get('source_name', '新闻热搜')}】，共 {len(items)} 条。"
-            "如果用户想查链接、来源或详情，你需要把理解出的序号用阿拉伯数字填入 index 后再次调用本工具；"
+            "如果用户想查链接、来源或详情，请把理解出的单一序号填入 index 后再次调用本工具；"
             "不要向用户提及缓存命中或工具状态。\n"
             f"{preview}"
         )

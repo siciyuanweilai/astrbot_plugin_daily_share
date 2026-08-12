@@ -31,6 +31,7 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
             snapshot,
             source_key=source_key,
             index=index,
+            fallback_to_query=bool(str(query or "").strip()),
         )
         if isinstance(item_index, str):
             return item_index
@@ -52,7 +53,7 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
                     snapshot, item, idx, action_key
                 )
 
-        return f"工具内部提示：新闻列表里没找到“{text}”。请自然提醒用户换个关键词；如果用户表达的是第几条，请你把序号转成阿拉伯数字填入 index 后再次调用本工具。不要提及工具状态。"
+        return f"工具内部提示：新闻列表里没找到“{text}”。请自然提醒用户换个关键词或明确要查看的列表序号，不要提及工具状态。"
 
     async def _load_news_snapshot(
         self, target: str, *, source_key: str | None = None
@@ -67,13 +68,16 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
         *,
         source_key: str | None,
         index: str,
+        fallback_to_query: bool = False,
     ) -> int | str | None:
         index_text = str(index or "").strip()
         item_index = self._coerce_news_tool_index(index_text)
         if index_text and item_index is None:
+            if fallback_to_query:
+                return None
             return (
-                "工具内部提示：index 参数不是纯数字。请你自己理解用户要第几条，"
-                "把阿拉伯数字字符串填入 index 后再次调用本工具；不要向用户提及工具状态。"
+                "工具内部提示：index 参数不是唯一可识别的新闻序号。"
+                "请自然提醒用户明确要查看第几条，不要提及工具状态。"
             )
 
         if item_index is None:

@@ -226,6 +226,15 @@
   color: #2e806d;
 }
 
+.recent-action.is-warning {
+  border-color: rgba(239, 190, 139, 0.9);
+}
+
+.recent-action.is-warning .recent-action-status {
+  background: var(--amber-soft);
+  color: #9b5f22;
+}
+
 .recent-action.is-error {
   border-color: rgba(246, 182, 196, 0.88);
 }

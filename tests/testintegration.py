@@ -26,13 +26,17 @@ class _Logger:
 class _Runtime:
     def __init__(self, label: str):
         self.label = label
-        self.context_targets = []
+        self.share_context_targets = []
         self.activities = []
         self.searches = []
 
-    async def get_life_context(self, target_umo: str = ""):
-        self.context_targets.append(target_umo)
-        return {"schedule": self.label, "target": target_umo}
+    async def get_share_context(self, target_umo: str = ""):
+        self.share_context_targets.append(target_umo)
+        return {
+            "schedule": self.label,
+            "target": target_umo,
+            "share_guidance": {"version": 1},
+        }
 
     async def record_external_activity(self, target_umo, content, **kwargs):
         self.activities.append((target_umo, content, kwargs))
@@ -52,8 +56,8 @@ class _PublicPlugin:
     def __init__(self, label: str):
         self.runtime = _Runtime(label)
 
-    async def get_life_context(self, target_umo=""):
-        return await self.runtime.get_life_context(target_umo)
+    async def get_share_context(self, target_umo=""):
+        return await self.runtime.get_share_context(target_umo)
 
     async def record_external_activity(self, target_umo, content, **kwargs):
         return await self.runtime.record_external_activity(
@@ -131,8 +135,11 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             class Runtime:
                 image_models = []
 
-                async def get_life_context(self, target_umo=''):
-                    return {{'target': target_umo}}
+                async def get_share_context(self, target_umo=''):
+                    return {{
+                        'target': target_umo,
+                        'share_guidance': {{'version': 1}},
+                    }}
 
                 async def record_external_activity(self, target_umo, content, **kwargs):
                     return target_umo.endswith('user-test-a') and content == '测试分享内容'
@@ -179,7 +186,9 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     types.SimpleNamespace(get_all_stars=lambda: [metadata])
                 )
                 target = 'bot-test:FriendMessage:user-test-a'
-                assert (await bridge.get_life_context(target))['target'] == target
+                context = await bridge.get_share_context(target)
+                assert context['target'] == target
+                assert context['share_guidance']['version'] == 1
                 assert await bridge.record_external_activity(
                     target,
                     '测试分享内容',
@@ -236,7 +245,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         bridge = DailyLifeBridge(context)
 
         target = "bot-test:FriendMessage:user-test-a"
-        result = await bridge.get_life_context(target)
+        result = await bridge.get_share_context(target)
         recorded = await bridge.record_external_activity(
             target,
             "测试分享内容",
@@ -245,9 +254,26 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result["target"], target)
-        self.assertEqual(plugin.runtime.context_targets, [target])
+        self.assertEqual(plugin.runtime.share_context_targets, [target])
+        self.assertEqual(result["share_guidance"], {"version": 1})
         self.assertTrue(recorded)
         self.assertEqual(plugin.runtime.activities[0][0], target)
+
+    async def test_bridge_rejects_legacy_life_context_entry(self):
+        calls = []
+
+        class LegacyPlugin:
+            async def get_life_context(self, target_umo=""):
+                calls.append(target_umo)
+                return {"target": target_umo, "legacy": True}
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(LegacyPlugin())])
+        )
+        target = "bot-test:FriendMessage:user-test-a"
+
+        self.assertEqual(await bridge.get_share_context(target), {})
+        self.assertEqual(calls, [])
 
     async def test_bridge_search_passes_category_and_target(self):
         plugin = _life_plugin("实例一")
@@ -325,10 +351,10 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         bridge = DailyLifeBridge(types.SimpleNamespace(get_all_stars=lambda: stars))
 
         self.assertEqual(
-            await bridge.get_life_context("bot-test:FriendMessage:user-test-a"),
+            await bridge.get_share_context("bot-test:FriendMessage:user-test-a"),
             {},
         )
-        self.assertEqual(plugin.runtime.context_targets, [])
+        self.assertEqual(plugin.runtime.share_context_targets, [])
 
     async def test_bridge_resolves_new_instance_after_reload(self):
         first = _life_plugin("旧实例")
@@ -338,21 +364,23 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             types.SimpleNamespace(get_all_stars=lambda: list(stars))
         )
 
-        first_result = await bridge.get_life_context(
+        first_result = await bridge.get_share_context(
             "bot-test:FriendMessage:user-test-a"
         )
         stars[:] = [_metadata(second)]
-        second_result = await bridge.get_life_context(
+        second_result = await bridge.get_share_context(
             "bot-test:FriendMessage:user-test-b"
         )
 
         self.assertEqual(first_result["schedule"], "旧实例")
         self.assertEqual(second_result["schedule"], "新实例")
         self.assertEqual(
-            first.runtime.context_targets, ["bot-test:FriendMessage:user-test-a"]
+            first.runtime.share_context_targets,
+            ["bot-test:FriendMessage:user-test-a"],
         )
         self.assertEqual(
-            second.runtime.context_targets, ["bot-test:FriendMessage:user-test-b"]
+            second.runtime.share_context_targets,
+            ["bot-test:FriendMessage:user-test-b"],
         )
 
     def test_bridge_reports_media_entry_availability(self):
@@ -474,6 +502,30 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(status, "unavailable")
         self.assertIn("未安装", reason)
+
+    async def test_bridge_records_video_timeout_as_degradation_reason(self):
+        class Plugin:
+            async def generate_share_video(
+                self,
+                event,
+                prompt,
+                *,
+                reference_image="",
+            ):
+                raise RuntimeError("Grok 视频任务超时：task-timeout")
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+
+        self.assertEqual(
+            await bridge.generate_video(None, "视频提示词"),
+            "",
+        )
+        self.assertEqual(
+            bridge.media_result("video"),
+            ("error", "生活插件视频生成超时"),
+        )
 
     async def test_bridge_media_results_are_isolated_between_tasks(self):
         class Plugin:

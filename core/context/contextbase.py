@@ -109,6 +109,9 @@ class ContextComponent:
     def _format_commitments(self, *args, **kwargs):
         return self.service.life_memory._format_commitments(*args, **kwargs)
 
+    def _format_share_guidance(self, *args, **kwargs):
+        return self.service.life_memory._format_share_guidance(*args, **kwargs)
+
     def _parse_life_data(self, *args, **kwargs):
         return self.service.life_parse._parse_life_data(*args, **kwargs)
 

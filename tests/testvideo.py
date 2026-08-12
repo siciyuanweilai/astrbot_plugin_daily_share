@@ -5,7 +5,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_video_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
@@ -15,6 +14,12 @@ VIDEO_MODULE_NAME = f"{IMAGE_PACKAGE_NAME}.motion"
 
 class _Logger:
     def debug(self, *args, **kwargs):
+        return None
+
+    def info(self, *args, **kwargs):
+        return None
+
+    def warning(self, *args, **kwargs):
         return None
 
 
@@ -146,6 +151,36 @@ class VideoPromptTests(unittest.TestCase):
         self.assertIn("今天绕了好大一圈", sound)
         self.assertIn("慢慢待着最舒服", sound)
         self.assertIn("窗边细微风声", sound)
+
+    def test_video_generation_logs_terminal_success_without_media_url(self):
+        mod = _load_video_module()
+        logs = []
+
+        class Service(mod.ImageVideoService):
+            def __init__(self):
+                self.img_conf = {"enable_ai_video": True}
+                self.context = object()
+                self.daily_life_bridge = object()
+
+            async def _build_video_design_prompts(self, *args, **kwargs):
+                return "轻微推近", "环境声"
+
+        async def generate(*args, **kwargs):
+            return "https://example.com/private-video.mp4?token=secret"
+
+        mod.call_default_daily_life_media_tool = generate
+        mod.logger = types.SimpleNamespace(
+            info=lambda message: logs.append(("info", message)),
+            warning=lambda message: logs.append(("warning", message)),
+        )
+
+        result = asyncio.run(
+            Service().generate_video_from_image("image.png", "测试内容")
+        )
+
+        self.assertTrue(result)
+        self.assertTrue(any("视频生成完成" in message for _level, message in logs))
+        self.assertFalse(any("private-video" in message for _level, message in logs))
 
 
 if __name__ == "__main__":

@@ -190,6 +190,17 @@ class DashboardMediaPreviewTests(unittest.TestCase):
         self.assertIn('configRow("运行状态", runtimeText, "is-runtime")', view_source)
         self.assertIn('failed: "初始化失败"', view_source)
 
+    def test_degraded_stat_is_a_filterable_media_kind(self):
+        status_source = (ROOT / "pages" / "dashboard" / "ui" / "status.js").read_text(
+            encoding="utf-8"
+        )
+        kind_source = (ROOT / "core" / "panel" / "gallery" / "kind.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('mediaKind: "degraded"', status_source)
+        self.assertIn('"degraded"', kind_source)
+
     def test_qzone_auto_interaction_delayed_job_uses_readable_dashboard_name(self):
         mod = _load_main_module()
         plugin = _new_dashboard_service(mod)
@@ -268,10 +279,10 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                     },
                 }
 
-            async def get_latest_news_snapshot(self, target_id, source_key=None):
+            async def get_latest_news_snapshot_with_focus(self, target_id, focus_key):
                 if target_id != "session-1":
-                    return None
-                return {
+                    return None, {}
+                snapshot = {
                     "source_key": "thepaper",
                     "source_name": "澎湃热搜",
                     "items": [
@@ -279,6 +290,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                         {"title": "第二条新闻", "url": "https://example.com/2"},
                     ],
                 }
+                return snapshot, self.state.get(focus_key, {})
 
         class Manager:
             snapshot_store = None

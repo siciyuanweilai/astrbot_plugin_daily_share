@@ -1784,15 +1784,29 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(plugin.db.state["qzone"]["pending_delay_job"])
 
-    def test_news_tool_index_only_accepts_structured_number(self):
+    def test_news_tool_index_accepts_structured_chinese_ordinals(self):
         mod = _load_tasks_module()
         manager = _new_manager(mod, _Plugin())
 
         self.assertEqual(manager.snapshot_store._coerce_news_tool_index("10"), 10)
         self.assertEqual(manager.snapshot_store._coerce_news_tool_index("１２"), 12)
-        self.assertIsNone(manager.snapshot_store._coerce_news_tool_index("第10条链接"))
+        self.assertEqual(
+            manager.snapshot_store._coerce_news_tool_index("第10条链接"), 10
+        )
+        self.assertEqual(
+            manager.snapshot_store._coerce_news_tool_index("刚才第十条原文"), 10
+        )
+        self.assertEqual(
+            manager.snapshot_store._coerce_news_tool_index("任意文本第十一段任意后缀"),
+            11,
+        )
+        self.assertEqual(manager.snapshot_store._coerce_news_tool_index("二十三"), 23)
+        self.assertIsNone(manager.snapshot_store._coerce_news_tool_index("2024年新闻"))
         self.assertIsNone(
-            manager.snapshot_store._coerce_news_tool_index("刚才第十条原文")
+            manager.snapshot_store._coerce_news_tool_index("2024年第十条新闻")
+        )
+        self.assertIsNone(
+            manager.snapshot_store._coerce_news_tool_index("第十条和第十一条")
         )
 
     async def test_commit_news_snapshot_stores_payload_without_fetch(self):
@@ -2200,7 +2214,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(f"来源：{YICAI_NAME}", result)
         self.assertIn("来源标识：yicai", result)
 
-    async def test_get_cached_news_link_does_not_parse_full_sentence_query(self):
+    async def test_get_cached_news_link_keeps_full_sentence_query_as_keyword(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
@@ -2220,6 +2234,86 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("新闻列表里没找到", result)
         self.assertNotIn("https://example.com/target", result)
+        self.assertNotIn("阿拉伯数字", result)
+
+    async def test_get_cached_news_link_prefers_valid_index_over_query(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        await manager.snapshot_store.commit_sent_news_snapshot(
+            target,
+            snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [
+                    {"title": "第一条", "url": "https://example.com/1"},
+                    {"title": "第二条", "url": "https://example.com/2"},
+                ],
+                "yicai",
+            ),
+        )
+
+        result = await manager.snapshot_store.get_cached_news_link(
+            target,
+            index="第二条",
+            query="第一条",
+        )
+
+        self.assertIn("第二条", result)
+        self.assertIn("https://example.com/2", result)
+
+    async def test_get_cached_news_link_uses_query_when_index_is_invalid(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        await manager.snapshot_store.commit_sent_news_snapshot(
+            target,
+            snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [{"title": "目标新闻", "url": "https://example.com/target"}],
+                "yicai",
+            ),
+        )
+
+        result = await manager.snapshot_store.get_cached_news_link(
+            target,
+            index="无法识别",
+            query="目标新闻",
+        )
+
+        self.assertIn("目标新闻", result)
+        self.assertIn("https://example.com/target", result)
+
+    async def test_share_history_keeps_success_and_records_media_degradation(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+
+        await manager.executor_helpers.record_share_history(
+            target_id=GROUP_TARGET_1,
+            share_type=mod.ShareType.MOOD,
+            content="已发送内容",
+            success=True,
+            source_type="scheduled",
+            degradation_reason="视频生成失败，继续发送图片",
+            media_result={
+                "text_sent": True,
+                "image_sent": True,
+                "image_path": "generated.png",
+                "partial_errors": [
+                    {
+                        "stage": "audio",
+                        "stage_label": "语音",
+                        "message": "平台不支持",
+                    }
+                ],
+            },
+        )
+
+        _args, history = plugin.db.history[0]
+        self.assertTrue(history["success"])
+        self.assertTrue(history["degraded"])
+        self.assertIn("视频生成失败", history["degradation_reason"])
+        self.assertIn("语音发送失败", history["degradation_reason"])
 
     def test_independent_target_schedule_accepts_clock_time(self):
         mod = _load_tasks_module()
