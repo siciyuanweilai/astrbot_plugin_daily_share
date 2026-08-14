@@ -3,6 +3,7 @@ import importlib.util
 import sqlite3
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from datetime import datetime, timedelta
@@ -132,6 +133,60 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(db._closed)
             with self.assertRaisesRegex(RuntimeError, "数据库已经关闭"):
                 await db.get_share_state("global")
+
+    async def test_database_close_flushes_queued_writes(self):
+        mod = _load_db_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db = mod.DatabaseManager(Path(tmp))
+            release = threading.Event()
+            entered = threading.Event()
+            entered_count = 0
+            entered_lock = threading.Lock()
+
+            def block_worker():
+                nonlocal entered_count
+                with entered_lock:
+                    entered_count += 1
+                    if entered_count == 2:
+                        entered.set()
+                release.wait(timeout=5)
+
+            db._executor.submit(block_worker)
+            db._executor.submit(block_worker)
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+
+            pending_write = asyncio.create_task(
+                db.set_share_state("queued-before-close", {"saved": True})
+            )
+            await asyncio.sleep(0)
+            close_task = asyncio.create_task(db.close())
+            await asyncio.sleep(0.05)
+            release.set()
+
+            await close_task
+            await pending_write
+
+            conn = sqlite3.connect(db.db_path)
+            try:
+                row = conn.execute(
+                    "SELECT value FROM plugin_state WHERE domain = 'share' AND key = ?",
+                    ("queued-before-close",),
+                ).fetchone()
+            finally:
+                conn.close()
+            self.assertIsNotNone(row)
+
+    def test_schema_validation_accepts_equivalent_column_order(self):
+        _load_db_module()
+        migration_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.migrations"]
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.execute("CREATE TABLE sample (second TEXT, first TEXT)")
+            migration_module._validate_tables(
+                conn, {"sample": ("first", "second")}
+            )
+        finally:
+            conn.close()
 
     async def test_database_uses_only_the_default_file_name(self):
         mod = _load_db_module()

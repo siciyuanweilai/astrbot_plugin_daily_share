@@ -1,10 +1,9 @@
 from astrbot.api import logger
 
-from .adapterio import TaskTargetPlatformService
-
 from ...config import CRON_TEMPLATES
 from ...constants import canonical_share_type_sequence, normalize_share_type_sequence
 from ...platform import parse_platform_session
+from .adapterio import TaskTargetPlatformService
 
 
 class TaskTargetConfigService(TaskTargetPlatformService):

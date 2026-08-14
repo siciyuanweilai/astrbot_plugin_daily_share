@@ -14,7 +14,6 @@ from .decoder import (
     clean_qzone_text,
 )
 
-
 FEED_PRIMARY_ID_KEYS = ("sourceFkey", "fkey")
 FEED_STRUCTURAL_ID_KEYS = ("fid", "tid", "cellid", "ugcrightkey", "ugckey", "key")
 FEED_ID_PATHS = (("id", "cellid"), ("cell_id", "cellid"), ("cellId", "cellid"))

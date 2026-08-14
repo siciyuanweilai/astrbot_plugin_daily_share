@@ -2,7 +2,6 @@ import random
 from datetime import datetime, timedelta
 
 from astrbot.api import logger
-from .schedulerbase import SchedulerComponent
 
 from ...database.keys import (
     BRIEFING_STATE_KEY,
@@ -10,7 +9,7 @@ from ...database.keys import (
     QZONE_STATE_KEY,
     target_state_key,
 )
-
+from .schedulerbase import SchedulerComponent
 
 _RECENT_MISSED_JOB_WINDOW_SECONDS = 3600
 
@@ -180,7 +179,6 @@ class TaskSchedulerRecoveryService(SchedulerComponent):
                 run_custom_recover,
                 lock=self._lock,
                 locked_warning=f"[日常分享] 恢复独立任务 {tid} 时系统仍在分享，已跳过本次恢复",
-                background=True,
             )
 
         return delayed_recover

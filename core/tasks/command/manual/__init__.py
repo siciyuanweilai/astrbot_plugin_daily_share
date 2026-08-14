@@ -4,7 +4,6 @@ from .mediafile import TaskCommandLocalMediaService
 from .resolve import TaskCommandLocalResolveService
 from .run import TaskCommandLocalRunService
 
-
 __all__ = [
     "TaskCommandLocalMediaService",
     "TaskCommandLocalNewsService",

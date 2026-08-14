@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from ..supportcomponent import SupportComponent
-
 from astrbot.api.event import AstrMessageEvent
 
 from ...args import find_invalid_non_news_args
 from ...config import NEWS_SOURCE_MAP, ShareType
 from ...constants import TYPE_CN_MAP
+from ..supportcomponent import SupportComponent
 
 
 class PluginShareTypedRouteService(SupportComponent):

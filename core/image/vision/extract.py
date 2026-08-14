@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from typing import Dict
 
 from astrbot.api import logger
 
@@ -142,7 +141,7 @@ class ImageVisualExtractService(ImageVisualFrameService):
         share_type: ShareType | None = None,
         involves_self: bool = False,
         target_umo: str | None = None,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """使用智能体一次性提取：主体、环境、光影、场景、天气温感、穿搭、动作。"""
         if not content and not life_context:
             return {}

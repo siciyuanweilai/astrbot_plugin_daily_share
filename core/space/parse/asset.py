@@ -5,7 +5,6 @@ from typing import Any
 
 from .decoder import _clean_media_url, _tag_attrs, _walk_mappings
 
-
 QZONE_IMAGE_URL_KEYS = {
     "url1",
     "url2",

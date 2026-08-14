@@ -1,5 +1,5 @@
-from .newsitem import TaskExecutorNewsService
 from ...platform import parse_platform_session
+from .newsitem import TaskExecutorNewsService
 
 
 class TaskExecutorTargetService(TaskExecutorNewsService):

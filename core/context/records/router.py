@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ..contextbase import ContextComponent
-
 from ..shared import Any, Dict, logger
 
 

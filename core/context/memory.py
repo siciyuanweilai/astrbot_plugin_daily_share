@@ -2,7 +2,6 @@ import asyncio
 import json
 
 from .contextbase import ContextComponent
-
 from .shared import (
     DAILY_SHARE_MEMORY_PROMPT,
     DAILY_SHARE_SOURCE,

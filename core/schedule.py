@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 SCHEDULE_MODE_OPTIONS = frozenset({"fixed_time", "random_period", "llm_smart", "cron"})
 
 

@@ -869,26 +869,6 @@
   min-width: 0;
 }
 
-.media-meta-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 3px;
-}
-
-.media-meta-flag {
-  width: fit-content;
-  max-width: 100%;
-  padding: 3px 7px;
-  border: 1px solid rgba(211, 142, 101, 0.52);
-  border-radius: 7px;
-  background: rgba(255, 241, 225, 0.9);
-  color: #8b442c;
-  font-size: 11px;
-  font-weight: 850;
-  line-height: 1.2;
-}
-
 .media-item.has-media-underlay .media-meta {
   position: relative;
   z-index: 1;

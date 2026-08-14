@@ -1,10 +1,9 @@
-from datetime import datetime
 import json
-from typing import Any, Dict
-
-from .repository import DatabaseRepository
+from datetime import datetime
+from typing import Any
 
 from .dbschema import STATE_DOMAINS
+from .repository import DatabaseRepository
 
 
 class DatabaseStateService(DatabaseRepository):
@@ -51,7 +50,7 @@ class DatabaseStateService(DatabaseRepository):
                 ),
             )
 
-    def _sync_update_domain_state(self, domain: str, key: str, updates: Dict) -> Dict:
+    def _sync_update_domain_state(self, domain: str, key: str, updates: dict) -> dict:
         domain = self._state_domain(domain)
         with self._connection(write=True) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -89,7 +88,7 @@ class DatabaseStateService(DatabaseRepository):
     async def _set_domain_state(self, domain: str, key: str, value: Any) -> None:
         await self._execute(self._sync_set_domain_state, domain, key, value)
 
-    async def _update_domain_state(self, domain: str, key: str, updates: Dict) -> Dict:
+    async def _update_domain_state(self, domain: str, key: str, updates: dict) -> dict:
         return await self._execute(self._sync_update_domain_state, domain, key, updates)
 
     async def get_share_state(self, key: str, default: Any | None = None) -> Any:
@@ -98,7 +97,7 @@ class DatabaseStateService(DatabaseRepository):
     async def set_share_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("share", key, value)
 
-    async def update_share_state(self, key: str, updates: Dict) -> Dict:
+    async def update_share_state(self, key: str, updates: dict) -> dict:
         return await self._update_domain_state("share", key, updates)
 
     async def get_qzone_state(self, key: str, default: Any | None = None) -> Any:
@@ -107,7 +106,7 @@ class DatabaseStateService(DatabaseRepository):
     async def set_qzone_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("qzone", key, value)
 
-    async def update_qzone_state(self, key: str, updates: Dict) -> Dict:
+    async def update_qzone_state(self, key: str, updates: dict) -> dict:
         return await self._update_domain_state("qzone", key, updates)
 
     async def get_context_state(self, key: str, default: Any | None = None) -> Any:
@@ -116,7 +115,7 @@ class DatabaseStateService(DatabaseRepository):
     async def set_context_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("context", key, value)
 
-    async def update_context_state(self, key: str, updates: Dict) -> Dict:
+    async def update_context_state(self, key: str, updates: dict) -> dict:
         return await self._update_domain_state("context", key, updates)
 
     async def get_cache_state(self, key: str, default: Any | None = None) -> Any:
@@ -125,5 +124,5 @@ class DatabaseStateService(DatabaseRepository):
     async def set_cache_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("cache", key, value)
 
-    async def update_cache_state(self, key: str, updates: Dict) -> Dict:
+    async def update_cache_state(self, key: str, updates: dict) -> dict:
         return await self._update_domain_state("cache", key, updates)

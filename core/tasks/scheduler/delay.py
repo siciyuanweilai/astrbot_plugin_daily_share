@@ -5,6 +5,7 @@ import random as random_module
 from datetime import datetime, timedelta
 
 from astrbot.api import logger
+
 from .schedulerbase import SchedulerComponent
 
 
@@ -82,7 +83,6 @@ class TaskSchedulerDelayService(SchedulerComponent):
         lock=None,
         locked_warning: str = "",
         before_action=None,
-        background: bool = False,
         state_updater=None,
     ):
         if self.plugin._is_terminated:
@@ -116,7 +116,4 @@ class TaskSchedulerDelayService(SchedulerComponent):
                 if track_current_task and task is not None:
                     self.plugin._bg_tasks.discard(task)
 
-        if background:
-            return self.plugin.track_task(run_job(track_current_task=False))
-
-        await run_job()
+        return self.plugin.track_task(run_job(track_current_task=False))

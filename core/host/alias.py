@@ -1,7 +1,7 @@
-from .supportcomponent import SupportComponent
-
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
+
+from .supportcomponent import SupportComponent
 
 
 class PluginAliasService(SupportComponent):

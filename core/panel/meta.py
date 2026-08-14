@@ -1,9 +1,6 @@
-from .panelcomponent import PanelComponent
-
 import asyncio
-import json
-
 import copy
+import json
 
 from astrbot.api import logger
 
@@ -13,6 +10,7 @@ from ..platform import (
     get_platform_bindings,
 )
 from .common import _PAGE_CONF_SCHEMA_PATH
+from .panelcomponent import PanelComponent
 
 
 class DashboardConfigMetaService(PanelComponent):

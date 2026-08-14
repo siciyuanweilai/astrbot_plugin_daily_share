@@ -1,7 +1,7 @@
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, List
-
+from typing import Any
 
 ONEBOT_PLATFORM_TYPES = frozenset({"aiocqhttp", "onebot"})
 WEIXIN_PLATFORM_TYPE = "weixin_oc"
@@ -92,7 +92,7 @@ def parse_platform_session(value: str) -> PlatformSession | None:
     return PlatformSession(platform_id, message_type, session_id)
 
 
-def iter_platform_instances(context_obj) -> List[Any]:
+def iter_platform_instances(context_obj) -> list[Any]:
     """从当前框架平台管理器返回平台实例列表。"""
     return list(context_obj.platform_manager.get_insts())
 

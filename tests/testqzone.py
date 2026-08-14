@@ -20,7 +20,7 @@ CLIENT_SERVICE_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.gateway"
 COMMENT_SERVICE_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.discussion"
 FEED_SERVICE_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.feed"
 SERVICE_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.qzone"
-HOST_MODULE_NAME = f"{PACKAGE_NAME}.core.host.space"
+HOST_MODULE_NAME = f"{PACKAGE_NAME}.core.host.portal"
 
 
 class _Logger:
@@ -208,7 +208,7 @@ def _load_qzone_host():
     )
     host_spec = importlib.util.spec_from_file_location(
         HOST_MODULE_NAME,
-        ROOT / "core" / "host" / "space.py",
+        ROOT / "core" / "host" / "portal.py",
     )
     host_module = importlib.util.module_from_spec(host_spec)
     sys.modules[HOST_MODULE_NAME] = host_module
@@ -573,14 +573,14 @@ class QzoneParserTests(unittest.TestCase):
                                       <li class="comments-item bor3" data-type="commentroot" data-tid="11" data-uin="100000001" data-nick="Bot">
                                         <div class="comments-item-bd">
                                           <div class="comments-content">
-                                            <a class="nickname">Bot</a>&nbsp;:&nbsp;这家书店听起来好舒服
+                                            <a class="nickname">Bot</a>&nbsp;:&nbsp;这家书店：听起来好舒服
                                           </div>
                                         </div>
                                         <div class="comments-list mod-comments-sub">
                                           <ul>
                                             <li class="comments-item bor3" data-type="replyroot" data-tid="1" data-uin="2492835361" data-nick="测试用户甲">
                                               <div class="comments-content">
-                                                <a class="nickname">测试用户甲</a>&nbsp;回复<a class="nickname">Bot</a>&nbsp;:&nbsp;下次一起去
+                                                <a class="nickname">测试用户甲</a>&nbsp;回复<a class="nickname">Bot</a>&nbsp;:&nbsp;下次一起去：周六见
                                               </div>
                                               <div class="comments-op">
                                                 <a class="reply" data-param="t1_tid=real-fkey-abc123&t2_uin=100000001&t2_tid=11">回复</a>
@@ -613,7 +613,8 @@ class QzoneParserTests(unittest.TestCase):
         self.assertEqual(posts[0].comments[1].parent_tid, "11")
         self.assertEqual(posts[0].comments[1].reply_to_tid, "11")
         self.assertEqual(posts[0].comments[1].reply_to_uin, 100000001)
-        self.assertEqual(posts[0].comments[1].content, "下次一起去")
+        self.assertEqual(posts[0].comments[0].content, "这家书店：听起来好舒服")
+        self.assertEqual(posts[0].comments[1].content, "下次一起去：周六见")
 
     def test_recent_feed_parses_feeds3_html_outside_data_array(self):
         payload = {
@@ -835,6 +836,35 @@ class QzoneParserTests(unittest.TestCase):
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].tid, "home-video-fid")
         self.assertEqual(posts[0].videos, ["qzone://video/1075_0b53homevideo"])
+
+    def test_home_feed_keeps_last_item_without_closing_list_tag(self):
+        markup = """
+            <script>
+            var _feedsdata = {
+              code: 0,
+              data: {
+                main: {},
+                host_data: [{
+                  appid: 311,
+                  key: "last-feed-key",
+                  fid: "last-feed-fid",
+                  uin: 12345,
+                  abstime: 1718000000
+                }]
+              }
+            };
+            </script>
+            <ul>
+              <li class="f-single" data-key="last-feed-key">
+                <div class="f-info">最后一条动态</div>
+              </li>
+        """
+
+        posts = parse_home_feed_list(markup)
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].tid, "last-feed-fid")
+        self.assertEqual(posts[0].text, "最后一条动态")
 
     def test_publish_feedinfo_parses_native_video_marker(self):
         markup = """
@@ -1653,7 +1683,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.call["url"], service.RELATION_URL)
         self.assertEqual(service.call["params"]["uin"], 100000001)
         self.assertEqual(service.call["params"]["do"], 2)
-        self.assertEqual(service.call["params"]["g_tk"], "337168208")
+        self.assertEqual(service.call["params"]["g_tk"], "2090726337")
 
     async def test_query_posts_with_detail_keeps_list_comments_when_detail_has_none(
         self,
@@ -2136,6 +2166,52 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("p_skey=p_skey", headers["Cookie"])
         self.assertIn("skey=skey", headers["Cookie"])
         self.assertIn("ptcz=noise", headers["Cookie"])
+
+    async def test_qzone_tokens_use_their_respective_cookie_salts(self):
+        service_module = _load_qzone_service()
+        ctx = service_module.QzoneContext(
+            uin=100000001,
+            skey="skey-value",
+            p_skey="p-skey-value",
+        )
+
+        def token(value):
+            result = 5381
+            for char in value:
+                result += (result << 5) + ord(char)
+            return str(result & 0x7FFFFFFF)
+
+        self.assertEqual(ctx.gtk, token("skey-value"))
+        self.assertEqual(ctx.gtk2, token("p-skey-value"))
+        self.assertNotEqual(ctx.gtk, ctx.gtk2)
+
+    async def test_h5_success_falls_back_to_code_when_ret_is_null(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module, types.SimpleNamespace())
+
+        self.assertTrue(service._h5_ok({"ret": None, "code": 0}))
+        self.assertFalse(service._h5_ok({"ret": None, "code": 1}))
+
+    async def test_header_overrides_are_case_insensitive(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module, types.SimpleNamespace())
+        ctx = service_module.QzoneContext(
+            uin=100000001,
+            skey="skey",
+            p_skey="p_skey",
+        )
+
+        headers = service._headers(
+            ctx,
+            referer="https://example.com/custom",
+            origin="https://example.com",
+        )
+        names = [name.lower() for name in headers]
+
+        self.assertEqual(names.count("referer"), 1)
+        self.assertEqual(names.count("origin"), 1)
+        self.assertEqual(headers["Referer"], "https://example.com/custom")
+        self.assertEqual(headers["Origin"], "https://example.com")
 
     async def test_comment_h5_headers_use_h5_origin_and_ajax_headers(self):
         service_module = _load_qzone_service()

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from html import unescape
-import re
 from typing import Any
 
 from .models import QzonePost

@@ -13,7 +13,7 @@ from ..platform import (
 from .analysis import ContextHistoryAnalysisService
 from .daily.memos import ContextLifeMemoryService
 from .daily.narrate import ContextLifeFormatService
-from .daily.parse import ContextLifeParseService
+from .daily.parser import ContextLifeParseService
 from .daily.plugin import ContextLifePluginService
 from .memory import ContextMemoryService
 from .normalize import ContextHistoryNormalizeService

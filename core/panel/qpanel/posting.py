@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 from ...database.keys import (
     HISTORY_SHARE_QZONE,
     MEDIA_IMAGE,
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
 )
+from ..panelcomponent import PanelComponent
 
 
 class DashboardQzonePublishService(PanelComponent):

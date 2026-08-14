@@ -1,15 +1,14 @@
 import re
 from pathlib import Path
 
-
-from ..config import (
-    TimePeriod,
-    SHARE_TYPE_SEQUENCES,
-)
-
+from quart import Response as _quart_response  # noqa: F401
 from quart import jsonify as _quart_jsonify  # noqa: F401
 from quart import request as _quart_request  # noqa: F401
-from quart import Response as _quart_response  # noqa: F401
+
+from ..config import (
+    SHARE_TYPE_SEQUENCES,
+    TimePeriod,
+)
 
 _PAGE_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
 _PAGE_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv"}

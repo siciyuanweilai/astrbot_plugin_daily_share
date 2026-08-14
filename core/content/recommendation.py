@@ -65,8 +65,16 @@ class ContentRecommendationService(ContentComponent):
         # 0. 获取配置
         allow_detail = self.context_conf.get("group_share_schedule", False)
         # 随机选择大类和子类
-        rec_type = random.choice(list(self.rec_cats.keys()))
-        sub_style = random.choice(self.rec_cats[rec_type])
+        categories = [
+            (name, tags)
+            for name, tags in self.rec_cats.items()
+            if isinstance(tags, (list, tuple)) and tags
+        ]
+        if not categories:
+            logger.warning("[内容服务] 推荐库未配置有效分类，取消推荐分享")
+            return None
+        rec_type, tags = random.choice(categories)
+        sub_style = random.choice(tags)
 
         target_id = ctx["target_id"]
 

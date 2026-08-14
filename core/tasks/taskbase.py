@@ -24,7 +24,7 @@ class TaskConfigState:
     receiver: dict
 
     @classmethod
-    def from_runtime(cls, runtime: TaskRuntime) -> "TaskConfigState":
+    def from_runtime(cls, runtime: TaskRuntime) -> TaskConfigState:
         return cls(
             basic=runtime.basic_conf,
             extra_shares=runtime.extra_shares_conf,
@@ -62,7 +62,7 @@ class TaskServiceBase:
         self.state = state
         self.services: TaskServices
 
-    def connect(self, services: "TaskServices") -> None:
+    def connect(self, services: TaskServices) -> None:
         self.services = services
 
     async def send_event(self, event, chain) -> None:

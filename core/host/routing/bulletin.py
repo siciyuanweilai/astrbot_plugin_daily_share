@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ..supportcomponent import SupportComponent
-
 from astrbot.api.event import AstrMessageEvent
+
+from ..supportcomponent import SupportComponent
 
 
 class PluginShareBriefingRouteService(SupportComponent):

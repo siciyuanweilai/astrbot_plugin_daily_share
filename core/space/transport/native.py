@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 import asyncio
 import ssl
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from ..methodset import QzoneMethodSet
 
 try:
-    import h2.connection
     import h2.config
+    import h2.connection
     import h2.events
 except Exception:  # pragma: no cover - 可选运行时依赖
     h2 = None
@@ -61,7 +59,7 @@ class QzoneH5NativeService(QzoneMethodSet):
 
     def _h5_native_h2_header_items(
         self,
-        ctx: "QzoneContext",
+        ctx: QzoneContext,
         parsed_url: Any,
         path: str,
         headers: dict[str, str] | None = None,
@@ -167,7 +165,7 @@ class QzoneH5NativeService(QzoneMethodSet):
 
     async def _h5_post_json_native_h2(
         self,
-        ctx: "QzoneContext",
+        ctx: QzoneContext,
         url: str,
         payload: dict[str, Any],
         *,

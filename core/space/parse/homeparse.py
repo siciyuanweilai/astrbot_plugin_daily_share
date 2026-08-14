@@ -26,11 +26,11 @@ def _extract_home_feed_blocks(markup: str) -> list[str]:
     matches = list(pattern.finditer(source))
     for index, match in enumerate(matches):
         start = match.start()
-        end = (
-            matches[index + 1].start()
-            if index + 1 < len(matches)
-            else source.find("</ul>", match.end())
-        )
+        if index + 1 < len(matches):
+            end = matches[index + 1].start()
+        else:
+            list_end = source.find("</ul>", match.end())
+            end = len(source) if list_end < 0 else list_end
         if end > start:
             blocks.append(source[start:end])
     return blocks

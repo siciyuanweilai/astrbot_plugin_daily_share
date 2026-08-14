@@ -1,8 +1,6 @@
-from .panelcomponent import PanelComponent
-
 from ..database.keys import target_state_key
 from ..platform import parse_platform_session
-
+from .panelcomponent import PanelComponent
 
 _TARGET_BUCKET_GROUP_KIND = {
     "groups": True,

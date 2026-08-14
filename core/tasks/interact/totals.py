@@ -2,7 +2,6 @@ from astrbot.api import logger
 
 from .formatting import _qzone_summary_generation_failed_suffix
 
-
 _QZONE_INTERACTION_TOTAL_KEYS = (
     "scanned",
     "liked",
@@ -27,7 +26,7 @@ def _qzone_empty_interaction_result() -> dict:
         "like": {},
         "comment": {},
         "reply": {},
-        **{key: 0 for key in _QZONE_INTERACTION_TOTAL_KEYS},
+        **dict.fromkeys(_QZONE_INTERACTION_TOTAL_KEYS, 0),
     }
 
 

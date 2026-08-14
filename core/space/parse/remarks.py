@@ -7,7 +7,6 @@ from .thread import (
     parse_comments,
 )
 
-
 __all__ = [
     "_comment_from_raw",
     "_feed_comment_items",

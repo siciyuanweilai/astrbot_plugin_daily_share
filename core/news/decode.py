@@ -1,9 +1,9 @@
 import html
 import json
 import re
-from typing import Optional, List, Dict, Any
+from typing import Any
 
-from .transport import NewsApiService
+from .client import NewsApiService
 
 
 class NewsParserService(NewsApiService):
@@ -85,7 +85,7 @@ class NewsParserService(NewsApiService):
 
     def _parse_news_payload(
         self, text: str, limit: int | None = None
-    ) -> tuple[Any, Optional[List[Dict]]]:
+    ) -> tuple[Any, list[dict] | None]:
         """在线程中解析并规范化一次新闻响应。"""
         data = self._loads_json_payload(text)
         return data, self._parse_response(data, limit=limit)
@@ -100,7 +100,7 @@ class NewsParserService(NewsApiService):
             for item in self._extract_news_items(data)
         )
 
-    def _extract_news_items(self, data: Any) -> List[Dict]:
+    def _extract_news_items(self, data: Any) -> list[dict]:
         if isinstance(data, list):
             return data
         if not isinstance(data, dict):
@@ -124,7 +124,7 @@ class NewsParserService(NewsApiService):
         return []
 
     @staticmethod
-    def _first_non_empty(item: Dict, keys) -> Any:
+    def _first_non_empty(item: dict, keys) -> Any:
         for key in keys:
             value = item.get(key)
             if value:
@@ -133,7 +133,7 @@ class NewsParserService(NewsApiService):
 
     def _parse_response(
         self, data: Any, limit: int | None = None
-    ) -> Optional[List[Dict]]:
+    ) -> list[dict] | None:
         """
         解析响应数据
         支持多层级结构化数据和多种上游字段名。
@@ -145,7 +145,7 @@ class NewsParserService(NewsApiService):
             return None
 
         limit = self._news_item_limit(limit)
-        res: list[Dict] = []
+        res: list[dict] = []
         for item in items:
             if len(res) >= limit:
                 break
@@ -173,7 +173,7 @@ class NewsParserService(NewsApiService):
             return text[:max_len].rstrip() + "..."
         return text
 
-    def _parse_news_item(self, item: Any) -> Dict | None:
+    def _parse_news_item(self, item: Any) -> dict | None:
         if not isinstance(item, dict):
             return None
         title = self._first_non_empty(item, self.TITLE_KEYS)

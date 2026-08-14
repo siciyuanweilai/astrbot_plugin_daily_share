@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 from ...config import ShareType, TimePeriod
 from .persona import ImageVisualPersonaService
 
@@ -14,7 +12,7 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         content: str,
         share_type: ShareType,
         involves_self: bool,
-        visuals: Dict,
+        visuals: dict,
         target_umo: str | None = None,
     ) -> str:
         prompts: list[str] = []
@@ -45,7 +43,7 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         return ", ".join(filter(None, prompts))
 
     async def _append_self_visual_prompts(
-        self, prompts: list[str], visuals: Dict, target_umo: str | None
+        self, prompts: list[str], visuals: dict, target_umo: str | None
     ) -> None:
         prompts.append("画面主体是当前角色本人，保持角色外貌身份一致")
         appearance = await self._get_appearance_keywords(target_umo=target_umo)
@@ -57,14 +55,14 @@ class ImageVisualPromptService(ImageVisualPersonaService):
                 prompts.append(text)
 
     @staticmethod
-    def _append_subject_visual_prompts(prompts: list[str], visuals: Dict) -> None:
+    def _append_subject_visual_prompts(prompts: list[str], visuals: dict) -> None:
         subject = visuals.get("subject", "")
         if subject and subject not in {"无", "N/A", "None"}:
             prompts.extend(("无人, 静物", subject))
         else:
             prompts.append("无人, 风景, 景观, 细节丰富")
 
-    def _append_environment_prompts(self, prompts: list[str], visuals: Dict) -> None:
+    def _append_environment_prompts(self, prompts: list[str], visuals: dict) -> None:
         environment = visuals.get("environment", "")
         prompts.append(f"位于 {environment}" if environment else "简单的背景")
         lighting = visuals.get("lighting", "")

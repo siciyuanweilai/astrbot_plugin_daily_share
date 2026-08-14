@@ -3,7 +3,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -16,14 +15,13 @@ def _tool_docstring(function_name: str) -> str:
 
 
 def _args_from_docstring(docstring: str) -> dict:
-    return {
-        name: type_name
-        for name, type_name in re.findall(
+    return dict(
+        re.findall(
             r"^\s+([A-Za-z_][A-Za-z0-9_]*) \((string|boolean|number|object|array)\):",
             docstring,
             flags=re.MULTILINE,
         )
-    }
+    )
 
 
 class LlmToolDocstringTests(unittest.TestCase):

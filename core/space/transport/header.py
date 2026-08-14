@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from http.cookies import SimpleCookie
 from typing import TYPE_CHECKING
+
+from ..methodset import QzoneMethodSet
 
 if TYPE_CHECKING:
     from ..models import QzoneContext
@@ -48,17 +47,24 @@ class QzoneHeaderService(QzoneMethodSet):
             if str(key).strip() and value not in (None, "")
         )
 
-    def _headers(self, ctx: "QzoneContext", **extra) -> dict[str, str]:
+    def _headers(self, ctx: QzoneContext, **extra) -> dict[str, str]:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
             "Referer": f"{self.BASE_URL}/{ctx.uin}",
             "Origin": self.BASE_URL,
         }
-        headers.update({key: value for key, value in extra.items() if value})
+        for key, value in extra.items():
+            if not value:
+                continue
+            existing = next(
+                (name for name in headers if name.lower() == str(key).lower()),
+                None,
+            )
+            headers[existing or str(key)] = value
         return headers
 
     def _pc_form_headers(
-        self, ctx: "QzoneContext", *, referer: str = ""
+        self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
         return self._headers(
             ctx,
@@ -75,7 +81,7 @@ class QzoneHeaderService(QzoneMethodSet):
         )
 
     def _comment_h5_headers(
-        self, ctx: "QzoneContext", *, referer: str = ""
+        self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
         return self._headers(
             ctx,
@@ -92,7 +98,7 @@ class QzoneHeaderService(QzoneMethodSet):
         )
 
     def _comment_sns_headers(
-        self, ctx: "QzoneContext", *, referer: str = ""
+        self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
         return self._headers(
             ctx,
@@ -107,7 +113,7 @@ class QzoneHeaderService(QzoneMethodSet):
             },
         )
 
-    def _feeds3_headers(self, ctx: "QzoneContext") -> dict[str, str]:
+    def _feeds3_headers(self, ctx: QzoneContext) -> dict[str, str]:
         return self._headers(
             ctx,
             Referer=f"{self.BASE_URL}/{ctx.uin}/main",

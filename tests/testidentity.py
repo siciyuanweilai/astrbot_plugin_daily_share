@@ -4,7 +4,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_identity_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"

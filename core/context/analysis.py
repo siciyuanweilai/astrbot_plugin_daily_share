@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from .contextbase import ContextComponent
-
 from .shared import DAILY_SHARE_SOURCE, datetime, time
 
 
 class ContextHistoryAnalysisService(ContextComponent):
-    def _analyze_group_chat(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _analyze_group_chat(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         if not messages:
             return {}
         try:
@@ -21,7 +20,7 @@ class ContextHistoryAnalysisService(ContextComponent):
         cutoff_time = now - active_window_seconds
 
         active_msgs_count = 0
-        user_count: Dict[str, int] = {}
+        user_count: dict[str, int] = {}
         topics: list[str] = []
         last_msg_time: float = 0
 
@@ -80,7 +79,7 @@ class ContextHistoryAnalysisService(ContextComponent):
             return 0
 
     def format_structured_history_context(
-        self, history_data: Dict[str, Any], *, limit: int = 6
+        self, history_data: dict[str, Any], *, limit: int = 6
     ) -> str:
         if not history_data or not history_data.get("messages"):
             return ""
@@ -99,7 +98,7 @@ class ContextHistoryAnalysisService(ContextComponent):
         )
 
     def _format_structured_history_flow(
-        self, messages: List[Dict[str, Any]], *, is_group: bool, limit: int = 6
+        self, messages: list[dict[str, Any]], *, is_group: bool, limit: int = 6
     ) -> str:
         if not messages:
             return ""
@@ -111,7 +110,7 @@ class ContextHistoryAnalysisService(ContextComponent):
         return "\n".join(lines)
 
     def _format_structured_history_line(
-        self, msg: Dict[str, Any], *, is_group: bool
+        self, msg: dict[str, Any], *, is_group: bool
     ) -> str:
         content = str(msg.get("content") or "").strip()
         if not content:
@@ -136,7 +135,7 @@ class ContextHistoryAnalysisService(ContextComponent):
             prefix = f"{prefix} {meta}"
         return f"- {prefix}: {content}"
 
-    def _format_history_speaker(self, msg: Dict[str, Any], *, is_group: bool) -> str:
+    def _format_history_speaker(self, msg: dict[str, Any], *, is_group: bool) -> str:
         role = str(msg.get("role") or "user").strip().lower()
         name = str(msg.get("name") or "").strip()
         user_id = str(msg.get("user_id") or "").strip()
@@ -149,7 +148,7 @@ class ContextHistoryAnalysisService(ContextComponent):
             return name or user_id or "你"
         return name or user_id or "对方"
 
-    def _format_history_meta(self, msg: Dict[str, Any]) -> str:
+    def _format_history_meta(self, msg: dict[str, Any]) -> str:
         media = str(msg.get("media") or "").strip()
         reply_to_name = str(msg.get("reply_to_name") or "").strip()
         reply_to_id = str(msg.get("reply_to_id") or "").strip()
@@ -178,7 +177,7 @@ class ContextHistoryAnalysisService(ContextComponent):
             return text[:limit].rstrip() + "..."
         return text
 
-    def check_group_strategy(self, group_info: Dict[str, Any]) -> bool:
+    def check_group_strategy(self, group_info: dict[str, Any]) -> bool:
         if not group_info:
             return True
         strategy = self.history_conf.get("group_share_strategy", "cautious")

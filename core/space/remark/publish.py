@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 import json
+
+from ..methodset import QzoneMethodSet
 
 
 class QzoneCommentPostService(QzoneMethodSet):

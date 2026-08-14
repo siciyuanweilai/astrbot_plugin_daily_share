@@ -4,9 +4,7 @@ import json
 import random
 import re
 from datetime import datetime, timedelta
-from typing import Any, Optional
-
-from .schedulerbase import SchedulerComponent
+from typing import Any
 
 from astrbot.api import logger
 
@@ -20,6 +18,7 @@ from ...database.keys import (
     SOURCE_SMART,
 )
 from ...prompt import build_smart_schedule_rules
+from .schedulerbase import SchedulerComponent
 
 
 class TaskSchedulerSmartService(SchedulerComponent):
@@ -45,7 +44,7 @@ class TaskSchedulerSmartService(SchedulerComponent):
             raise
 
     @staticmethod
-    def _smart_today_time(now: datetime, value: Any) -> Optional[datetime]:
+    def _smart_today_time(now: datetime, value: Any) -> datetime | None:
         raw = str(value or "").strip()
         if not raw:
             return None
@@ -67,7 +66,7 @@ class TaskSchedulerSmartService(SchedulerComponent):
         return dt.hour * 60 + dt.minute
 
     @staticmethod
-    def _smart_time_range_minutes(value: str) -> Optional[tuple[int, int]]:
+    def _smart_time_range_minutes(value: str) -> tuple[int, int] | None:
         match = re.match(
             r"^\s*((?:[01]?\d|2[0-3]):[0-5]\d)\s*-\s*((?:[01]?\d|2[0-3]):[0-5]\d)\s*$",
             str(value or ""),
@@ -125,7 +124,7 @@ class TaskSchedulerSmartService(SchedulerComponent):
         source = conf.get(key, default) if key in conf else default
         return [str(item).strip() for item in (source or []) if str(item).strip()]
 
-    def _smart_share_type(self, value: Any) -> Optional[ShareType]:
+    def _smart_share_type(self, value: Any) -> ShareType | None:
         normalized = normalize_share_type_token(value, allow_auto=True)
         if not normalized or normalized == "auto":
             return None
@@ -355,7 +354,7 @@ class TaskSchedulerSmartService(SchedulerComponent):
         quiet_hours: list[str],
         allow_share_type: bool,
         min_gap_minutes: int,
-    ) -> Optional[list[dict]]:
+    ) -> list[dict] | None:
         if not (
             isinstance(smart_schedule, dict)
             and smart_schedule.get("date") == date_str
@@ -563,7 +562,6 @@ class TaskSchedulerSmartService(SchedulerComponent):
                 run_briefing,
                 lock=self._briefing_share_lock,
                 locked_warning="[日常分享] 上一个早报任务仍在进行，已跳过本次智能定时触发",
-                background=True,
             )
             return
 
@@ -580,7 +578,6 @@ class TaskSchedulerSmartService(SchedulerComponent):
                 run_qzone,
                 lock=self._lock,
                 locked_warning="[日常分享] 上一个分享任务仍在进行，已跳过本次智能 QQ 空间触发",
-                background=True,
             )
             return
 
@@ -606,7 +603,6 @@ class TaskSchedulerSmartService(SchedulerComponent):
             lock=self._lock,
             locked_warning="[日常分享] 上一个任务仍在进行，已跳过本次智能定时触发",
             before_action=before_share,
-            background=True,
         )
 
     async def _schedule_daily_smart_jobs(self, *, generation: int | None = None):

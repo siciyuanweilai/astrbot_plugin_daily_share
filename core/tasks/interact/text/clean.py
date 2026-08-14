@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 _QZONE_MENTION_TAG_RE = re.compile(r"@\{[^{}]*\buin\s*:\s*\d+[^{}]*\}\s*")
 _QZONE_EMPTY_GENERATION_TEXT = {"跳过", "不评论", "略过", "skip", "pass"}
 

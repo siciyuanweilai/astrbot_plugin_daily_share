@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 import asyncio
 import base64
 import mimetypes
@@ -15,6 +13,7 @@ from ..common import (
     _PAGE_THUMBNAIL_MAX_SIDE,
     _PAGE_VIEW_IMAGE_MAX_SIDE,
 )
+from ..panelcomponent import PanelComponent
 
 
 class DashboardMediaPreviewService(PanelComponent):

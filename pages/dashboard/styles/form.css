@@ -8,6 +8,35 @@
   backdrop-filter: none;
 }
 
+.settings-config-actions {
+  position: sticky;
+  top: 12px;
+  z-index: 45;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 12px auto;
+  padding: 8px;
+  border: 1px solid rgba(237, 201, 218, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 20px rgba(207, 109, 151, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.settings-config-actions .text-button {
+  min-width: 96px;
+  min-height: 40px;
+}
+
+.settings-config-actions .is-conflict {
+  border-color: var(--danger);
+  color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
 .settings-form {
   min-width: 0;
   width: 100%;

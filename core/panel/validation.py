@@ -1,5 +1,3 @@
-from .panelcomponent import PanelComponent
-
 import re
 from typing import Any
 
@@ -14,6 +12,7 @@ from .common import (
     _PAGE_RANDOM_PERIOD_RE,
     _PAGE_SHARE_TYPE_OPTIONS,
 )
+from .panelcomponent import PanelComponent
 
 
 class DashboardConfigValidationService(PanelComponent):

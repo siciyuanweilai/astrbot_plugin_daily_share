@@ -305,6 +305,25 @@
         </header>
 
         <section class="panel settings-panel bento-settings-board" aria-label="设置">
+          <div class="settings-config-actions" aria-label="设置操作">
+            <button
+              id="saveConfigButton"
+              class="text-button strong"
+              type="submit"
+              form="configForm"
+              disabled
+            >
+              立即保存
+            </button>
+            <button
+              id="reloadConfigButton"
+              class="text-button"
+              type="button"
+              title="重新读取当前已保存的设置"
+            >
+              重新加载
+            </button>
+          </div>
           <nav class="settings-dock bento-sticker-nav" aria-label="设置分区">
             <a href="#settings-target" data-code="01">目标</a>
             <a href="#settings-basic" data-code="02">基础</a>

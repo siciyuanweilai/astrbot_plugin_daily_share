@@ -74,7 +74,6 @@ class TaskSchedulerTriggerService(SchedulerComponent):
             lock=self._lock,
             locked_warning="[日常分享] 上一个任务仍在进行，已跳过本次定时触发",
             before_action=before_share,
-            background=True,
         )
 
     async def _task_wrapper_briefing(self):
@@ -106,7 +105,6 @@ class TaskSchedulerTriggerService(SchedulerComponent):
             run_briefing_share,
             lock=self._briefing_share_lock,
             locked_warning="[日常分享] 上一个早报任务仍在进行，已跳过本次定时触发",
-            background=True,
         )
 
     async def _task_wrapper_qzone(self):
@@ -140,7 +138,6 @@ class TaskSchedulerTriggerService(SchedulerComponent):
             run_qzone_share,
             lock=self._lock,
             locked_warning="[日常分享] 上一个分享任务仍在进行，已跳过本次 QQ 空间触发",
-            background=True,
         )
 
     async def _task_wrapper_qzone_auto_interaction(self):
@@ -159,7 +156,6 @@ class TaskSchedulerTriggerService(SchedulerComponent):
                 state_updater=self.db.update_qzone_state,
                 lock=self._qzone_auto_interaction_lock,
                 locked_warning="[日常分享] 上一个 QQ 空间自动互动任务仍在进行，已跳过本次触发",
-                background=True,
             )
 
         await self.schedule.delay._schedule_or_execute_delayed(

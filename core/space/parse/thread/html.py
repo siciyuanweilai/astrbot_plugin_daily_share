@@ -46,12 +46,23 @@ def _comment_content_html(block: str) -> str:
 
 
 def _comment_text_from_html(block: str) -> str:
-    text = clean_qzone_text(_comment_content_html(block))
-    for sep in ("：", ":"):
-        index = text.rfind(sep)
-        if index >= 0:
-            text = text[index + 1 :].strip()
-            break
+    content_html = _comment_content_html(block)
+    text = clean_qzone_text(content_html)
+    nickname_anchor = (
+        r'<a\b[^>]*class=["\'][^"\']*\bnickname\b[^"\']*["\']'
+        r'[^>]*>.*?</a>'
+    )
+    prefix = re.search(
+        rf"^\s*{nickname_anchor}"
+        rf"(?:\s|&nbsp;)*(?:回复\s*{nickname_anchor}\s*)?"
+        r"(?:\s|&nbsp;)*[:：]",
+        content_html or "",
+        re.I | re.S,
+    )
+    if prefix:
+        body = clean_qzone_text(content_html[prefix.end() :])
+        if body:
+            return body
     return text
 
 

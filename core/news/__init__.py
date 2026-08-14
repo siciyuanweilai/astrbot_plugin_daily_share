@@ -1,7 +1,7 @@
 import random
-from typing import Optional
 
 import aiohttp
+
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
@@ -29,7 +29,7 @@ class NewsService(NewsSourceService):
         specific_source: str | None = None,
         limit: int | None = None,
         allow_fallback: bool = True,
-    ) -> Optional[tuple]:
+    ) -> tuple | None:
         """获取热搜 (包含降级重试逻辑)"""
         # 检查开关和密钥
         if not self.conf.get("enable_news_api", True):

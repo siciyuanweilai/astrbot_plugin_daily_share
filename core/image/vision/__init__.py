@@ -1,10 +1,9 @@
 from .extract import ImageVisualExtractService
 from .frame import ImageVisualFrameService
-from .judge import ImageVisualJudgeService
-from .json import _extract_json_object
-from .persona import ImageVisualPersonaService
 from .instruction import ImageVisualPromptService
-
+from .json import _extract_json_object
+from .judge import ImageVisualJudgeService
+from .persona import ImageVisualPersonaService
 
 __all__ = [
     "ImageVisualExtractService",

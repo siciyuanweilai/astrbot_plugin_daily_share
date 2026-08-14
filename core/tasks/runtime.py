@@ -40,7 +40,7 @@ class TaskRuntime:
     @classmethod
     def from_services(
         cls, plugin: DailySharePlugin, services: PluginServices
-    ) -> "TaskRuntime":
+    ) -> TaskRuntime:
         return cls(
             plugin=plugin,
             scheduler=services.scheduler,
@@ -60,7 +60,7 @@ class TaskRuntime:
         )
 
     @classmethod
-    def from_plugin(cls, plugin: DailySharePlugin) -> "TaskRuntime":
+    def from_plugin(cls, plugin: DailySharePlugin) -> TaskRuntime:
         services = plugin.services
         if not isinstance(services, PluginServices):
             raise TypeError("每日分享插件必须提供 PluginServices 服务容器")

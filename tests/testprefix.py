@@ -4,7 +4,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_content_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
@@ -231,6 +230,18 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(service.rec_cats)
         self.assertIn("有趣的冷知识", service.knowledge_cats)
         self.assertIn("书籍", service.rec_cats)
+
+    async def test_empty_knowledge_categories_cancel_without_index_error(self):
+        service = _service("测试输出")
+        service.knowledge_cats = {}
+
+        self.assertIsNone(await service.knowledge._gen_knowledge(_ctx()))
+
+    async def test_empty_recommendation_categories_cancel_without_index_error(self):
+        service = _service("测试输出")
+        service.rec_cats = {"好物": []}
+
+        self.assertIsNone(await service.recommendation._gen_rec(_ctx()))
 
     async def test_knowledge_prefix_is_enabled_by_default(self):
         service = _service("【蜂蜜】不会轻易变质。$$happy$$")

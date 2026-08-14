@@ -137,16 +137,6 @@ function createMediaMeta(item, openTextLightbox) {
   path.textContent = formatMediaTime(item.timestamp);
   const body = contentPreviewButton(item.content, titleText, openTextLightbox, 70);
   meta.append(title, path, body);
-  const flags = document.createElement("div");
-  flags.className = "media-meta-flags";
-  if (item.degraded) {
-    const degraded = document.createElement("span");
-    degraded.className = "media-meta-flag is-degraded";
-    degraded.textContent = "媒体已降级";
-    degraded.title = text(item.degradation_reason).trim() || "部分媒体能力未完成";
-    flags.append(degraded);
-  }
-  if (flags.childElementCount) meta.append(flags);
   return meta;
 }
 

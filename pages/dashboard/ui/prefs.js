@@ -84,6 +84,21 @@ export function createSettingsConfig({
     }
   }
 
+  function setReloadConflict(value) {
+    if (!el.reloadConfigButton) return;
+    const conflicted = Boolean(value);
+    el.reloadConfigButton.classList.toggle("is-conflict", conflicted);
+    el.reloadConfigButton.setAttribute(
+      "aria-label",
+      conflicted ? "设置已发生冲突，请重新加载" : "重新加载设置",
+    );
+  }
+
+  function isConfigRevisionConflict(error) {
+    const message = text(error?.message).trim();
+    return message.includes("重新加载设置") || message.includes("设置已在其他页面");
+  }
+
   function configAutoSaveDelay(event) {
     const target = event?.target;
     if (event?.type === "change") return CONFIG_AUTO_SAVE_FAST_DELAY_MS;
@@ -343,6 +358,7 @@ export function createSettingsConfig({
     try {
       const data = await apiGet("page/config");
       applyConfigData(data);
+      setReloadConflict(false);
       if (!quiet) setNotice("");
     } catch (error) {
       setNotice(error.message || "设置加载失败", "error");
@@ -376,11 +392,13 @@ export function createSettingsConfig({
       } else {
         applyConfigData(data);
       }
+      setReloadConflict(false);
       await loadStatus({ quiet: true });
       if (!auto) setNotice("设置已保存。", "success");
     } catch (error) {
       shouldQueueNextSave = false;
       setConfigDirty(true);
+      setReloadConflict(isConfigRevisionConflict(error));
       setNotice(error.message || "设置保存失败", "error");
     } finally {
       state.configSaving = false;

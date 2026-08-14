@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 QZONE_REPLY_VERIFICATION_FIELDS = (
     "verification_status",
     "verified_reply_tid",

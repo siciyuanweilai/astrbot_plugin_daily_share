@@ -15,7 +15,7 @@ class QzoneContext:
     @property
     def gtk(self) -> str:
         value = 5381
-        for ch in self.p_skey:
+        for ch in self.skey:
             value += (value << 5) + ord(ch)
         return str(value & 0x7FFFFFFF)
 

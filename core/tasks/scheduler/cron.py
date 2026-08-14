@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
-from typing import Optional
+from typing import Any
 
 from astrbot.api import logger
 
@@ -27,7 +27,7 @@ class ScheduleJobDefinition:
 
 
 class TaskSchedulerCronService(SchedulerComponent):
-    def parse_cron_to_kwargs(self, cron_str: str) -> Optional[dict]:
+    def parse_cron_to_kwargs(self, cron_str: str) -> dict | None:
         """解析标准 5 位定时表达式：分、时、日、月、周。"""
         parts = cron_str.strip().split()
         if len(parts) != 5:
@@ -41,7 +41,7 @@ class TaskSchedulerCronService(SchedulerComponent):
         }
 
     @staticmethod
-    def clock_time_to_cron(time_value: str) -> Optional[str]:
+    def clock_time_to_cron(time_value: str) -> str | None:
         raw = str(time_value or "").strip()
         if ":" not in raw:
             return None

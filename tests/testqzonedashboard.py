@@ -6,7 +6,6 @@ from pathlib import Path
 
 from quart import Response, jsonify, request
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_qzone_dashboard_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"

@@ -12,9 +12,8 @@ from .formatting import (
     _qzone_auto_reply_comment_summary,
     _qzone_auto_reply_thread_summary,
 )
-from .vision import _qzone_auto_comment_image_context, _qzone_auto_reply_image_context
 from .policy import QzoneAutoPolicyService
-
+from .sight import _qzone_auto_comment_image_context, _qzone_auto_reply_image_context
 
 QZONE_AUTO_STYLE_PROMPT_LIMIT = 1200
 

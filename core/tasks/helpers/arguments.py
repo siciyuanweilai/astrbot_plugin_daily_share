@@ -3,7 +3,7 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import NEWS_SOURCE_MAP
 from ...constants import CMD_CN_MAP, SOURCE_CN_MAP
 from ...toolkit import log_exception
-from .context import TaskHelperContextService
+from .material import TaskHelperContextService
 
 
 class TaskHelperArgsService(TaskHelperContextService):

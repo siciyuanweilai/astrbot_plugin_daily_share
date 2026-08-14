@@ -1,5 +1,3 @@
-from .panelcomponent import PanelComponent
-
 import asyncio
 import json
 from datetime import datetime
@@ -7,6 +5,7 @@ from datetime import datetime
 from astrbot.api import logger
 
 from .common import _quart_response
+from .panelcomponent import PanelComponent
 
 
 class DashboardEventsService(PanelComponent):

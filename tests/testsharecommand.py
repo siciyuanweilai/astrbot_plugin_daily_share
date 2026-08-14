@@ -5,7 +5,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_share_command_testpkg"
 SUPPORT_MODULE_NAME = f"{PACKAGE_NAME}.core.support"

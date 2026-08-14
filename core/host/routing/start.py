@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from ..supportcomponent import SupportComponent
-
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import NEWS_SOURCE_MAP, ShareType
+from ..supportcomponent import SupportComponent
 
 
 class PluginShareStartRouteService(SupportComponent):

@@ -373,6 +373,16 @@
     padding-right: 0;
   }
 
+  .settings-config-actions {
+    top: 8px;
+    width: 100%;
+  }
+
+  .settings-config-actions .text-button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
   .settings-section {
     gap: 12px;
     min-height: 0;

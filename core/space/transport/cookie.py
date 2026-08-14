@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from typing import TYPE_CHECKING
 
+from ..methodset import QzoneMethodSet
 
 if TYPE_CHECKING:
     from ..models import QzoneContext
@@ -12,11 +10,11 @@ if TYPE_CHECKING:
 
 class QzoneH5CookieService(QzoneMethodSet):
     @staticmethod
-    def _h5_cookie_uin(ctx: "QzoneContext") -> str:
+    def _h5_cookie_uin(ctx: QzoneContext) -> str:
         return str(ctx.uin).removeprefix("o")
 
     def _h5_minimal_cookie_header(
-        self, ctx: "QzoneContext", *, o_prefix: bool = False
+        self, ctx: QzoneContext, *, o_prefix: bool = False
     ) -> str:
         raw_uin = self._h5_cookie_uin(ctx)
         cookie_uin = (
@@ -24,7 +22,7 @@ class QzoneH5CookieService(QzoneMethodSet):
         )
         return f"uin={cookie_uin};p_skey={ctx.p_skey}"
 
-    def _h5_cookie_header(self, ctx: "QzoneContext", *, o_prefix: bool = False) -> str:
+    def _h5_cookie_header(self, ctx: QzoneContext, *, o_prefix: bool = False) -> str:
         cookies = {
             key: str(value)
             for key, value in (ctx.cookie_values or {}).items()
@@ -45,14 +43,14 @@ class QzoneH5CookieService(QzoneMethodSet):
             cookies.setdefault("skey", ctx.skey)
         return self._cookie_header_from_values(cookies)
 
-    def _h5_headers(self, ctx: "QzoneContext") -> dict[str, str]:
+    def _h5_headers(self, ctx: QzoneContext) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
             "Cookie": self._h5_cookie_header(ctx),
         }
 
     def _h5_minimal_headers(
-        self, ctx: "QzoneContext", *, o_prefix: bool = False
+        self, ctx: QzoneContext, *, o_prefix: bool = False
     ) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
@@ -60,7 +58,7 @@ class QzoneH5CookieService(QzoneMethodSet):
         }
 
     def _h5_cookie_variants(
-        self, ctx: "QzoneContext"
+        self, ctx: QzoneContext
     ) -> list[tuple[str, dict[str, str]]]:
         variants: list[tuple[str, dict[str, str]]] = [
             ("minimal", self._h5_minimal_headers(ctx)),
@@ -87,7 +85,7 @@ class QzoneH5CookieService(QzoneMethodSet):
             unique.append((name, headers))
         return unique
 
-    def _h5_aiohttp_headers(self, ctx: "QzoneContext") -> dict[str, str]:
+    def _h5_aiohttp_headers(self, ctx: QzoneContext) -> dict[str, str]:
         headers = self._h5_headers(ctx)
         headers.update(
             {

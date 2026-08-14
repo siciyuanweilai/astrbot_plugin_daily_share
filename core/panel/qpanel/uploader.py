@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
-import base64
 import asyncio
+import base64
 import inspect
 
 from ..common import _quart_request
+from ..panelcomponent import PanelComponent
 
 
 class DashboardQzoneUploadService(PanelComponent):

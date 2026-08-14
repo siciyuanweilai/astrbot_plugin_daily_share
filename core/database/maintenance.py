@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 
-from .repository import DatabaseRepository
-
 from astrbot.api import logger
+
+from .repository import DatabaseRepository
 
 
 class DatabaseMaintenanceService(DatabaseRepository):

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from astrbot.api import logger
 
+from .database.history import DatabaseHistoryService
 from .database.maintenance import DatabaseMaintenanceService
 from .database.metrics import DatabaseDashboardService
 from .database.migrations import (
@@ -16,7 +17,6 @@ from .database.migrations import (
     schema_requires_backup,
 )
 from .database.newssnapshot import DatabaseNewsSnapshotService
-from .database.records import DatabaseHistoryService
 from .database.state import DatabaseStateService
 from .database.topics import DatabaseTopicService
 
@@ -277,7 +277,7 @@ class DatabaseManager:
             await asyncio.to_thread(
                 self._executor.shutdown,
                 wait=True,
-                cancel_futures=True,
+                cancel_futures=False,
             )
 
     def _sync_add_sent_history_with_news_snapshots(

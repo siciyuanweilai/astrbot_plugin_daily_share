@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from typing import Any
 from urllib.parse import parse_qs
 
+from ..methodset import QzoneMethodSet
 from ..models import QzoneContext, QzonePost
 
 

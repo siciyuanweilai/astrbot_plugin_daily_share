@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from astrbot.api import logger
 
@@ -15,7 +15,7 @@ class ContentSupportService(ContentComponent):
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)
 
-    def parse_category_config(self, data: Any) -> Dict[str, List[str]]:
+    def parse_category_config(self, data: Any) -> dict[str, list[str]]:
         result = {}
         if isinstance(data, dict):
             for name, tags_data in data.items():
@@ -37,7 +37,7 @@ class ContentSupportService(ContentComponent):
                             result[name] = tags
         return result
 
-    def _parse_category_tags(self, tags_data: Any) -> List[str]:
+    def _parse_category_tags(self, tags_data: Any) -> list[str]:
         if isinstance(tags_data, list):
             raw_tags = tags_data
         else:

@@ -5,7 +5,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_news_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
@@ -77,6 +76,22 @@ def _load_news_module():
 
 
 class NewsPayloadDecodingTests(unittest.TestCase):
+    def test_baike_success_flag_rejects_explicit_failure_and_accepts_code_fallback(self):
+        mod = _load_news_module()
+        self.assertIsNone(
+            mod.NewsService._baike_response_text(
+                {"success": False, "code": "200", "data": "错误"},
+                "测试",
+            )
+        )
+        self.assertEqual(
+            mod.NewsService._baike_response_text(
+                {"success": True, "code": "500", "data": "可用资料"},
+                "测试",
+            ),
+            "可用资料",
+        )
+
     def test_decode_payload_rejects_oversized_response(self):
         mod = _load_news_module()
         service = mod.NewsService({"news_conf": {}})

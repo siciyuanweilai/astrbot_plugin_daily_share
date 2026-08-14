@@ -1,7 +1,6 @@
-from .panelcomponent import PanelComponent
-
 import re
 
+from .panelcomponent import PanelComponent
 
 CALENDAR_DELAYED_SOURCE_JOB_IDS = {
     "delayed_auto_share": "auto_share",

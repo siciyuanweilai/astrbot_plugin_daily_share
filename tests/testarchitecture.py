@@ -36,15 +36,15 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.0.6", metadata)
-        self.assertIn("version-1.0.6", readme)
-        self.assertIn("v1.0.6 已发布", readme)
-        self.assertIn("v1.0.6 · 2026-08-13", changelog)
-        self.assertLess(changelog.index("v1.0.6"), changelog.index("v1.0.5"))
-        release = changelog.split("## 🧭 v1.0.6", 1)[1].split("## 🎨 v1.0.5", 1)[0]
-        self.assertIn("get_share_context(target_umo)", release)
+        self.assertIn("version: 1.0.7", metadata)
+        self.assertIn("version-1.0.7", readme)
+        self.assertIn("v1.0.7 已发布", readme)
+        self.assertIn("v1.0.7 · 2026-08-14", changelog)
+        self.assertLess(changelog.index("v1.0.7"), changelog.index("v1.0.6"))
+        release = changelog.split("## 🧰 v1.0.7", 1)[1].split("## 🧭 v1.0.6", 1)[0]
         self.assertIn("数据库结构保持 v2", release)
-        self.assertIn("成功分享记录", release)
+        self.assertIn("立即保存", release)
+        self.assertIn("60 秒总时间预算", release)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
@@ -67,6 +67,27 @@ class TaskArchitectureTests(unittest.TestCase):
         )
         self.assertIn("仪表盘组件必须绑定运行时", source)
         self.assertNotIn("Panel 组件必须绑定运行时", source)
+
+    def test_source_directories_are_single_words_and_do_not_match_modules(self):
+        source_roots = (ROOT / "core", ROOT / "pages", ROOT / "tests")
+        directories = {
+            path.name
+            for source_root in source_roots
+            for path in source_root.rglob("*")
+            if path.is_dir() and path.name != "__pycache__"
+        }
+        modules = {
+            path.stem
+            for source_root in source_roots
+            for path in source_root.rglob("*.py")
+            if path.name != "__init__.py"
+        }
+
+        invalid_directories = sorted(name for name in directories if not name.isalpha())
+        invalid_modules = sorted(name for name in modules if not name.isalpha())
+        self.assertEqual(invalid_directories, [])
+        self.assertEqual(invalid_modules, [])
+        self.assertEqual(sorted(directories & modules), [])
 
     def test_services_do_not_call_other_services_private_methods(self):
         pattern = re.compile(
@@ -311,6 +332,25 @@ class TaskArchitectureTests(unittest.TestCase):
         )
         self.assertIn("!state.configDirty && !state.configSaving", view)
         self.assertIn('target: ["cfgContactAliases"]', schema_map)
+
+    def test_dashboard_get_element_ids_exist_in_html(self):
+        dashboard = ROOT / "pages" / "dashboard"
+        html = (dashboard / "index.html").read_text(encoding="utf-8")
+        scripts = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(dashboard.rglob("*.js"))
+        )
+        element_ids = sorted(
+            set(re.findall(r'getElementById\(["\']([^"\']+)["\']\)', scripts))
+        )
+
+        self.assertTrue(element_ids)
+        for element_id in element_ids:
+            self.assertRegex(html, rf'\bid=["\']{re.escape(element_id)}["\']')
+
+        self.assertIn('id="saveConfigButton"', html)
+        self.assertIn('form="configForm"', html)
+        self.assertIn('id="reloadConfigButton"', html)
 
     def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
         html = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ..prompt import build_topic_category_boundary
 from .contentbase import ContentComponent
@@ -7,7 +6,7 @@ from .contentbase import ContentComponent
 class ContentTopicService(ContentComponent):
     async def _agent_brainstorm_topic(
         self, category_type: str, sub_category: str, target_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         选题智能提取：专门负责从给定的类别中，结合历史记录，避坑并选出一个有趣的、不重复的话题/作品名。
         """
@@ -50,7 +49,7 @@ class ContentTopicService(ContentComponent):
    - 如果是生活类，优先选实用性强的。
    - 如果是科普类，优先选反直觉或颠覆认知的。
    - 不要刻意追求“生僻难懂”，大众感兴趣的话题也可以。
-3. 不要输出上述“已分享过的列表”中的内容，必须换一个新的。 
+3. 不要输出上述“已分享过的列表”中的内容，必须换一个新的。
 4. 只输出关键词，不要任何解释，不要标点符号。
 """
 

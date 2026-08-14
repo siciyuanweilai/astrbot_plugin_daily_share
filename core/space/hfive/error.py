@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 import asyncio
 import re
 from typing import Any
 
 import aiohttp
+
+from ..methodset import QzoneMethodSet
 
 try:
     import httpx

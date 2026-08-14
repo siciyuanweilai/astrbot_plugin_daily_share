@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from .methodset import QzoneMethodSet
-
-
 from .models import QzoneComment, QzonePost
 
 

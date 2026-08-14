@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from ...config import ShareType, TimePeriod
 
@@ -30,7 +31,7 @@ class ImageVisualFrameService:
     """视觉构图和穿搭一致性提示。"""
 
     def _resolve_composition(
-        self, visuals: Dict, involves_self: bool
+        self, visuals: dict, involves_self: bool
     ) -> tuple[str, str]:
         composition = str(visuals.get("composition", "") or "").strip()
         frame_logic = str(
@@ -61,7 +62,7 @@ class ImageVisualFrameService:
         )
 
     def _format_outfit_consistency_hint(
-        self, visuals: Dict, frame_hint: str = ""
+        self, visuals: dict, frame_hint: str = ""
     ) -> str:
         scene_type = str(visuals.get("scene_type", "") or "").strip()
         temperature = str(visuals.get("temperature_feel", "") or "").strip()

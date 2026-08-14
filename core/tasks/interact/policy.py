@@ -20,7 +20,6 @@ from .tracker import (
     _qzone_processed_thread_has_self_reply,
 )
 
-
 QZONE_ACTIVE_WINDOW_MIN_TIMESTAMP = 946684800
 
 

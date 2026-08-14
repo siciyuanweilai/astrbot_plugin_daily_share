@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 _URL_PREFIXES = ("https://", "http://")
 _URL_TRAILING_PUNCTUATION = ".,;:!?，。；：！？"
 

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
-
 from astrbot.api import logger
+
+from ..panelcomponent import PanelComponent
 
 
 class DashboardQzoneFeedService(PanelComponent):

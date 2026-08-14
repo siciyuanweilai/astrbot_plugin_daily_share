@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 from datetime import datetime
 
 from astrbot.api import logger
@@ -12,6 +10,7 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
 )
+from ..panelcomponent import PanelComponent
 
 
 def _retry_failure_message(target_id: str) -> str:

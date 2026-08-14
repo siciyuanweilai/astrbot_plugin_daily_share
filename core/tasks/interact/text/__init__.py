@@ -1,3 +1,8 @@
+from .abstract import (
+    _qzone_auto_comment_post_summary,
+    _qzone_post_plain_text,
+    _qzone_summary_generation_failed_suffix,
+)
 from .clean import (
     _clean_auto_comment_text,
     _compact_auto_comment_spacing,
@@ -5,7 +10,7 @@ from .clean import (
     _strip_qzone_mention_tags,
     _trim_text_utf8_bytes,
 )
-from .thread import (
+from .lineage import (
     _qzone_auto_reply_comment_summary,
     _qzone_auto_reply_thread_summary,
     _qzone_comment_created_at,
@@ -18,18 +23,12 @@ from .thread import (
     _qzone_thread_history_summary,
     _same_qzone_comment,
 )
-from .abstract import (
-    _qzone_auto_comment_post_summary,
-    _qzone_post_plain_text,
-    _qzone_summary_generation_failed_suffix,
-)
 from .time import (
     _compact_qzone_auto_life_context,
     _format_qzone_local_datetime,
     _qzone_auto_interaction_time_context,
     _qzone_period_label,
 )
-
 
 __all__ = [
     "_clean_auto_comment_text",

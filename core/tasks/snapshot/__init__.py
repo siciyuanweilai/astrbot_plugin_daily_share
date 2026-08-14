@@ -4,7 +4,6 @@ from .formatter import TaskNewsCacheFormatService
 from .lookup import TaskNewsCacheLookupService
 from .store import TaskNewsCacheStoreService
 
-
 __all__ = [
     "TaskNewsCacheFocusService",
     "TaskNewsCacheFormatService",

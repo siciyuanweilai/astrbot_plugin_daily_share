@@ -5,8 +5,8 @@ from astrbot.api import logger
 from ...config import CRON_TEMPLATES
 from ...database.keys import target_state_key
 from ...schedule import BRIEFING_SCHEDULE, GLOBAL_SCHEDULE, QZONE_SCHEDULE
-from .schedulerbase import SchedulerComponent
 from .cron import ScheduleJobDefinition
+from .schedulerbase import SchedulerComponent
 
 
 class TaskSchedulerSetupService(SchedulerComponent):
@@ -84,7 +84,6 @@ class TaskSchedulerSetupService(SchedulerComponent):
                 run_share,
                 lock=self._lock,
                 locked_warning=f"[日常分享] 独立任务 {target_id} 触发时系统仍在分享，已跳过本次触发",
-                background=True,
             )
 
         async def wrapper():

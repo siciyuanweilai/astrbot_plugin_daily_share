@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from ..supportcomponent import SupportComponent
-
 import asyncio
 
 from astrbot.api import logger
@@ -13,6 +11,7 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_COMMAND,
 )
+from ..supportcomponent import SupportComponent
 
 
 class ImageDeliveryShareService(SupportComponent):

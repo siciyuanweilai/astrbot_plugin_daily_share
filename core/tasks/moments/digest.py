@@ -3,7 +3,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import NEWS_SOURCE_MAP
 from ...database.keys import HISTORY_SHARE_NEWS, QZONE_STATE_KEY, QZONE_TARGET_ID
-from .content import TaskQzoneContentService
+from .caption import TaskQzoneContentService
 
 
 class TaskQzoneNewsService(TaskQzoneContentService):

@@ -5,7 +5,6 @@ from typing import Any
 from .comments import _comment_created_at, _comment_tid, _comment_uin
 from .formatting import _qzone_post_plain_text
 
-
 QZONE_AUTO_COMMENT_STATE_KEY = "qzone_auto_comment"
 QZONE_AUTO_COMMENT_DEFAULT_CRON = "0 */2 * * *"
 QZONE_AUTO_COMMENT_DEFAULT_LIMIT = 3

@@ -1,6 +1,5 @@
 import random
 from datetime import datetime
-from typing import Optional
 
 from astrbot.api import logger
 
@@ -142,7 +141,7 @@ class NewsSourceService(NewsParserService):
 
         return final_url, NEWS_SOURCE_MAP[source]["name"]
 
-    def get_60s_image_url(self) -> Optional[str]:
+    def get_60s_image_url(self) -> str | None:
         """获取每日 60 秒读世界图片链接"""
         key = self.conf.get("nycnm_api_key", "").strip()
         if not key:
@@ -150,7 +149,7 @@ class NewsSourceService(NewsParserService):
             return None
         return f"https://api.nycnm.cn/api/v2/60s?format=image&apikey={key}"
 
-    def get_ai_news_image_url(self) -> Optional[str]:
+    def get_ai_news_image_url(self) -> str | None:
         """获取每日 AI 资讯图片链接。"""
         key = self.conf.get("nycnm_api_key", "").strip()
         if not key:

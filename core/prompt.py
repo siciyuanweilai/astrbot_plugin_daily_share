@@ -1,6 +1,5 @@
 import re
 
-
 TOPIC_CATEGORY_RULES = {
     "美食": {
         "target_desc": "具体食物名称",

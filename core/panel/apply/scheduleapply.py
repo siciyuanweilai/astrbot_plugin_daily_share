@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
 from ...schedule import ScheduleDefinition
+from ..panelcomponent import PanelComponent
 
 
 class DashboardApplyScheduleService(PanelComponent):

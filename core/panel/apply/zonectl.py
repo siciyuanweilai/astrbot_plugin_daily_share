@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 from ...constants import TYPE_CN_MAP
 from ...schedule import QZONE_SCHEDULE
 from ..common import _PAGE_QZONE_SEQUENCE_DEFAULTS
+from ..panelcomponent import PanelComponent
 
 
 class DashboardApplyQzoneService(PanelComponent):

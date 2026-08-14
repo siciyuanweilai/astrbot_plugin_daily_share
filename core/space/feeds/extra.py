@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
-import time
 import re
+import time
 from datetime import datetime
 from typing import Any
 
@@ -14,6 +11,7 @@ from ..entry import (
     parse_last_year,
     parse_message_board,
 )
+from ..methodset import QzoneMethodSet
 from ..models import QzonePost
 from ..parse import parse_recent_feed_list
 from ..relation import parse_qzone_relations, parse_qzone_visit_stats

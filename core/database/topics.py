@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from typing import List
 
 from .repository import DatabaseRepository
 
@@ -20,7 +19,7 @@ class DatabaseTopicService(DatabaseRepository):
     async def record_topic(self, target_id: str, category: str, content_key: str):
         await self._execute(self._sync_record_topic, target_id, category, content_key)
 
-    def _sync_get_used_topics(self, target_id, category, days_limit=60) -> List[str]:
+    def _sync_get_used_topics(self, target_id, category, days_limit=60) -> list[str]:
         date_limit = (datetime.now() - timedelta(days=days_limit)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
@@ -35,7 +34,7 @@ class DatabaseTopicService(DatabaseRepository):
 
     async def get_used_topics(
         self, target_id: str, category: str, days_limit: int = 60
-    ) -> List[str]:
+    ) -> list[str]:
         return await self._execute(
             self._sync_get_used_topics, target_id, category, days_limit
         )

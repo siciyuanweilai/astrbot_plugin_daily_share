@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from typing import Any
 
+from ..methodset import QzoneMethodSet
 from ..models import QzonePost
 from ..parse import parse_feed_item
 

@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Callable
-from typing import Optional
 
 from astrbot.api import logger
 
@@ -87,7 +86,7 @@ class LlmService:
         max_retries: int = 2,
         tools: list | None = None,
         umo: str | None = None,
-    ) -> Optional[str]:
+    ) -> str | None:
         """调用模型，并对超时和可恢复错误进行有限重试。"""
         if self._is_terminated():
             return None

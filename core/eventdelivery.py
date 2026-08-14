@@ -4,7 +4,6 @@ import asyncio
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
 
-
 EVENT_SEND_TIMEOUT_SECONDS = 120
 
 

@@ -1,5 +1,3 @@
-from .panelcomponent import PanelComponent
-
 from astrbot.api import logger
 
 from ..database.keys import (
@@ -7,6 +5,7 @@ from ..database.keys import (
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
 )
+from .panelcomponent import PanelComponent
 
 
 class DashboardLabelsService(PanelComponent):
@@ -70,7 +69,7 @@ class DashboardLabelsService(PanelComponent):
         known_labels = {
             QZONE_TARGET_ID: "QQ \u7a7a\u95f4",
             GLOBAL_TARGET_ID: "\u5168\u5c40\u5206\u4eab",
-            **{key: "\u65e9\u62a5" for key in BRIEFING_TARGET_ALIASES},
+            **dict.fromkeys(BRIEFING_TARGET_ALIASES, "早报"),
         }
         if raw in known_labels:
             return known_labels[raw]

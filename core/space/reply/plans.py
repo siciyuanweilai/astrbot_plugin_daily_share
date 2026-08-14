@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from typing import Any
 
+from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzoneContext, QzonePost
 from .commentid import QzoneReplyIdentityService
 from .recipients import QzoneReplyTargetService
-
 
 QZONE_BASE_URL = "https://user.qzone.qq.com"
 

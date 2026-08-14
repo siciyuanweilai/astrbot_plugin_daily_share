@@ -1,11 +1,12 @@
 import asyncio
 import random
-from typing import Any, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from astrbot.api import logger
 
-from ..database.keys import QZONE_TARGET_ID
 from ..config import NEWS_SOURCE_MAP
+from ..database.keys import QZONE_TARGET_ID
 from ..prompt import build_common_content_rules
 from .contentbase import ContentComponent
 from .evidence import strip_news_reference_links
@@ -193,7 +194,7 @@ class ContentNewsService(ContentComponent):
 
 直接输出："""
 
-    async def _gen_news(self, news_data: Tuple[List, str] | None, ctx: dict):
+    async def _gen_news(self, news_data: tuple[list, str] | None, ctx: dict):
         """生成新闻分享，带基于联网搜索的自动核查功能。"""
         if not news_data:
             logger.warning("[内容服务] 未获取到新闻数据，取消分享")

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 from typing import Any
 
+from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzonePost
 from .commentid import QzoneReplyIdentityService
 

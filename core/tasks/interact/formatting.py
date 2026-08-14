@@ -26,7 +26,6 @@ from .text import (
     _trim_text_utf8_bytes,
 )
 
-
 __all__ = [
     "_clean_auto_comment_text",
     "_compact_auto_comment_spacing",

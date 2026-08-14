@@ -28,8 +28,16 @@ class ContentKnowledgeService(ContentComponent):
         # 0. 获取配置
         allow_detail = self.context_conf.get("group_share_schedule", False)
         # 随机选择大类和子类
-        main_cat = random.choice(list(self.knowledge_cats.keys()))
-        sub_cat = random.choice(self.knowledge_cats[main_cat])
+        categories = [
+            (name, tags)
+            for name, tags in self.knowledge_cats.items()
+            if isinstance(tags, (list, tuple)) and tags
+        ]
+        if not categories:
+            logger.warning("[内容服务] 知识库未配置有效分类，取消知识分享")
+            return None
+        main_cat, tags = random.choice(categories)
+        sub_cat = random.choice(tags)
         target_id = ctx["target_id"]
 
         logger.info(f"[内容服务] 知识方向: {main_cat} - {sub_cat}")

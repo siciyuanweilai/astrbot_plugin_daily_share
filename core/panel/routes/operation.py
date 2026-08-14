@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
-
 from datetime import datetime
 
 from astrbot.api import logger
 
 from ...database.keys import SOURCE_MANUAL
+from ..panelcomponent import PanelComponent
 
 _PAGE_SHARE_TARGET_SCOPES = {
     "broadcast_groups": "groups",

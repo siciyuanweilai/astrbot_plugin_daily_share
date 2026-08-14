@@ -95,10 +95,12 @@ def _validate_tables(
 
     for table_name, expected in expected_columns.items():
         actual = _table_columns(conn, table_name)
-        if actual != tuple(expected):
+        expected_names = tuple(str(column) for column in expected)
+        if set(actual) != set(expected_names) or len(actual) != len(expected_names):
             raise DatabaseMigrationError(
                 f"数据表 {table_name} 字段不匹配；"
-                f"期望 {', '.join(expected)}；实际 {', '.join(actual) or '空'}"
+                f"期望 {', '.join(sorted(expected_names))}；"
+                f"实际 {', '.join(sorted(actual)) or '空'}"
             )
 
 

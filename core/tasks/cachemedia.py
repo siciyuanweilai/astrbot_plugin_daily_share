@@ -2,9 +2,9 @@ import asyncio
 import os
 import random
 import re
-from typing import Optional
 
 import aiofiles
+
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
@@ -106,7 +106,7 @@ class TaskDeliveryAssetsService(TaskServiceBase):
             return False
         return source_key in NEWS_SOURCE_MAP or source_key in {"60s", "ai", "news"}
 
-    async def download_image_to_local(self, url: str, filename: str) -> Optional[str]:
+    async def download_image_to_local(self, url: str, filename: str) -> str | None:
         """将图片预先下载到本地临时文件夹再发送。"""
         temp_path = None
         try:

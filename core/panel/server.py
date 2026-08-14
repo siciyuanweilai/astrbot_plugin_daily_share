@@ -1,17 +1,16 @@
-from .panelcomponent import PanelComponent
-
 import asyncio
 import json
 
 from astrbot.api import logger
 
+from ..jsonio import write_json_atomic
 from .common import (
     _PAGE_MEDIA_CACHE_SECONDS,
     _PAGE_PREFERENCES_DEFAULTS,
     _quart_jsonify,
     _quart_request,
 )
-from ..jsonio import write_json_atomic
+from .panelcomponent import PanelComponent
 
 
 class DashboardBaseService(PanelComponent):
@@ -210,7 +209,7 @@ class DashboardBaseService(PanelComponent):
 
     @staticmethod
     def _read_json_sync(path):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
 
     def _normalize_page_preferences(self, preferences=None) -> dict:

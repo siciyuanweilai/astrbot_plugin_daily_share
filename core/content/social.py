@@ -82,7 +82,7 @@ class ContentSocialService(ContentComponent):
 1. 以你的人设性格说话，真实自然
 2. 基于当前真实时间问候
 3. 忽略群聊历史，直接开启新问候
-{greeting_constraint} 
+{greeting_constraint}
 5. {"简短（80-100字）" if is_group else "可适当长一些（100-120字）"}
 6. 直接输出内容，不要解释
 

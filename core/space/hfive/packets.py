@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
-
-
 import gzip
 import json
 import zlib
 from typing import Any
+
+from ..methodset import QzoneMethodSet
 
 
 class QzoneH5BaseService(QzoneMethodSet):
@@ -53,7 +52,9 @@ class QzoneH5BaseService(QzoneMethodSet):
 
     @staticmethod
     def _h5_ok(payload: dict[str, Any]) -> bool:
-        code = payload.get("ret", payload.get("code", 0))
+        code = payload.get("ret")
+        if code is None:
+            code = payload.get("code", 0)
         try:
             return int(code or 0) == 0
         except (TypeError, ValueError):

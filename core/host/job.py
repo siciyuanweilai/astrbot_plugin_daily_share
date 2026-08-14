@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from .supportcomponent import SupportComponent
-
 from collections.abc import Awaitable, Callable
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
+
+from .supportcomponent import SupportComponent
 
 
 class PluginShareJobService(SupportComponent):
@@ -45,7 +45,6 @@ class PluginShareJobService(SupportComponent):
         if task is not None:
             return True
 
-        manual_coro.close()
         self.jobs._release_manual_share_task_lock(
             share_lock,
             specific_target=specific_target,

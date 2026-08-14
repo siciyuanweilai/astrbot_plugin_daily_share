@@ -194,12 +194,17 @@ class DashboardMediaPreviewTests(unittest.TestCase):
         status_source = (ROOT / "pages" / "dashboard" / "ui" / "status.js").read_text(
             encoding="utf-8"
         )
+        item_source = (ROOT / "pages" / "dashboard" / "ui" / "items.js").read_text(
+            encoding="utf-8"
+        )
         kind_source = (ROOT / "core" / "panel" / "gallery" / "kind.py").read_text(
             encoding="utf-8"
         )
 
         self.assertIn('mediaKind: "degraded"', status_source)
         self.assertIn('"degraded"', kind_source)
+        self.assertNotIn("媒体已降级", item_source)
+        self.assertNotIn("部分媒体能力未完成", item_source)
 
     def test_qzone_auto_interaction_delayed_job_uses_readable_dashboard_name(self):
         mod = _load_main_module()

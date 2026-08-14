@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_auto_comment_testpkg"
 CORE_PACKAGE_NAME = f"{PACKAGE_NAME}.core"
@@ -1065,7 +1064,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             images=["https://example.com/sun.jpg"],
         )
 
-        vision_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.vision"]
+        vision_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.sight"]
         with patch.object(
             vision_module.logger,
             "debug",
@@ -1548,6 +1547,51 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             manager.context.calls[0]["chat_provider_id"], "qzone-vision-provider"
         )
+
+    async def test_auto_comment_image_vision_uses_one_total_timeout_budget(self):
+        _module, _models = _load_auto_comment_module()
+        vision_module = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.sight"]
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            async def get_current_chat_provider_id(self, _umo):
+                return "session-provider"
+
+            def get_config(self):
+                return {}
+
+            def get_using_provider(self):
+                return None
+
+            async def llm_generate(self, **kwargs):
+                self.calls.append(kwargs["chat_provider_id"])
+                await asyncio.sleep(1)
+
+        context = Context()
+        owner = types.SimpleNamespace(
+            plugin=types.SimpleNamespace(context=context),
+            _qzone_auto_config=lambda: types.SimpleNamespace(
+                comment_image_vision_enabled=True,
+                comment_image_vision_limit=1,
+                comment_image_vision_provider="qzone-vision-provider",
+            ),
+        )
+
+        with patch.object(
+            vision_module,
+            "QZONE_IMAGE_VISION_TIMEOUT_SECONDS",
+            0.01,
+        ):
+            result = await vision_module._describe_qzone_image(
+                owner,
+                "https://example.com/cat.jpg",
+                target_umo="session-1",
+            )
+
+        self.assertEqual(result, "")
+        self.assertEqual(context.calls, ["qzone-vision-provider"])
 
     async def test_auto_comment_image_vision_falls_back_from_configured_to_session_provider_per_request(
         self,
