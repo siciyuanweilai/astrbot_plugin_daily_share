@@ -391,9 +391,7 @@ async def _describe_qzone_image(owner, image_url: str, *, target_umo: str = "") 
         "只写可见事实、可见文字和整体氛围，不要猜身份、关系、地点隐私或回复建议。"
         "输出 8-60 字中文短句。"
     )
-    deadline = (
-        asyncio.get_running_loop().time() + QZONE_IMAGE_VISION_TIMEOUT_SECONDS
-    )
+    deadline = asyncio.get_running_loop().time() + QZONE_IMAGE_VISION_TIMEOUT_SECONDS
     for index, (provider_id, provider_source) in enumerate(provider_candidates):
         provider_label = _qzone_provider_label(context, provider_id)
         logger.debug(

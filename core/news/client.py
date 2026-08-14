@@ -163,9 +163,7 @@ class NewsApiService:
     @staticmethod
     def _baike_response_text(data: dict, keyword: str) -> str | None:
         success = data.get("success")
-        if success is False or (
-            str(data.get("code")) != "200" and success is not True
-        ):
+        if success is False or (str(data.get("code")) != "200" and success is not True):
             return None
         info = data.get("data")
         if isinstance(info, str):

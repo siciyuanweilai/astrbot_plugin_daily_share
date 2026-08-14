@@ -131,9 +131,7 @@ class NewsParserService(NewsApiService):
                 return value
         return ""
 
-    def _parse_response(
-        self, data: Any, limit: int | None = None
-    ) -> list[dict] | None:
+    def _parse_response(self, data: Any, limit: int | None = None) -> list[dict] | None:
         """
         解析响应数据
         支持多层级结构化数据和多种上游字段名。

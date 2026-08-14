@@ -226,6 +226,38 @@ class QzoneParserTests(unittest.TestCase):
         self.assertEqual(payload["code"], 0)
         self.assertEqual(payload["msg"], "succ")
 
+    def test_parse_qzone_response_supports_feeds3_undefined_items(self):
+        payload = _parser().parse_qzone_response(
+            r'''{
+                "code": 0,
+                "subcode": 0,
+                "message": "",
+                "data": {
+                    main: {hasMoreFeeds: true, externparam: 'pagenum=2'},
+                    data: [
+                        {
+                            appid: '311',
+                            key: 'stream-key',
+                            title: 'undefined 应保留为正文',
+                            html: '\x3Cli class=\x22f-single\x22 data-extra=\x22{"kind":"mood"}\x22>\x3Cdiv class=\x22f-nick\x22>\x3Ca class=\x22f-name q_namecard\x22 link=\x22nameCard_2492835361\x22>测试用户甲\x3C/a>\x3C/div>\x3Cdiv>\x3Ci name=\x22feed_data\x22 data-uin=\x222492835361\x22 data-fkey=\x22real-fkey\x22>\x3C/i>\x3Cdiv class=\x22f-info\x22>今天去了书店\x3C/div>\x3C/div>\x3C/li>',
+                            mergeData: [undefined],
+                        },
+                        undefined,
+                    ],
+                },
+            }'''
+        )
+
+        self.assertEqual(payload["code"], 0)
+        self.assertIsNone(payload["data"]["data"][1])
+        self.assertEqual(
+            payload["data"]["data"][0]["title"], "undefined 应保留为正文"
+        )
+        posts = parse_recent_feed_list(payload)
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].key, "2492835361:real-fkey")
+        self.assertEqual(posts[0].text, "今天去了书店")
+
     def test_relation_parser_normalizes_care_friend_items(self):
         relation = _load_qzone_relation()
 
@@ -1683,7 +1715,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.call["url"], service.RELATION_URL)
         self.assertEqual(service.call["params"]["uin"], 100000001)
         self.assertEqual(service.call["params"]["do"], 2)
-        self.assertEqual(service.call["params"]["g_tk"], "2090726337")
+        self.assertEqual(service.call["params"]["g_tk"], "337168208")
 
     async def test_query_posts_with_detail_keeps_list_comments_when_detail_has_none(
         self,
@@ -2167,7 +2199,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("skey=skey", headers["Cookie"])
         self.assertIn("ptcz=noise", headers["Cookie"])
 
-    async def test_qzone_tokens_use_their_respective_cookie_salts(self):
+    async def test_qzone_pc_tokens_use_p_skey(self):
         service_module = _load_qzone_service()
         ctx = service_module.QzoneContext(
             uin=100000001,
@@ -2181,9 +2213,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 result += (result << 5) + ord(char)
             return str(result & 0x7FFFFFFF)
 
-        self.assertEqual(ctx.gtk, token("skey-value"))
-        self.assertEqual(ctx.gtk2, token("p-skey-value"))
-        self.assertNotEqual(ctx.gtk, ctx.gtk2)
+        expected = token("p-skey-value")
+        self.assertEqual(ctx.gtk, expected)
+        self.assertEqual(ctx.gtk2, expected)
 
     async def test_h5_success_falls_back_to_code_when_ret_is_null(self):
         service_module = _load_qzone_service()
@@ -3575,6 +3607,109 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "confirmed")
         self.assertEqual(result["verified_reply_tid"], "2_r_3_100000001")
         self.assertEqual(result["candidates"][-1]["raw_reply_to_tid"], "2")
+
+    async def test_verify_thread_reply_refreshes_detail_cache_before_every_attempt(
+        self,
+    ):
+        service_module = _load_qzone_service()
+
+        class Service(service_module.QzoneService):
+            def __init__(self):
+                super().__init__(_qzone_plugin())
+                self.cache_hits = []
+                self.detail_responses = []
+
+            async def detail(self, post_id):
+                cached = post_id in self._post_detail_cache_at
+                self.cache_hits.append(cached)
+                if cached:
+                    return self._post_cache[post_id]
+                self._post_detail_cache_at[post_id] = 1.0
+                return self.detail_responses.pop(0)
+
+        service = Service()
+        parent = service_module.QzoneComment(
+            uin=100000002,
+            nickname="Friend",
+            tid="2",
+            submit_tid="2",
+            content="出门了吗",
+            create_time=100,
+        )
+        prior_self_reply = service_module.QzoneComment(
+            uin=100000001,
+            nickname="Me",
+            tid="2_r_1_100000001",
+            submit_tid="1",
+            raw_tid="1",
+            parent_tid="2",
+            reply_to_tid="2",
+            reply_to_uin=100000002,
+            content="前一条回复",
+            create_time=110,
+        )
+        target = service_module.QzoneComment(
+            uin=100000002,
+            nickname="Friend",
+            tid="2_r_2_100000002",
+            submit_tid="2",
+            parent_tid="2",
+            reply_to_tid=prior_self_reply.tid,
+            reply_to_uin=100000001,
+            content="等你好久了",
+            create_time=120,
+        )
+        post = service_module.QzonePost(
+            uin=100000001,
+            tid="post-1",
+            comments=[parent, prior_self_reply, target],
+        )
+        fresh = service_module.QzonePost(
+            uin=post.uin,
+            tid=post.tid,
+            comments=[
+                parent,
+                prior_self_reply,
+                target,
+                service_module.QzoneComment(
+                    uin=100000001,
+                    nickname="Me",
+                    tid="2_r_3_100000001",
+                    submit_tid="3",
+                    raw_tid="3",
+                    parent_tid="2",
+                    reply_to_tid=target.tid,
+                    raw_reply_to_tid="2",
+                    reply_to_uin=target.uin,
+                    content="@{uin:100000002,nick:Friend,auto:1} reply",
+                    create_time=200,
+                ),
+            ],
+        )
+        service._post_cache[post.key] = post
+        service._post_detail_cache_at[post.key] = 1.0
+        service.detail_responses = [post, post, fresh]
+
+        async def no_sleep(_delay):
+            return None
+
+        with patch.object(asyncio, "sleep", no_sleep):
+            result = await service._verify_thread_reply_submission(
+                post,
+                target,
+                "@{uin:100000002,nick:Friend,auto:1} reply",
+                parent_comment=parent,
+                ctx=service_module.QzoneContext(
+                    uin=100000001,
+                    skey="skey",
+                    p_skey="p_skey",
+                ),
+                submitted_at=150,
+            )
+
+        self.assertEqual(result["status"], "confirmed")
+        self.assertEqual(result["verified_reply_tid"], "2_r_3_100000001")
+        self.assertEqual(service.cache_hits, [False, False, False])
 
     async def test_reply_comment_rejects_unsafe_thread_reply_without_fallback(
         self,

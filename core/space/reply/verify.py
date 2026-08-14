@@ -38,6 +38,10 @@ class QzoneReplyVerifyService(QzoneMethodSet):
             if delay:
                 await asyncio.sleep(delay)
             try:
+                self._invalidate_qzone_cache(
+                    post_id=post.key,
+                    target_id=str(post.uin),
+                )
                 fresh = await self.detail(post.key)
             except Exception as exc:
                 last = {**base, "status": "detail_failed", "error": str(exc or "")}

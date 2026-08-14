@@ -1,4 +1,3 @@
-
 from ..prompt import build_topic_category_boundary
 from .contentbase import ContentComponent
 

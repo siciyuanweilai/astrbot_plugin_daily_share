@@ -56,7 +56,7 @@ def _json_object_candidates(raw: str) -> list[str]:
 
 
 def _parse_json_object(body: str) -> dict[str, Any]:
-    normalized = str(body or "").replace("undefined", "null")
+    normalized = str(body or "")
     try:
         parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
@@ -72,15 +72,116 @@ def _parse_json_object(body: str) -> dict[str, Any]:
     return parsed
 
 
+def _json_compatible_js_literal(body: str) -> str:
+    source = str(body or "")
+    output: list[str] = []
+    index = 0
+    length = len(source)
+    hex_digits = frozenset("0123456789abcdefABCDEF")
+
+    while index < length:
+        ch = source[index]
+        if ch in {"'", '"'}:
+            quote = ch
+            output.append('"')
+            index += 1
+            while index < length:
+                current = source[index]
+                if current == quote:
+                    output.append('"')
+                    index += 1
+                    break
+                if current != "\\":
+                    output.append('\\"' if current == '"' else current)
+                    index += 1
+                    continue
+
+                if index + 1 >= length:
+                    output.append("\\\\")
+                    index += 1
+                    continue
+                escaped = source[index + 1]
+                if escaped == "x" and (
+                    index + 3 < length
+                    and source[index + 2] in hex_digits
+                    and source[index + 3] in hex_digits
+                ):
+                    output.append(f"\\u00{source[index + 2 : index + 4]}")
+                    index += 4
+                    continue
+                if escaped == "u" and (
+                    index + 5 < length
+                    and all(
+                        item in hex_digits for item in source[index + 2 : index + 6]
+                    )
+                ):
+                    output.append(source[index : index + 6])
+                    index += 6
+                    continue
+                if escaped in {"\n", "\r"}:
+                    index += 2
+                    if escaped == "\r" and index < length and source[index] == "\n":
+                        index += 1
+                    continue
+                if escaped == "v":
+                    output.append("\\u000b")
+                elif escaped == "0" and (
+                    index + 2 >= length or not source[index + 2].isdigit()
+                ):
+                    output.append("\\u0000")
+                elif escaped == "'":
+                    output.append("'")
+                elif escaped == '"':
+                    output.append('\\"')
+                elif escaped in {"\\", "/", "b", "f", "n", "r", "t"}:
+                    output.append(f"\\{escaped}")
+                else:
+                    output.append(json.dumps(escaped, ensure_ascii=False)[1:-1])
+                index += 2
+            continue
+
+        if source.startswith("//", index):
+            newline = source.find("\n", index + 2)
+            index = length if newline < 0 else newline
+            continue
+        if source.startswith("/*", index):
+            ending = source.find("*/", index + 2)
+            index = length if ending < 0 else ending + 2
+            continue
+
+        if ch.isalpha() or ch in {"_", "$"}:
+            end = index + 1
+            while end < length and (source[end].isalnum() or source[end] in {"_", "$"}):
+                end += 1
+            token = source[index:end]
+            next_index = end
+            while next_index < length and source[next_index].isspace():
+                next_index += 1
+            if next_index < length and source[next_index] == ":":
+                output.append(json.dumps(token, ensure_ascii=False))
+            elif token in {"undefined", "NaN", "Infinity"}:
+                output.append("null")
+            else:
+                output.append(token)
+            index = end
+            continue
+
+        if ch == ",":
+            next_index = index + 1
+            while next_index < length and source[next_index].isspace():
+                next_index += 1
+            if next_index < length and source[next_index] in {"}", "]"}:
+                index += 1
+                continue
+
+        output.append(ch)
+        index += 1
+
+    return "".join(output)
+
+
 def _parse_js_object_literal(body: str) -> dict[str, Any]:
-    normalized = str(body or "").replace("undefined", "null")
-    quoted = re.sub(
-        r"(?<=[{,\s])([A-Za-z_$][\w$]*)\s*:",
-        r'"\1":',
-        normalized,
-    )
-    quoted = re.sub(r"'([^'\\]*(?:\\.[^'\\]*)*)'", r'"\1"', quoted)
-    parsed = json.loads(quoted)
+    parsed = json.loads(_json_compatible_js_literal(body))
     if not isinstance(parsed, dict):
         raise ValueError("响应格式异常")
     return parsed
@@ -208,7 +309,7 @@ def _object_literal_mapping(value: str) -> dict[str, Any]:
     if not text:
         return {}
     try:
-        parsed = json.loads(text.replace("undefined", "null"))
+        parsed = json.loads(text)
     except (TypeError, ValueError):
         if json5 is None:
             parsed = None
@@ -218,13 +319,8 @@ def _object_literal_mapping(value: str) -> dict[str, Any]:
             except Exception:
                 parsed = None
     if parsed is None:
-        quoted = re.sub(
-            r"(?<=[{,\s])([A-Za-z_$][\w$]*)\s*:",
-            r'"\1":',
-            text.replace("undefined", "null"),
-        )
         try:
-            parsed = json.loads(quoted)
+            parsed = _parse_js_object_literal(text)
         except (TypeError, ValueError):
             return {}
     return parsed if isinstance(parsed, dict) else {}

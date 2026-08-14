@@ -7,4 +7,6 @@ from .transmit import TaskDeliverySendService
 
 class TaskDeliveryService(TaskDeliverySendService):
     """平台发送与投递结果处理。"""
+
+
 __all__ = ["TaskDeliveryService", "random"]

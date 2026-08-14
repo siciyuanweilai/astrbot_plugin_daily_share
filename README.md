@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.7-ef6f8f" alt="版本 1.0.7"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.8-ef6f8f" alt="版本 1.0.8"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -35,7 +35,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.7 已发布**：修复 QQ 空间评论正文冒号被截断、视觉识别等待无总上限、空内容分类异常和设置页保存控件缺失；同时加固 QQ 空间请求参数、首页动态解析与数据库关闭写入。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.0.8 已发布**：修复 QQ 空间 `gtk` 错误派生引发的 HTTP 403/500 空响应、好友动态响应解析为 0 条、多级回评落点校验误读旧缓存，以及设置页双栏错排。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -231,10 +231,6 @@ bot-main:FriendMessage:user-test-001
 - 合并好友动态和“与我相关”入口，提高提及与回评命中率；
 - 使用评论 ID、回复目标与楼层关系校验落点，降低回错楼层的概率。
 
-QQ 空间自动互动由 <code>qzone_conf.qzone_enable_auto_interaction</code> 控制，并按 <code>qzone_auto_interaction_cron</code> 执行。视觉识别默认处理 1 张图片，最多 9 张；识别失败时按纯文字动态继续。
-
-QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_adapter_id</code> 只影响 QQ 空间链路，不改变普通私聊和群聊路由。
-
 ## 🪄 自然语言工具
 
 开启 LLM 工具调用后，管理员或已配置的接收对象可以通过自然语言使用：
@@ -296,8 +292,6 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 - **设置**：管理常用配置，并由 schema 补齐其他配置项；
 - **失败记录**：仅记录整条分享未能完成的失败原因，并按支持的任务类型重试；图片、视频或语音回退不会错误计入整条分享失败。
 
-目标列表与普通设置分别保存并独立校验配置版本。AstrBot 重启不会主动清空目标；如果长期未刷新的页面、多标签页或指令已经修改了同一类配置，仪表盘会拒绝旧页面继续保存并提示重新加载，避免独立定时、独立序列或其他设置被静默覆盖。
-
 <a id="configuration"></a>
 
 ## ⚙️ 配置分组
@@ -328,7 +322,7 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 
 ## 🔗 与 daily_life 联动
 
-插件只通过 <code>astrbot_plugin_daily_life</code> 的公开入口联动，不读取其数据库或内部运行时，也不直接调用其搜索工具。生活上下文只调用 <code>get_share_context(target_umo)</code>；旧的跨插件入口 <code>get_life_context(target_umo)</code> 已删除，未提供新入口的生活插件需同步更新后才能提供生活上下文。
+插件只通过 <code>astrbot_plugin_daily_life</code> 的公开入口联动，不读取其数据库或内部运行时，也不直接调用其搜索工具。生活上下文只调用 <code>get_share_context(target_umo)</code>，未提供新入口的生活插件需同步更新后才能提供生活上下文。
 
 | 联动能力 | 行为 |
 | :--- | :--- |
@@ -340,16 +334,10 @@ QQ 空间依赖 OneBot 适配器提供 <code>get_cookies</code>。<code>qzone_ad
 
 生活插件未安装、未启用、未完成初始化、正在重载或调用失败时，对应增强会自动跳过，不影响插件基础能力；媒体进度会区分“生活插件不可用”“未返回有效结果”“视频生成超时”和“生成调用失败”，并按当前异步任务隔离状态，便于定位配置或接口问题。媒体失败但其余内容成功送达时，记录保持成功并标记为降级，不会进入整条分享失败的重试队列。
 
-新分享上下文在生活插件侧按目标隔离并压缩：私聊只允许当前联系人相关经历，群聊和 QQ 空间等公开目标只允许无人物关联的日常生活片段；回复效果只提供正向、中性、负向数量与结论。原始回复、证据、消息与数据库 ID、纠错记录、健康检查和内部治理数据不会传给本插件。
-
-`image_conf.daily_life_text_image_model` 对应生活插件的文生图通道，`image_conf.daily_life_edit_image_model` 对应图生图通道。daily_life 真正取得角色参考图时使用图生图模型，否则使用文生图模型；每项留空时沿用对应模式的原有通道顺序，两项都留空时兼容未提供新参数的旧版 daily_life。填写后需同步更新 daily_life，且只选择模型名称完全一致的通道；同一模型配置多条线路时仍按原顺序依次容错，不会回退到其他模型。未找到对应模型或 daily_life 版本不支持时，分享会保留文案并给出明确的配图失败原因。
-
-v1.0.6 的生活上下文只调用 daily_life 的 `get_share_context(target_umo)` 公开入口，不再回退旧的 `get_life_context`。配合包含视频总超时预算修复的 daily_life 使用时，视频状态查询和轮询间隔都会受统一截止时间约束，避免任务在配置超时后继续额外等待。
-
 ## 🧪 开发与验证
 
 ~~~bash
-pytest
+pytest -q
 python -m unittest discover -s tests
 python -m ruff check .
 python -m ruff format --check .

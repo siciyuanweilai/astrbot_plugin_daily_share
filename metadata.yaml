@@ -1,7 +1,7 @@
 name: astrbot_plugin_daily_share
 display_name: 愿此见闻温柔你的日常
 desc: 在恰好的时刻，循着时间、生活状态、聊天记忆与网络热搜，将一路拾来的所见所闻化作文字、语音或配图主动分享到指定的私聊、群聊或 QQ 空间，也可在聊天场景生成视频，为平凡日常添一点新鲜与温柔。
-version: 1.0.7
+version: 1.0.8
 author: 四次元未来
 repo: https://github.com/siciyuanweilai/astrbot_plugin_daily_share
 astrbot_version: ">=4.26.0"

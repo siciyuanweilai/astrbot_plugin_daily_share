@@ -50,7 +50,7 @@ def _comment_text_from_html(block: str) -> str:
     text = clean_qzone_text(content_html)
     nickname_anchor = (
         r'<a\b[^>]*class=["\'][^"\']*\bnickname\b[^"\']*["\']'
-        r'[^>]*>.*?</a>'
+        r"[^>]*>.*?</a>"
     )
     prefix = re.search(
         rf"^\s*{nickname_anchor}"

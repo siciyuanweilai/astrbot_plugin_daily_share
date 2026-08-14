@@ -36,15 +36,21 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.0.7", metadata)
-        self.assertIn("version-1.0.7", readme)
-        self.assertIn("v1.0.7 已发布", readme)
-        self.assertIn("v1.0.7 · 2026-08-14", changelog)
-        self.assertLess(changelog.index("v1.0.7"), changelog.index("v1.0.6"))
-        release = changelog.split("## 🧰 v1.0.7", 1)[1].split("## 🧭 v1.0.6", 1)[0]
+        self.assertIn("version: 1.0.8", metadata)
+        self.assertIn("version-1.0.8", readme)
+        self.assertIn("v1.0.8 已发布", readme)
+        self.assertIn("v1.0.8 · 2026-08-15", changelog)
+        self.assertLess(changelog.index("v1.0.8"), changelog.index("v1.0.7"))
+        release = changelog.split("## 🩹 v1.0.8", 1)[1].split("## 🧰 v1.0.7", 1)[0]
         self.assertIn("数据库结构保持 v2", release)
         self.assertIn("立即保存", release)
-        self.assertIn("60 秒总时间预算", release)
+        self.assertIn("p_skey", release)
+        self.assertIn("HTTP 403/500", release)
+        self.assertIn("好友动态", release)
+        self.assertIn("undefined", release)
+        self.assertIn("详情缓存", release)
+        self.assertIn("pytest.ini", release)
+        self.assertIn("560 项", release)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
@@ -351,6 +357,10 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIn('id="saveConfigButton"', html)
         self.assertIn('form="configForm"', html)
         self.assertIn('id="reloadConfigButton"', html)
+        self.assertLess(
+            html.index('class="settings-config-actions"'),
+            html.index('class="panel settings-panel bento-settings-board"'),
+        )
 
     def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
         html = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")
