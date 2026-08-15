@@ -59,13 +59,29 @@ class ContextLifeParseService(ContextComponent):
                 f"【今日穿搭】{outfit}\n"
                 "（归属：主角/你本人；只用于描述你自己的外观状态，不用于日程或关系档案里的其他人。）"
             )
+        meta = data.get("meta", {})
+        if not isinstance(meta, dict):
+            meta = {}
+        appearance_labels = (
+            ("hair_style", "发型名称"),
+            ("hair", "发型细节"),
+            ("makeup", "妆容"),
+            ("nails", "美甲"),
+        )
+        appearance = [
+            f"{label}: {meta[key]}" for key, label in appearance_labels if meta.get(key)
+        ]
+        if appearance:
+            parts.append(
+                f"【当前外观】{' | '.join(appearance)}\n"
+                "（归属：主角/你本人；当天动态外观优先于人设中的固定造型，不用于其他人物。）"
+            )
         labels = (
             ("theme", "主题"),
             ("mood", "心情"),
             ("style", "风格"),
             ("schedule_type", "定位"),
         )
-        meta = data.get("meta", {})
         values = [f"{label}: {meta[key]}" for key, label in labels if meta.get(key)]
         if values:
             parts.append(f"【今日基调】{' | '.join(values)}")

@@ -26,6 +26,7 @@ class ContextLifeMemoryService(ContextComponent):
             "- 对方身份、关系和称谓以这些原文为准；原文没有明确写出的信息不要自行补全或改写。\n"
             "- 如果无法从原文确认身份细节，就使用名字或中性称呼，不要擅自判断。\n"
             "- 【今日穿搭】只属于主角/你本人；即使日程里出现其他人，也不得把这套穿搭套用到对方身上。\n"
+            "- 【当前外观】中的发型、妆容和美甲也只属于主角/你本人；不得套用到日程或关系档案里的其他人身上。\n"
         )
 
     def _format_relationships(self, relationships) -> str:

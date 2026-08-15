@@ -76,7 +76,9 @@ def _load_news_module():
 
 
 class NewsPayloadDecodingTests(unittest.TestCase):
-    def test_baike_success_flag_rejects_explicit_failure_and_accepts_code_fallback(self):
+    def test_baike_success_flag_rejects_explicit_failure_and_accepts_code_fallback(
+        self,
+    ):
         mod = _load_news_module()
         self.assertIsNone(
             mod.NewsService._baike_response_text(

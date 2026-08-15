@@ -182,9 +182,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
         conn = sqlite3.connect(":memory:")
         try:
             conn.execute("CREATE TABLE sample (second TEXT, first TEXT)")
-            migration_module._validate_tables(
-                conn, {"sample": ("first", "second")}
-            )
+            migration_module._validate_tables(conn, {"sample": ("first", "second")})
         finally:
             conn.close()
 

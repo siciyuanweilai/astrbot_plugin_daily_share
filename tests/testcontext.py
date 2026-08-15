@@ -87,7 +87,15 @@ class _DailyLifePlugin:
         return {
             "weather": "北京 晴 20°C",
             "outfit": "浅蓝外套和白裙子",
-            "meta": {"theme": "慢生活日", "mood": "平静"},
+            "meta": {
+                "theme": "慢生活日",
+                "mood": "平静",
+                "style": "清爽日常风",
+                "hair_style": "松散低马尾",
+                "hair": "黑色中长直发，低马尾，碎发自然垂落",
+                "makeup": "清透自然妆",
+                "nails": "奶白色短圆甲",
+            },
             "timeline": [
                 {"time": "00:00", "activity": "在窗边写手帐", "status": "专注"}
             ],
@@ -675,6 +683,13 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         text = await service.get_life_context("aiocqhttp:FriendMessage:123")
 
         self.assertIn("【今日天气】北京 晴 20°C", text)
+        self.assertIn("【今日穿搭】浅蓝外套和白裙子", text)
+        self.assertIn("【当前外观】", text)
+        self.assertIn("发型名称: 松散低马尾", text)
+        self.assertIn("发型细节: 黑色中长直发，低马尾，碎发自然垂落", text)
+        self.assertIn("妆容: 清透自然妆", text)
+        self.assertIn("美甲: 奶白色短圆甲", text)
+        self.assertIn("当天动态外观优先于人设中的固定造型", text)
         self.assertIn("【当前状态】", text)
         self.assertIn("体力: 35/100", text)
         self.assertIn("今天偏累，不太想出门", text)
@@ -753,6 +768,7 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         context = "\n".join(
             [
                 "【今日穿搭】浅蓝外套和白裙子",
+                "【当前外观】发型名称: 松散低马尾 | 妆容: 清透自然妆",
                 "【关系档案】",
                 "- 阿林：互动 3 次；人设线索：男生，死党",
                 "【今日完整时间轴及计划】",
@@ -768,6 +784,8 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("【今日穿搭】只属于主角/你本人", prompt)
         self.assertIn("不得把这套穿搭套用到对方身上", prompt)
+        self.assertIn("【当前外观】中的发型、妆容和美甲也只属于主角/你本人", prompt)
+        self.assertIn("不得套用到日程或关系档案里的其他人身上", prompt)
 
     def test_life_context_bridge_uses_exact_plugin_id(self):
         _, service = _service()

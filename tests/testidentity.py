@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import types
 import unittest
@@ -304,7 +305,15 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
 
         async def call_llm(prompt, system_prompt="", **kwargs):
             calls.append({"prompt": prompt, "system_prompt": system_prompt})
-            return "{}"
+            return json.dumps(
+                {
+                    "hair_style": "蓬松短卷发",
+                    "hair": "金色短发",
+                    "makeup": "浓艳舞台妆",
+                    "nails": "黑色尖甲",
+                },
+                ensure_ascii=False,
+            )
 
         context = types.SimpleNamespace(
             persona_manager=_PersonaManager("你的名字叫小舟。"),
@@ -316,18 +325,35 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
             call_llm,
         )
 
-        await service._agent_extract_visuals(
+        visuals = await service._agent_extract_visuals(
             "和阿林去展览馆。",
-            "【今日穿搭】浅蓝外套和白裙子\n【关系档案】\n- 阿林：人设线索：朋友",
+            "【今日穿搭】浅蓝外套和白裙子\n"
+            "【当前外观】发型名称: 松散低马尾 | 发型细节: 黑色中长直发，碎发自然垂落 | "
+            "妆容: 清透自然妆 | 美甲: 奶白色短圆甲\n"
+            "【关系档案】\n- 阿林：人设线索：朋友",
             share_type=sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
             involves_self=True,
         )
 
-        self.assertIn("【今日穿搭】只属于主角/你本人", calls[0]["system_prompt"])
+        self.assertEqual(visuals["outfit"], "浅蓝外套和白裙子")
+        self.assertEqual(visuals["outfit_source"], "daily_life")
+        self.assertEqual(visuals["hair_style"], "松散低马尾")
+        self.assertEqual(visuals["hair"], "黑色中长直发，碎发自然垂落")
+        self.assertEqual(visuals["makeup"], "清透自然妆")
+        self.assertEqual(visuals["nails"], "奶白色短圆甲")
+        self.assertEqual(visuals["appearance_source"], "daily_life")
+        self.assertIn(
+            "【今日穿搭】和【当前外观】只属于主角/你本人",
+            calls[0]["system_prompt"],
+        )
         self.assertIn(
             "其他人物只按文案或关系原文明确写出的外观处理", calls[0]["system_prompt"]
         )
-        self.assertIn("outfit 只写构图中能看见的衣着和鞋袜", calls[0]["system_prompt"])
+        self.assertIn("优先于角色人设中的固定造型", calls[0]["system_prompt"])
+        self.assertIn(
+            "【今日穿搭】是主角当前已经穿上的事实",
+            calls[0]["system_prompt"],
+        )
         self.assertIn("不要描写其他人的衣着", calls[0]["system_prompt"])
         self.assertIn(
             "只描述主角/你本人在 composition 里能看见的穿搭", calls[0]["system_prompt"]
@@ -336,8 +362,108 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("近景、半身、中景、远景、全景", calls[0]["system_prompt"])
         self.assertIn("composition", calls[0]["system_prompt"])
         self.assertIn("frame_logic", calls[0]["system_prompt"])
+        for field in ('"hair_style"', '"hair"', '"makeup"', '"nails"'):
+            self.assertIn(field, calls[0]["system_prompt"])
         self.assertIn("不把生活状态里未入镜的内容写进画面词", calls[0]["system_prompt"])
         self.assertNotIn("脚部状态必须写进 outfit", calls[0]["system_prompt"])
+
+    async def test_image_visual_extraction_keeps_explicit_outfit_over_sleepwear(self):
+        _, image_module = _load_daily_share_modules()
+        calls = []
+
+        async def call_llm(prompt, system_prompt="", **kwargs):
+            calls.append({"prompt": prompt, "system_prompt": system_prompt})
+            return json.dumps(
+                {
+                    "environment": "卧室床边",
+                    "composition": "半身近景",
+                    "outfit": "浅色轻薄睡衣领口",
+                    "outfit_logic": "当前是深夜卧床场景",
+                },
+                ensure_ascii=False,
+            )
+
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager("你的名字叫小舟。"),
+            get_all_stars=lambda: [],
+        )
+        service = image_module.ImageService(
+            context,
+            {"image_conf": {"enable_ai_image": True}},
+            call_llm,
+        )
+        current_outfit = (
+            "水手领荷叶边露脐短上衣，白色，浅蓝色水手翻领；双层荷叶边蝴蝶结超短裙裤"
+        )
+
+        visuals = await service._agent_extract_visuals(
+            "别熬太晚啦，快睡吧，晚安。",
+            f"【今日穿搭】{current_outfit}\n【当前外观】发型名称: 自然披散长发",
+            share_type=sys.modules[CONFIG_MODULE_NAME].ShareType.GREETING,
+            involves_self=True,
+        )
+
+        self.assertEqual(visuals["outfit"], current_outfit)
+        self.assertEqual(visuals["outfit_source"], "daily_life")
+        self.assertEqual(visuals["outfit_logic"], "使用生活插件明确提供的当前穿搭")
+        self.assertEqual(visuals["hair_style"], "自然披散长发")
+        self.assertEqual(visuals["appearance_source"], "daily_life")
+        self.assertIn("不得因场景或时段替换成睡衣", calls[0]["system_prompt"])
+
+        inferred = await service._agent_extract_visuals(
+            "别熬太晚啦，快睡吧，晚安。",
+            "【今日天气】多云",
+            share_type=sys.modules[CONFIG_MODULE_NAME].ShareType.GREETING,
+            involves_self=True,
+        )
+
+        self.assertEqual(inferred["outfit"], "浅色轻薄睡衣领口")
+        self.assertNotIn("outfit_source", inferred)
+
+    async def test_image_prompt_prefers_daily_life_dynamic_appearance(self):
+        _, image_module = _load_daily_share_modules()
+
+        async def call_llm(*args, **kwargs):
+            return "东亚女性，黑色长卷发，棕色眼睛"
+
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager("你的名字叫小舟，平时留黑色长卷发。"),
+            get_all_stars=lambda: [],
+        )
+        service = image_module.ImageService(
+            context,
+            {"image_conf": {"enable_ai_image": True}},
+            call_llm,
+        )
+
+        prompt = await service._assemble_final_prompt(
+            "今天去看展。",
+            sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+            True,
+            {
+                "environment": "展览馆",
+                "lighting": "柔和室内光",
+                "hair_style": "松散低马尾",
+                "hair": "黑色中长直发，碎发自然垂落",
+                "makeup": "清透自然妆",
+                "nails": "奶白色短圆甲",
+                "outfit": "浅蓝外套和白裙子",
+                "outfit_source": "daily_life",
+                "appearance_source": "daily_life",
+            },
+        )
+
+        self.assertIn("东亚女性，黑色长卷发，棕色眼睛", prompt)
+        self.assertIn("当天动态外观硬性约束", prompt)
+        self.assertIn("角色人设和参考图仅用于稳定身份", prompt)
+        self.assertIn("不得覆盖本轮发型、妆容或美甲", prompt)
+        self.assertIn("发型名称：松散低马尾", prompt)
+        self.assertIn("发型细节：黑色中长直发，碎发自然垂落", prompt)
+        self.assertIn("妆容：清透自然妆", prompt)
+        self.assertIn("美甲：奶白色短圆甲", prompt)
+        self.assertIn("当前穿搭硬性约束", prompt)
+        self.assertIn("不得因时段或场景替换为睡衣或其他服装", prompt)
+        self.assertIn("浅蓝外套和白裙子", prompt)
 
     async def test_image_self_judge_prompt_uses_first_person_hidden_reasoning(self):
         _, image_module = _load_daily_share_modules()

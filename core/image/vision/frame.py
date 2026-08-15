@@ -77,5 +77,5 @@ class ImageVisualFrameService:
             details.append(f"天气：{weather}")
 
         prefix = f"{'，'.join(details)}，" if details else ""
-        base_rule = "穿搭、动作和场景必须符合当前地点、天气、温度和预设构图范围。"
+        base_rule = "穿搭、外观、动作和场景必须符合当前地点、天气、温度和预设构图范围。"
         return f"{prefix}{frame_hint or base_rule}"

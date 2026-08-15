@@ -33,18 +33,60 @@ def _visual_time_hint(period: TimePeriod, hour: int) -> str:
 
 def _visual_outfit_hint(is_night: bool) -> str:
     if is_night:
-        return "当前是休息时间，优先提取睡衣、家居服等可见居家穿搭；只有文案或日程明确正在外出时，才使用完整外出穿搭。"
-    return "当前是活动时间，请结合生活日程里的地点、天气、温度、今日穿搭提取合理穿搭。"
+        return (
+            "当前是休息时间；如果【生活日程】提供了【今日穿搭】，它就是已经穿上的当前事实，"
+            "必须按原文提取，不得因为深夜、居家、卧床或晚安文案自行替换成睡衣。"
+            "只有【今日穿搭】为空时，才能根据明确的睡前状态推断睡衣或家居服。"
+        )
+    return (
+        "如果【生活日程】提供了【今日穿搭】，必须按原文提取；"
+        "只有【今日穿搭】为空时，才能结合地点、天气和温度推断合理穿搭。"
+    )
+
+
+def _life_current_outfit(life_context: str | None) -> str:
+    prefix = "【今日穿搭】"
+    for line in str(life_context or "").splitlines():
+        text = line.strip()
+        if text.startswith(prefix):
+            return text.removeprefix(prefix).strip()
+    return ""
+
+
+def _life_current_appearance(life_context: str | None) -> dict[str, str]:
+    prefix = "【当前外观】"
+    fields = {
+        "发型名称": "hair_style",
+        "发型细节": "hair",
+        "妆容": "makeup",
+        "美甲": "nails",
+    }
+    for line in str(life_context or "").splitlines():
+        text = line.strip()
+        if not text.startswith(prefix):
+            continue
+        appearance: dict[str, str] = {}
+        for item in text.removeprefix(prefix).replace("｜", "|").split("|"):
+            normalized = item.strip().replace("：", ":", 1)
+            label, separator, value = normalized.partition(":")
+            key = fields.get(label.strip()) if separator else None
+            value = value.strip()
+            if key and value:
+                appearance[key] = value
+        return appearance
+    return {}
 
 
 def _visual_outfit_policy() -> str:
     return """
-【穿搭决策策略】
-- 信息优先级：生活日程/今日穿搭/天气温度 > 分享文案明确描述 > 当前时段推断；资料没有支持的衣着、动作和人物关系不要补全。
-- 归属边界：【今日穿搭】只属于主角/你本人；其他人物只按文案或关系原文明确写出的外观处理。
+【主角外观决策策略】
+- 信息优先级：生活日程中的今日穿搭/当前外观 > 分享文案明确描述 > 天气温度与当前时段推断；资料没有支持的衣着、外观、动作和人物关系不要补全。
+- 穿搭事实：【今日穿搭】是主角当前已经穿上的事实，不是搭配建议。存在该字段时必须保持服装类别、颜色、款式和组成，不得因场景或时段替换成睡衣、家居服或其他服装。
+- 归属边界：【今日穿搭】和【当前外观】只属于主角/你本人；其他人物只按文案或关系原文明确写出的外观处理。
+- 动态优先：生活日程明确提供的当前发型、妆容和美甲是当天事实，优先于角色人设中的固定造型；不得改写或套用给其他人物。
 - 场景策略：家里偏居家状态；室内公共场所保留日常外出合理性；室外必须符合天气、温度和外出场景。
-- 可见性策略：outfit 只写构图中能看见的衣着和鞋袜；不可见或不确定的部分写入 outfit_logic，不进入画面词。
-- 调整策略：如果日程给了今日穿搭，可按当前地点和温度做轻微调整；调整原因必须写在 outfit_logic。
+- 可见性策略：outfit 可按构图省略完全不可见的组成，但不得改变可见服装；hair_style、hair、makeup、nails 只写构图中能看见的内容，不可见或不确定时留空。
+- 推断边界：只有【今日穿搭】为空时才允许根据地点、天气、温度和时段推断服装，并把依据写入 outfit_logic。
 """
 
 
@@ -75,7 +117,8 @@ class ImageVisualExtractService(ImageVisualFrameService):
             "请根据文案主体、情绪、动作、地点和画面重点自然选择构图，不要按分享类型固定镜头；"
             "可以选择脸部近景、半身、中景、远景、全景、手部或物品特写。"
             "composition 写最终构图，frame_logic 说明为什么这样取景以及哪些内容在画面范围内可见。"
-            "outfit 和 action 只写入该构图中能直接看见的内容，不把生活状态里未入镜的内容写进画面词。"
+            "outfit、hair_style、hair、makeup、nails 和 action 只写入该构图中能直接看见的内容，"
+            "不把生活状态里未入镜的内容写进画面词。"
         )
 
     def _visual_extraction_system_prompt(
@@ -100,7 +143,7 @@ class ImageVisualExtractService(ImageVisualFrameService):
 2. **分析背景 (Environment)**：
 {logic_prompt}
 3. **时间边界**：不要提取 {hour}:00 之后尚未发生的未来日程作为背景；若当前时段没有明确地点，使用当前状态、室内外线索或“未知”。
-4. **场景与穿搭判断**：先判断当前画面属于“家里 / 室内公共场所 / 室外 / 未知”，再根据地点、天气、温度、动作和构图可见范围决定穿搭。
+4. **场景与外观判断**：先判断当前画面属于“家里 / 室内公共场所 / 室外 / 未知”，再根据地点、天气、温度、动作和构图可见范围决定穿搭与当前外观。
 
 {_visual_outfit_policy()}
 
@@ -114,8 +157,12 @@ class ImageVisualExtractService(ImageVisualFrameService):
 7. **构图 (composition)**：根据文案主体、动作、情绪、地点、光影和物品关系自然选择景别；可用近景、半身、中景、远景、全景、手部特写、物品特写、静物构图等，不要按分享类型固定镜头。
 8. **构图逻辑 (frame_logic)**：用一句话说明为什么这样取景，并说明哪些身体范围、物品或环境会进入画面。
 9. **穿搭 (outfit)**：只描述主角/你本人在 composition 里能看见的穿搭。{outfit_hint} 可说明内搭/外穿层次、外套状态和可见鞋袜；不要描写其他人的衣着。
-10. **穿搭逻辑 (outfit_logic)**：用一句话说明穿搭判断依据，覆盖地点、温度、动作、构图可见范围和是否引用今日穿搭。
-11. **动作 (action)**：只描述 composition 里能看见的人物动作。
+10. **发型名称 (hair_style)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天发型名称；没有则留空。
+11. **发型细节 (hair)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天发型细节；没有则留空。
+12. **妆容 (makeup)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天妆容；没有则留空。
+13. **美甲 (nails)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天美甲；没有则留空。
+14. **穿搭逻辑 (outfit_logic)**：用一句话说明穿搭判断依据，覆盖地点、温度、动作、构图可见范围和是否引用今日穿搭。
+15. **动作 (action)**：只描述 composition 里能看见的人物动作。
 
 请严格输出 JSON 格式：
 {{
@@ -128,6 +175,10 @@ class ImageVisualExtractService(ImageVisualFrameService):
     "composition": "...",
     "frame_logic": "...",
     "outfit": "...",
+    "hair_style": "...",
+    "hair": "...",
+    "makeup": "...",
+    "nails": "...",
     "outfit_logic": "...",
     "action": "...",
     "weather_vibe": "..."
@@ -173,7 +224,21 @@ class ImageVisualExtractService(ImageVisualFrameService):
             if not res:
                 return {}
             clean_json = _extract_json_object(res)
-            return await asyncio.to_thread(json.loads, clean_json)
+            visuals = await asyncio.to_thread(json.loads, clean_json)
+            if not isinstance(visuals, dict):
+                return {}
+            current_outfit = _life_current_outfit(life_context) if involves_self else ""
+            current_appearance = (
+                _life_current_appearance(life_context) if involves_self else {}
+            )
+            if current_outfit:
+                visuals["outfit"] = current_outfit
+                visuals["outfit_source"] = "daily_life"
+                visuals["outfit_logic"] = "使用生活插件明确提供的当前穿搭"
+            if current_appearance:
+                visuals.update(current_appearance)
+                visuals["appearance_source"] = "daily_life"
+            return visuals
         except Exception as e:
             logger.warning(f"[日常分享] 智能提取失败: {e}")
             return {}

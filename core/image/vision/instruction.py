@@ -50,9 +50,46 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         prompts.append(
             appearance or await self._get_persona_figure_keywords() or "1个人物, 独奏"
         )
-        for value in (visuals.get("outfit"), visuals.get("action")):
-            if text := str(value or "").strip():
-                prompts.append(text)
+        current_appearance = self._format_current_appearance(visuals)
+        if current_appearance:
+            prompts.append(current_appearance)
+        outfit = str(visuals.get("outfit", "") or "").strip()
+        if outfit:
+            if visuals.get("outfit_source") == "daily_life":
+                prompts.append(
+                    "当前穿搭硬性约束（生活插件当天事实，不得因时段或场景替换为睡衣或其他服装）："
+                    f"{outfit}"
+                )
+            else:
+                prompts.append(outfit)
+        action = str(visuals.get("action", "") or "").strip()
+        if action:
+            prompts.append(action)
+
+    @staticmethod
+    def _format_current_appearance(visuals: dict) -> str:
+        details = []
+        for key, label in (
+            ("hair_style", "发型名称"),
+            ("hair", "发型细节"),
+            ("makeup", "妆容"),
+            ("nails", "美甲"),
+        ):
+            value = str(visuals.get(key, "") or "").strip()
+            if value:
+                details.append(f"{label}：{value}")
+        if not details:
+            return ""
+        if visuals.get("appearance_source") == "daily_life":
+            return (
+                "当天动态外观硬性约束（生活插件当天事实；角色人设和参考图仅用于稳定身份，"
+                "不得覆盖本轮发型、妆容或美甲）："
+                f"{'；'.join(details)}"
+            )
+        return (
+            "当天动态外观优先于角色人设中的固定发型、妆容和美甲描述，"
+            f"冲突时以当天状态为准：{'；'.join(details)}"
+        )
 
     @staticmethod
     def _append_subject_visual_prompts(prompts: list[str], visuals: dict) -> None:

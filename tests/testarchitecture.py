@@ -36,21 +36,21 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.0.8", metadata)
-        self.assertIn("version-1.0.8", readme)
-        self.assertIn("v1.0.8 已发布", readme)
+        self.assertIn("version: 1.0.9", metadata)
+        self.assertIn("version-1.0.9", readme)
+        self.assertIn("v1.0.9 已发布", readme)
+        self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
-        self.assertLess(changelog.index("v1.0.8"), changelog.index("v1.0.7"))
-        release = changelog.split("## 🩹 v1.0.8", 1)[1].split("## 🧰 v1.0.7", 1)[0]
+        self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
+        release = changelog.split("## 🎨 v1.0.9", 1)[1].split("## 🩹 v1.0.8", 1)[0]
         self.assertIn("数据库结构保持 v2", release)
-        self.assertIn("立即保存", release)
-        self.assertIn("p_skey", release)
-        self.assertIn("HTTP 403/500", release)
-        self.assertIn("好友动态", release)
-        self.assertIn("undefined", release)
-        self.assertIn("详情缓存", release)
+        self.assertIn("hair_style", release)
+        self.assertIn("睡衣", release)
+        self.assertIn("强制覆盖", release)
+        self.assertIn("角色参考图不锁定本轮造型", release)
+        self.assertIn("合并 10 个", release)
         self.assertIn("pytest.ini", release)
-        self.assertIn("560 项", release)
+        self.assertIn("562 项", release)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
@@ -343,8 +343,7 @@ class TaskArchitectureTests(unittest.TestCase):
         dashboard = ROOT / "pages" / "dashboard"
         html = (dashboard / "index.html").read_text(encoding="utf-8")
         scripts = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in sorted(dashboard.rglob("*.js"))
+            path.read_text(encoding="utf-8") for path in sorted(dashboard.rglob("*.js"))
         )
         element_ids = sorted(
             set(re.findall(r'getElementById\(["\']([^"\']+)["\']\)', scripts))

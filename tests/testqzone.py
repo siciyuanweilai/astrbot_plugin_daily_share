@@ -228,7 +228,7 @@ class QzoneParserTests(unittest.TestCase):
 
     def test_parse_qzone_response_supports_feeds3_undefined_items(self):
         payload = _parser().parse_qzone_response(
-            r'''{
+            r"""{
                 "code": 0,
                 "subcode": 0,
                 "message": "",
@@ -245,14 +245,12 @@ class QzoneParserTests(unittest.TestCase):
                         undefined,
                     ],
                 },
-            }'''
+            }"""
         )
 
         self.assertEqual(payload["code"], 0)
         self.assertIsNone(payload["data"]["data"][1])
-        self.assertEqual(
-            payload["data"]["data"][0]["title"], "undefined 应保留为正文"
-        )
+        self.assertEqual(payload["data"]["data"][0]["title"], "undefined 应保留为正文")
         posts = parse_recent_feed_list(payload)
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].key, "2492835361:real-fkey")
