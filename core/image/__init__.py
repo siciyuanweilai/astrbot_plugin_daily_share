@@ -85,6 +85,8 @@ class ImageService(ImageVisualService, ImageVideoService):
                 logger.warning("[日常分享] 智能提取失败，已取消配图，仅发送文案")
                 return None
 
+            visuals = self._enforce_visual_mode(visuals, involves_self)
+
             # 日志记录提取结果
             env = visuals.get("environment", "无")
             subj = visuals.get("subject", "无")
@@ -98,7 +100,7 @@ class ImageService(ImageVisualService, ImageVideoService):
             weather = visuals.get("weather_condition") or visuals.get(
                 "weather_vibe", "无"
             )
-            logger.info(
+            logger.debug(
                 f"[日常分享] 配图智能提取：主体: {subj} | 场景: {scene} | 环境: {env} | "
                 f"天气: {weather} | 温感: {temp} | 穿搭: {outfit[:15]}..."
             )
@@ -111,7 +113,7 @@ class ImageService(ImageVisualService, ImageVideoService):
         if not prompt:
             logger.warning("[日常分享] 提示词组装失败，取消配图")
             return None
-        logger.info(f"[日常分享] 最终配图提示词: {prompt[:100]}...")
+        logger.debug(f"[日常分享] 最终配图提示词: {prompt[:100]}...")
         image_path = await call_default_daily_life_media_tool(
             self.context,
             media_kind="image",

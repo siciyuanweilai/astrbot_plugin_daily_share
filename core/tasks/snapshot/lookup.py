@@ -20,6 +20,8 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
         snapshot = await self._load_news_snapshot(target, source_key=source_key)
         if not self._is_news_snapshot(snapshot):
             return "工具内部提示：还没有可用于反查的新闻列表。请自然提醒用户先分享一次新闻，再问“第3条链接”，不要提及工具状态。"
+        if not self._is_news_snapshot_fresh(snapshot):
+            return "工具内部提示：最近的新闻列表已过期。请自然提醒用户先分享一次最新新闻，再查询链接、摘要或来源，不要提及工具状态。"
 
         action_key = self._normalize_news_link_action(action)
         items = snapshot.get("items") or []

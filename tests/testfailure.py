@@ -250,7 +250,7 @@ class _Db:
             "source_name": source_name,
             "image_url": image_url,
             "items": items,
-            "created_at": "2026-07-12 09:00:00",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         self.news_snapshots.append(snapshot)
         return snapshot
@@ -593,6 +593,29 @@ def _manager(mod):
 
 
 class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
+    def test_cron_validation_rejects_invalid_field_without_removing_old_job(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+
+        manager.schedule.setup_cron_job_custom(
+            "qzone_auto_interaction", "0 */3 * * *", lambda: None
+        )
+
+        self.assertIsNone(manager.schedule.parse_cron_to_kwargs("*/ * * * *"))
+        with self.assertRaisesRegex(ValueError, "定时表达式无效"):
+            manager.schedule.setup_cron_job_custom(
+                "qzone_auto_interaction", "*/ * * * *", lambda: None
+            )
+
+        jobs = [
+            job
+            for job in plugin.scheduler.jobs
+            if job["kwargs"].get("id") == "qzone_auto_interaction"
+        ]
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["kwargs"]["minute"], "0")
+
     def test_setup_tasks_registers_enabled_fixed_time_schedule(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
@@ -1418,6 +1441,102 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service._llm_config_timeout(180), 120)
         self.assertEqual(service._llm_config_timeout(None), 120)
 
+    async def test_llm_permanent_provider_error_falls_back_without_retry_delay(self):
+        _clear_modules()
+        package = _install_stub_module(PACKAGE_NAME)
+        package.__path__ = [str(ROOT)]
+        core_package = _install_stub_module(CORE_PACKAGE_NAME)
+        core_package.__path__ = [str(ROOT / "core")]
+        host_package = _install_stub_module(f"{CORE_PACKAGE_NAME}.host")
+        host_package.__path__ = [str(ROOT / "core" / "host")]
+        _install_stub_module("astrbot")
+        _install_stub_module("astrbot.api", logger=_Logger())
+        _load_module(f"{CORE_PACKAGE_NAME}.toolkit", ROOT / "core" / "toolkit.py")
+        model = _load_module(
+            f"{PACKAGE_NAME}.core.host.model",
+            ROOT / "core" / "host" / "model.py",
+        )
+
+        class ProviderError(RuntimeError):
+            status_code = 403
+            body = {"code": "GROUP_DELETED", "message": "API Key 所属分组已删除"}
+
+        class Context:
+            def __init__(self):
+                self.calls = []
+
+            def get_config(self):
+                return {
+                    "provider_settings": {"default_provider_id": "provider-default"}
+                }
+
+            async def llm_generate(self, **kwargs):
+                provider_id = kwargs["chat_provider_id"]
+                self.calls.append(provider_id)
+                if provider_id == "provider-broken":
+                    raise ProviderError("403 GROUP_DELETED: API Key 所属分组已删除")
+                return types.SimpleNamespace(completion_text="默认模型响应")
+
+        context = Context()
+        service = model.LlmService(
+            context,
+            {"llm_provider_id": "provider-broken", "llm_timeout": 60},
+            lambda: False,
+        )
+
+        result = await asyncio.wait_for(service.call("测试提示"), timeout=0.5)
+        next_result = await asyncio.wait_for(service.call("再次测试"), timeout=0.5)
+
+        self.assertEqual(result, "默认模型响应")
+        self.assertEqual(next_result, "默认模型响应")
+        self.assertEqual(
+            context.calls,
+            [
+                "provider-broken",
+                "provider-default",
+                "provider-broken",
+                "provider-default",
+            ],
+        )
+
+    async def test_llm_retry_uses_one_total_timeout_budget(self):
+        _clear_modules()
+        package = _install_stub_module(PACKAGE_NAME)
+        package.__path__ = [str(ROOT)]
+        core_package = _install_stub_module(CORE_PACKAGE_NAME)
+        core_package.__path__ = [str(ROOT / "core")]
+        host_package = _install_stub_module(f"{CORE_PACKAGE_NAME}.host")
+        host_package.__path__ = [str(ROOT / "core" / "host")]
+        _install_stub_module("astrbot")
+        _install_stub_module("astrbot.api", logger=_Logger())
+        _load_module(f"{CORE_PACKAGE_NAME}.toolkit", ROOT / "core" / "toolkit.py")
+        model = _load_module(
+            f"{PACKAGE_NAME}.core.host.model",
+            ROOT / "core" / "host" / "model.py",
+        )
+
+        class Context:
+            def __init__(self):
+                self.calls = 0
+
+            def get_config(self):
+                return {"provider_settings": {"default_provider_id": "provider-main"}}
+
+            async def llm_generate(self, **kwargs):
+                self.calls += 1
+                raise RuntimeError("临时网络错误")
+
+        context = Context()
+        service = model.LlmService(context, {"llm_timeout": 1}, lambda: False)
+
+        result = await asyncio.wait_for(
+            service.call("测试总时限", max_retries=5),
+            timeout=1.5,
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual(context.calls, 1)
+
     async def test_manual_share_releases_lock_when_task_is_not_created(self):
         _clear_modules()
         package = _install_stub_module(PACKAGE_NAME)
@@ -1910,6 +2029,27 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("还没有可用于反查的新闻列表", result)
         self.assertNotIn("https://example.com/unsent", result)
+
+    async def test_news_link_rejects_expired_sent_snapshot(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        await manager.snapshot_store.commit_sent_news_snapshot(
+            target,
+            snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [{"title": "旧新闻", "url": "https://example.com/old"}],
+                "weibo",
+            ),
+        )
+        plugin.db.news_snapshots[0]["created_at"] = (
+            datetime.now() - timedelta(hours=1)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+
+        result = await manager.snapshot_store.get_cached_news_link(target, index="1")
+
+        self.assertIn("新闻列表已过期", result)
+        self.assertNotIn("https://example.com/old", result)
 
     async def test_cached_news_link_keeps_same_target_source_snapshots(self):
         mod = _load_tasks_module()

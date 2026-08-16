@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from ..taskbase import TaskServiceBase
 
 
 class TaskNewsCacheNormalizeService(TaskServiceBase):
+    NEWS_SNAPSHOT_TTL_SECONDS = 1800
+
     def get_news_snapshot_limit(self) -> int:
         """缓存新闻长图对应结构化数据时尽量保留完整列表。"""
         return 50
@@ -16,6 +19,21 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
 
     def _is_news_snapshot(self, snapshot) -> bool:
         return isinstance(snapshot, dict) and bool(snapshot.get("items"))
+
+    def _is_news_snapshot_fresh(self, snapshot) -> bool:
+        """仅允许最近发送的新闻快照参与上下文和链接反查。"""
+        if not self._is_news_snapshot(snapshot):
+            return False
+        created_at = str(snapshot.get("created_at") or "").strip()
+        if not created_at:
+            return False
+        try:
+            created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
+        age_seconds = (now - created).total_seconds()
+        return -60 <= age_seconds <= self.NEWS_SNAPSHOT_TTL_SECONDS
 
     def _clean_snapshot_text(self, value, max_len: int = 300) -> str:
         text = re.sub(r"\s+", " ", str(value or "")).strip()

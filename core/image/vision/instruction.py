@@ -82,8 +82,9 @@ class ImageVisualPromptService(ImageVisualPersonaService):
             return ""
         if visuals.get("appearance_source") == "daily_life":
             return (
-                "当天动态外观硬性约束（生活插件当天事实；角色人设和参考图仅用于稳定身份，"
-                "不得覆盖本轮发型、妆容或美甲）："
+                "角色参考图身份锚点（最高优先级）：必须保持参考图中的脸型、五官比例、眼睛、鼻子、"
+                "嘴唇、肤色、年龄感和体态；当天动态外观硬性约束（生活插件当天事实）只覆盖发型、"
+                "妆容、美甲和服装，不得改变角色身份："
                 f"{'；'.join(details)}"
             )
         return (

@@ -237,7 +237,7 @@
         "description": "LLM提供商",
         "type": "string",
         "default": "",
-        "hint": "使用LLM生成内容，不选择或者指定LLM失败后自动降级使用默认的第一个聊天模型",
+        "hint": "使用LLM生成内容，不选择或者指定LLM失败后自动降级使用当前默认模型",
         "_special": "select_provider"
       },
       "llm_timeout": {
@@ -249,7 +249,7 @@
           "max": 180,
           "step": 1
         },
-        "hint": "LLM生成内容的最大等待时间"
+        "hint": "一次LLM逻辑调用（包含重试）的最大等待时间；降级使用当前默认模型重试由框架配置控制。"
       },
       "trigger_mode": {
         "description": "定时分享模式",

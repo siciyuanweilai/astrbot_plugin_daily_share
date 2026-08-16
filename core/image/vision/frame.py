@@ -30,28 +30,48 @@ class ImageVisualFrameService:
 
     """视觉构图和穿搭一致性提示。"""
 
+    @staticmethod
+    def _has_visual_subject(visuals: dict) -> bool:
+        subject = str(visuals.get("subject", "") or "").strip()
+        return bool(subject and subject not in {"无", "N/A", "None"})
+
+    def _resolve_visual_mode(self, visuals: dict, contains_character: bool) -> str:
+        if contains_character:
+            return "person"
+        return "object" if self._has_visual_subject(visuals) else "landscape"
+
+    def _enforce_visual_mode(self, visuals: dict, contains_character: bool) -> dict:
+        """固定人物、静物或风景模式，避免模型构图覆盖上游决策。"""
+        normalized = dict(visuals or {})
+        visual_mode = self._resolve_visual_mode(normalized, contains_character)
+        normalized["visual_mode"] = visual_mode
+        if visual_mode != "person":
+            normalized["composition"] = ""
+            normalized["frame_logic"] = ""
+            normalized["composition_logic"] = ""
+        return normalized
+
     def _resolve_composition(
         self, visuals: dict, involves_self: bool
     ) -> tuple[str, str]:
+        visual_mode = self._resolve_visual_mode(visuals, involves_self)
         composition = str(visuals.get("composition", "") or "").strip()
         frame_logic = str(
             visuals.get("frame_logic", "") or visuals.get("composition_logic", "") or ""
         ).strip()
-        if composition:
+        if visual_mode == "person" and composition:
             return (
                 composition,
                 frame_logic
                 or "画面范围遵循已选择的自然构图；穿搭、动作和环境只呈现入镜内容。",
             )
 
-        subject = str(visuals.get("subject", "") or "").strip()
-        has_subject = subject and subject not in ["无", "N/A", "None"]
-        if not involves_self and has_subject:
+        if visual_mode == "object":
             return (
                 "自然静物构图, 景别由主体关系决定",
                 "画面范围根据主体和环境关系自然确定；不要为了补充背景扩大构图。",
             )
-        if not involves_self:
+        if visual_mode == "landscape":
             return (
                 "自然风景构图, 景别由环境氛围决定",
                 "画面范围根据环境、光影和天气自然确定；不要加入额外人物。",

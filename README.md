@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.9-ef6f8f" alt="版本 1.0.9"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-ef6f8f" alt="版本 1.1.0"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -35,7 +35,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.0.9 已发布**：完整读取 daily_life 的当天穿搭、发型、妆容与美甲，并在视觉模型返回后确定性回填；明确穿搭不会再因深夜、居家或晚安场景被替换成睡衣。角色参考图只负责身份一致性，建议同步更新 daily_life。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.0 已发布**：配图增加人物、静物和风景的代码级视觉模式约束；角色参考图优先锁定脸部身份和体态，当天发型、妆容、美甲与服装只覆盖可变造型。`llm_timeout` 覆盖包含插件重试的整次逻辑调用，媒体提示日志收敛到 DEBUG。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -304,7 +304,7 @@ bot-main:FriendMessage:user-test-001
 | <code>contact_aliases</code> | 本地用户称呼映射 |
 | <code>content_library</code> | 知识库、推荐库和类型前缀 |
 | <code>extra_shares</code> | 每天 60s、AI 资讯快报、早报目标和 QQ 空间同步 |
-| <code>basic_conf</code> | LLM、生成超时、全局定时、时段序列、显示范围和去重 |
+| <code>basic_conf</code> | LLM、单次逻辑调用总超时、全局定时、时段序列、显示范围和去重 |
 | <code>context_conf</code> | 生活上下文、聊天历史、群聊热度和 MemOS |
 | <code>news_conf</code> | 新闻接口、新闻源、短链接和联网证据 |
 | <code>image_conf</code> | 配图、新闻长图、视频和个人微信图片处理 |
@@ -329,7 +329,7 @@ bot-main:FriendMessage:user-test-001
 | :--- | :--- |
 | 生活上下文 | 按当前目标读取当天状态、穿搭、发型、妆容、美甲、生理节律、相关生活片段、关注事项及提炼后的表达与互动建议 |
 | 联网检索 | 由生活插件统一决定搜索策略、提供商与失败处理 |
-| 配图、视频、语音 | 复用生活插件媒体能力；配图可分别指定文生图与图生图模型，并以当天穿搭和动态外观为造型事实 |
+| 配图、视频、语音 | 复用生活插件媒体能力；配图可分别指定文生图与图生图模型。人物配图以角色参考图锁定脸部身份和体态，当天发型、妆容、美甲与服装仅覆盖可变造型 |
 | 活动回传 | 成功发送后更新生活节奏 |
 | MemOS | 按生活插件设置同步长期记忆 |
 

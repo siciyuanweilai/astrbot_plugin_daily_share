@@ -136,9 +136,9 @@ class ImageVideoService:
                 target_umo=target_umo,
             )
             video_prompt = f"画面：{image_description}。动态：{motion_prompt}。声音：{sound_prompt}。"
-            logger.info(f"[日常分享] 视频动态提取：动态: {motion_prompt[:180]}...")
-            logger.info(f"[日常分享] 声音设计提取：声音: {sound_prompt[:180]}...")
-            logger.info(f"[日常分享] 最终视频提示词: {video_prompt[:180]}...")
+            logger.debug(f"[日常分享] 视频动态提取：动态: {motion_prompt[:180]}...")
+            logger.debug(f"[日常分享] 声音设计提取：声音: {sound_prompt[:180]}...")
+            logger.debug(f"[日常分享] 最终视频提示词: {video_prompt[:180]}...")
 
             video_ref = await call_default_daily_life_media_tool(
                 self.context,

@@ -36,21 +36,22 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.0.9", metadata)
-        self.assertIn("version-1.0.9", readme)
-        self.assertIn("v1.0.9 已发布", readme)
+        self.assertIn("version: 1.1.0", metadata)
+        self.assertIn("version-1.1.0", readme)
+        self.assertIn("v1.1.0 已发布", readme)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
+        self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        release = changelog.split("## 🎨 v1.0.9", 1)[1].split("## 🩹 v1.0.8", 1)[0]
+        release = changelog.split("## 🛡️ v1.1.0", 1)[1].split("## 🎨 v1.0.9", 1)[0]
         self.assertIn("数据库结构保持 v2", release)
-        self.assertIn("hair_style", release)
-        self.assertIn("睡衣", release)
-        self.assertIn("强制覆盖", release)
-        self.assertIn("角色参考图不锁定本轮造型", release)
-        self.assertIn("合并 10 个", release)
-        self.assertIn("pytest.ini", release)
-        self.assertIn("562 项", release)
+        self.assertIn("person", release)
+        self.assertIn("object", release)
+        self.assertIn("landscape", release)
+        self.assertIn("角色参考图身份锚点", release)
+        self.assertIn("总等待时间", release)
+        self.assertIn("DEBUG", release)
+        self.assertIn("568 项", release)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")

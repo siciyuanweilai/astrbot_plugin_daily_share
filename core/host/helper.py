@@ -86,7 +86,7 @@ class PluginToolContextService(SupportComponent):
                 target,
                 focus_key,
             )
-            if not snapshot_store._is_news_snapshot(snapshot):
+            if not snapshot_store._is_news_snapshot_fresh(snapshot):
                 return ""
 
             items = snapshot.get("items") or []

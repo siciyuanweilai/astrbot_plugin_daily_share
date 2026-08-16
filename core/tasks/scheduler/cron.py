@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from apscheduler.triggers.cron import CronTrigger
+
 from astrbot.api import logger
 
 from ...config import CRON_TEMPLATES
@@ -29,8 +31,13 @@ class ScheduleJobDefinition:
 class TaskSchedulerCronService(SchedulerComponent):
     def parse_cron_to_kwargs(self, cron_str: str) -> dict | None:
         """解析标准 5 位定时表达式：分、时、日、月、周。"""
-        parts = cron_str.strip().split()
+        text = str(cron_str or "").strip()
+        parts = text.split()
         if len(parts) != 5:
+            return None
+        try:
+            CronTrigger.from_crontab(text)
+        except (TypeError, ValueError):
             return None
         return {
             "minute": parts[0],
@@ -141,26 +148,23 @@ class TaskSchedulerCronService(SchedulerComponent):
         """通用定时表达式设置方法。"""
         if self.plugin._is_terminated:
             return
+        actual_cron = CRON_TEMPLATES.get(cron_str, cron_str)
+        cron_kwargs = self.parse_cron_to_kwargs(actual_cron)
+        if not cron_kwargs:
+            raise ValueError(
+                f"任务[{job_id}]的定时表达式无效，需使用标准 5 位格式: {cron_str}"
+            )
+
         try:
-            if self.scheduler.get_job(job_id):
-                self.scheduler.remove_job(job_id)
-
-            actual_cron = CRON_TEMPLATES.get(cron_str, cron_str)
-            cron_kwargs = self.parse_cron_to_kwargs(actual_cron)
-
-            if cron_kwargs:
-                self.scheduler.add_job(
-                    func,
-                    "cron",
-                    **cron_kwargs,
-                    id=job_id,
-                    replace_existing=True,
-                    max_instances=1,
-                )
-                logger.debug(f"[日常分享] 任务[{job_id}]已设定: {actual_cron}")
-            else:
-                logger.error(
-                    f"[日常分享] 任务[{job_id}]无效的定时表达式（仅支持标准 5 位）: {cron_str}"
-                )
+            self.scheduler.add_job(
+                func,
+                "cron",
+                **cron_kwargs,
+                id=job_id,
+                replace_existing=True,
+                max_instances=1,
+            )
         except Exception as e:
             logger.error(f"[日常分享] 任务[{job_id}]设置失败: {e}")
+            raise
+        logger.debug(f"[日常分享] 任务[{job_id}]已设定: {actual_cron}")

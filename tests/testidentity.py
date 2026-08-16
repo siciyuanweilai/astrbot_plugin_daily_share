@@ -454,9 +454,10 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIn("东亚女性，黑色长卷发，棕色眼睛", prompt)
+        self.assertIn("角色参考图身份锚点（最高优先级）", prompt)
+        self.assertIn("脸型、五官比例、眼睛、鼻子、嘴唇、肤色、年龄感和体态", prompt)
         self.assertIn("当天动态外观硬性约束", prompt)
-        self.assertIn("角色人设和参考图仅用于稳定身份", prompt)
-        self.assertIn("不得覆盖本轮发型、妆容或美甲", prompt)
+        self.assertIn("只覆盖发型、妆容、美甲和服装", prompt)
         self.assertIn("发型名称：松散低马尾", prompt)
         self.assertIn("发型细节：黑色中长直发，碎发自然垂落", prompt)
         self.assertIn("妆容：清透自然妆", prompt)
@@ -573,6 +574,83 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("白色衬衫", prompt)
         self.assertIn("牛仔裤", prompt)
         self.assertIn("白色运动鞋", prompt)
+
+    async def test_image_non_character_mode_rejects_person_composition(self):
+        _, image_module = _load_daily_share_modules()
+
+        async def call_llm(*args, **kwargs):
+            return ""
+
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager("你的名字叫小舟。"),
+            get_all_stars=lambda: [],
+        )
+        service = image_module.ImageService(
+            context,
+            {"image_conf": {"enable_ai_image": True}},
+            call_llm,
+        )
+        visuals = service._enforce_visual_mode(
+            {
+                "subject": "一杯冒着热气的咖啡",
+                "environment": "窗边木桌",
+                "lighting": "清晨自然光",
+                "composition": "半身人像中景，主角手中捧着咖啡",
+                "frame_logic": "突出主角神态和手部动作",
+            },
+            False,
+        )
+
+        prompt = await service._assemble_final_prompt(
+            "清晨喝杯咖啡。",
+            sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+            False,
+            visuals,
+        )
+
+        self.assertEqual(visuals["visual_mode"], "object")
+        self.assertEqual(visuals["composition"], "")
+        self.assertIn("无人, 静物", prompt)
+        self.assertIn("自然静物构图", prompt)
+        self.assertNotIn("主角", prompt)
+        self.assertNotIn("半身人像", prompt)
+
+    async def test_image_landscape_mode_rejects_person_composition(self):
+        _, image_module = _load_daily_share_modules()
+
+        async def call_llm(*args, **kwargs):
+            return ""
+
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager("你的名字叫小舟。"),
+            get_all_stars=lambda: [],
+        )
+        service = image_module.ImageService(
+            context,
+            {"image_conf": {"enable_ai_image": True}},
+            call_llm,
+        )
+        visuals = service._enforce_visual_mode(
+            {
+                "subject": "无",
+                "environment": "雨后的城市街道",
+                "composition": "人物全身远景，主角走在街道中央",
+            },
+            False,
+        )
+
+        prompt = await service._assemble_final_prompt(
+            "雨停了。",
+            sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+            False,
+            visuals,
+        )
+
+        self.assertEqual(visuals["visual_mode"], "landscape")
+        self.assertIn("无人, 风景", prompt)
+        self.assertIn("自然风景构图", prompt)
+        self.assertNotIn("主角", prompt)
+        self.assertNotIn("人物全身", prompt)
 
     async def test_image_decision_log_does_not_include_provider_mode(self):
         _, image_module = _load_daily_share_modules()

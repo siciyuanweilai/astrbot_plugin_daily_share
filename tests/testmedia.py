@@ -62,25 +62,8 @@ class _DomainStateDb:
 
 def _install_stub_modules():
     for name in list(sys.modules):
-        if (
-            name.startswith("astrbot")
-            or name.startswith("apscheduler")
-            or name == "aiohttp"
-            or name == "aiofiles"
-        ):
+        if name.startswith("astrbot") or name == "aiohttp" or name == "aiofiles":
             sys.modules.pop(name, None)
-
-    apscheduler = types.ModuleType("apscheduler")
-    apscheduler_schedulers = types.ModuleType("apscheduler.schedulers")
-    apscheduler_asyncio = types.ModuleType("apscheduler.schedulers.asyncio")
-
-    class AsyncIOScheduler:
-        pass
-
-    apscheduler_asyncio.AsyncIOScheduler = AsyncIOScheduler
-    sys.modules["apscheduler"] = apscheduler
-    sys.modules["apscheduler.schedulers"] = apscheduler_schedulers
-    sys.modules["apscheduler.schedulers.asyncio"] = apscheduler_asyncio
 
     astrbot = types.ModuleType("astrbot")
     astrbot.__path__ = []
@@ -290,6 +273,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
                 snapshot = {
                     "source_key": "thepaper",
                     "source_name": "澎湃热搜",
+                    "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "items": [
                         {"title": "第一条新闻", "url": "https://example.com/1"},
                         {"title": "第二条新闻", "url": "https://example.com/2"},
@@ -311,6 +295,11 @@ class DashboardMediaPreviewTests(unittest.TestCase):
 
             def _is_news_snapshot(self, snapshot):
                 return isinstance(snapshot, dict) and bool(snapshot.get("items"))
+
+            def _is_news_snapshot_fresh(self, snapshot):
+                return self._is_news_snapshot(snapshot) and bool(
+                    snapshot.get("created_at")
+                )
 
             def _coerce_news_tool_index(self, index):
                 text = str(index or "").strip()

@@ -170,6 +170,7 @@ class VideoPromptTests(unittest.TestCase):
 
         mod.call_default_daily_life_media_tool = generate
         mod.logger = types.SimpleNamespace(
+            debug=lambda message: logs.append(("debug", message)),
             info=lambda message: logs.append(("info", message)),
             warning=lambda message: logs.append(("warning", message)),
         )
