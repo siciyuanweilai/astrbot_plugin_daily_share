@@ -3,6 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 SCHEDULE_MODE_OPTIONS = frozenset({"fixed_time", "random_period", "llm_smart", "cron"})
+SCHEDULE_MODE_ALIASES = {
+    "固定时间": "fixed_time",
+    "随机时段": "random_period",
+    "智能定时": "llm_smart",
+    "高级定时": "cron",
+}
+
+
+def normalize_schedule_mode(value: str | None, default: str) -> str:
+    """将设置页中文模式名转换为调度器使用的内部值。"""
+    text = str(value or "").strip()
+    if not text:
+        return default
+    return SCHEDULE_MODE_ALIASES.get(text, text)
 
 
 @dataclass(frozen=True)
@@ -91,11 +105,35 @@ QZONE_SCHEDULE = ScheduleDefinition(
     smart_prompt_key="qzone_smart_schedule_prompt",
 )
 
+XIAOHONGSHU_SCHEDULE = ScheduleDefinition(
+    mode_key="trigger_mode",
+    mode_default="fixed_time",
+    mode_label="小红书触发模式",
+    fixed_key="fixed_times",
+    fixed_default=("20:30",),
+    fixed_label="小红书固定时间",
+    random_key="random_periods",
+    random_default=("19:00-21:00",),
+    random_label="小红书随机时段",
+    cron_key="cron",
+    cron_default="30 20 * * *",
+    cron_label="小红书高级定时表达式",
+    smart_max_key="smart_schedule_max_count",
+    smart_max_default=1,
+    smart_quiet_key="smart_schedule_quiet_hours",
+    smart_quiet_default=("23:30-07:30",),
+    smart_quiet_label="小红书智能定时勿扰时间",
+    smart_prompt_key="smart_schedule_prompt",
+    mode_options=frozenset({"fixed_time", "random_period", "cron"}),
+)
+
 
 __all__ = [
     "BRIEFING_SCHEDULE",
     "GLOBAL_SCHEDULE",
     "QZONE_SCHEDULE",
+    "XIAOHONGSHU_SCHEDULE",
     "SCHEDULE_MODE_OPTIONS",
+    "normalize_schedule_mode",
     "ScheduleDefinition",
 ]

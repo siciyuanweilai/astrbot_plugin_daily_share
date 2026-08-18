@@ -39,8 +39,6 @@ class DatabaseDashboardService(DatabaseRepository):
     @staticmethod
     def _media_kind_clause(media_kind: str) -> tuple:
         kind = str(media_kind or "").strip().lower()
-        if kind == "degraded":
-            return "degraded = 1", []
         if kind == "text":
             return (
                 """COALESCE(media_path, '') = ''
@@ -178,23 +176,21 @@ class DatabaseDashboardService(DatabaseRepository):
                 ) AS media_count,
                 SUM(CASE WHEN {text_clause} THEN 1 ELSE 0 END) AS text_count,
                 SUM(CASE WHEN {image_clause} THEN 1 ELSE 0 END) AS image_count,
-                SUM(CASE WHEN {video_clause} THEN 1 ELSE 0 END) AS video_count,
-                SUM(CASE WHEN degraded = 1 THEN 1 ELSE 0 END) AS degraded_count
+                SUM(CASE WHEN {video_clause} THEN 1 ELSE 0 END) AS video_count
             FROM sent_history
             WHERE success = 1
               {days_clause}
         """,
             tuple(params),
         )
-        row = row or (0, 0, 0, 0, 0, 0)
-        dynamic, media, text, image, video, degraded = row
+        row = row or (0, 0, 0, 0, 0)
+        dynamic, media, text, image, video = row
         return {
             "dynamic": int(dynamic or 0),
             "media": int(media or 0),
             "text": int(text or 0),
             "image": int(image or 0),
             "video": int(video or 0),
-            "degraded": int(degraded or 0),
         }
 
     async def get_dashboard_dynamic_summary(self, days: int = 0):
@@ -212,7 +208,6 @@ class DatabaseDashboardService(DatabaseRepository):
                 COUNT(*) AS total_count,
                 SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
                 SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed_count,
-                SUM(CASE WHEN success = 1 AND degraded = 1 THEN 1 ELSE 0 END) AS degraded_count,
                 SUM(CASE WHEN success = 1 AND created_at >= ? THEN 1 ELSE 0 END) AS today_count,
                 SUM(
                     CASE
@@ -225,13 +220,12 @@ class DatabaseDashboardService(DatabaseRepository):
         """,
             (today_start,),
         )
-        row = row or (0, 0, 0, 0, 0, 0)
-        total, success, failed, degraded, today, media = row
+        row = row or (0, 0, 0, 0, 0)
+        total, success, failed, today, media = row
         return {
             "total": int(total or 0),
             "success": int(success or 0),
             "failed": int(failed or 0),
-            "degraded": int(degraded or 0),
             "today": int(today or 0),
             "dynamic": int(success or 0),
             "media": int(media or 0),

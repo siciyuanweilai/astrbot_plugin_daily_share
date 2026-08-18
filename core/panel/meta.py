@@ -152,6 +152,7 @@ class DashboardConfigMetaService(PanelComponent):
             "options",
             "default",
             "_special",
+            "_advanced",
         ):
             value = item.get(key)
             if value not in (None, ""):

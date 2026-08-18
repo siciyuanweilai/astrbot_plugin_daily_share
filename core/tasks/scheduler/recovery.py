@@ -7,6 +7,7 @@ from ...database.keys import (
     BRIEFING_STATE_KEY,
     GLOBAL_STATE_KEY,
     QZONE_STATE_KEY,
+    XIAOHONGSHU_STATE_KEY,
     target_state_key,
 )
 from .schedulerbase import SchedulerComponent
@@ -23,6 +24,9 @@ class TaskSchedulerRecoveryService(SchedulerComponent):
         await self.db.update_share_state(QZONE_STATE_KEY, {"pending_delay_job": None})
         await self.db.update_share_state(
             BRIEFING_STATE_KEY, {"pending_delay_job": None}
+        )
+        await self.db.update_share_state(
+            XIAOHONGSHU_STATE_KEY, {"pending_delay_job": None}
         )
 
         r_groups = self.services.targets.parse_targets_config(
@@ -136,6 +140,17 @@ class TaskSchedulerRecoveryService(SchedulerComponent):
                 "[日常分享] 检测到近期错过的早报延迟任务，即将补偿分享",
             ),
         ]
+        if self.xiaohongshu_conf.get("enable_xiaohongshu", False):
+            jobs.append(
+                (
+                    XIAOHONGSHU_STATE_KEY,
+                    self.schedule.triggers._execute_delayed_xiaohongshu,
+                    "resume_xiaohongshu_share",
+                    10,
+                    "[日常分享] 已恢复未完成的小红书延迟发布任务，将在 {time} 发布",
+                    "[日常分享] 检测到近期错过的小红书延迟任务，即将补偿发布",
+                )
+            )
         for state_key, job, job_id, delay, future_log, missed_log in jobs:
             state = await self.db.get_share_state(state_key, {})
             await self._recover_pending_delay_job(

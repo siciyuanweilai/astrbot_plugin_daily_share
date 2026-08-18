@@ -1,5 +1,5 @@
 from ..config import TimePeriod
-from ..database.keys import QZONE_TARGET_ID
+from ..database.keys import is_public_share_target, public_share_target_label
 from ..prompt import build_common_content_rules
 from .contentbase import ContentComponent
 
@@ -8,7 +8,8 @@ class ContentSocialService(ContentComponent):
     async def _gen_greeting(self, period: TimePeriod, ctx: dict):
         p_label = ctx["period_label"]
         is_group = ctx["is_group"]
-        is_qzone = ctx.get("target_id") == QZONE_TARGET_ID
+        is_qzone = is_public_share_target(ctx.get("target_id"))
+        public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
         detect_name = ctx.get("detect_name", "")
 
@@ -29,6 +30,7 @@ class ContentSocialService(ContentComponent):
             period_label=p_label,
             action="问候",
             allow_detail=allow_detail,
+            public_label=public_label,
         )
         greeting_constraint = ""
         opening_rule = ""
@@ -54,7 +56,7 @@ class ContentSocialService(ContentComponent):
 
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
-        target_str = "QQ空间" if is_qzone else ("群聊" if is_group else "私聊")
+        target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
 
         prompt = f"""
 【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({p_label})
@@ -69,7 +71,7 @@ class ContentSocialService(ContentComponent):
 
 【问候写法】
 - 可以参考生活状态、天气或正在做的事，让问候更像当下自然说出口的话。
-- 群聊请直接开启新问候，不评价群氛围；私聊可以更个人化；QQ 空间写成自己的状态记录。
+- 群聊请直接开启新问候，不评价群氛围；私聊可以更个人化；{public_label}写成自己的状态记录。
 
 【开头方式】（自然直接）
 {opening_rule}
@@ -99,7 +101,8 @@ class ContentSocialService(ContentComponent):
 
     async def _gen_mood(self, period, ctx):
         is_group = ctx["is_group"]
-        is_qzone = ctx.get("target_id") == QZONE_TARGET_ID
+        is_qzone = is_public_share_target(ctx.get("target_id"))
+        public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
         detect_name = ctx.get("detect_name", "")
 
@@ -120,11 +123,14 @@ class ContentSocialService(ContentComponent):
             period_label=ctx["period_label"],
             action="分享心情",
             allow_detail=allow_detail,
+            public_label=public_label,
         )
         # 3. 共鸣策略
         resonance_guide = ""
         if is_qzone:
-            resonance_guide = "【QQ空间写法】像个人说说一样记录此刻，不需要互动提问。"
+            resonance_guide = (
+                f"【{public_label}写法】像个人动态一样记录此刻，不需要互动提问。"
+            )
         elif is_group:
             resonance_guide = """
 【群聊共鸣写法】
@@ -138,7 +144,7 @@ class ContentSocialService(ContentComponent):
 
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
-        target_str = "QQ空间" if is_qzone else ("群聊" if is_group else "私聊")
+        target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         time_greeting_rule = ""
         if period in (TimePeriod.LATE_NIGHT, TimePeriod.DAWN):
             time_greeting_rule = """

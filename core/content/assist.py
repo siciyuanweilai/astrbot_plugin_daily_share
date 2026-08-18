@@ -3,6 +3,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..config import TimePeriod
+from ..database.keys import QZONE_TARGET_ID, XIAOHONGSHU_TARGET_ID
 from ..prompt import build_private_target_prompt
 from .contentbase import ContentComponent
 
@@ -93,21 +94,39 @@ class ContentSupportService(ContentComponent):
             "（注：优先按这段消息流判断谁在对谁说话、谁在回复谁、是否 @、是否带图。）"
         )
 
-    def _build_output_format_prompt(self, is_qzone: bool = False) -> str:
+    def _build_output_format_prompt(self, target_id: str | bool = "") -> str:
+        # 保留布尔参数调用契约，同时允许平台目标使用独立格式。
+        if isinstance(target_id, bool):
+            target = QZONE_TARGET_ID if target_id else ""
+        else:
+            target = str(target_id or "").strip()
+        is_qzone = target == QZONE_TARGET_ID
+        is_xiaohongshu = target == XIAOHONGSHU_TARGET_ID
         general_format = str(
             self.basic_conf.get("share_output_format", "") or ""
         ).strip()
-        qzone_format = ""
+        target_format = ""
         if is_qzone:
-            qzone_format = str(
+            target_format = str(
                 self.qzone_conf.get("qzone_share_output_format", "") or ""
             ).strip()
+        elif is_xiaohongshu:
+            target_format = str(
+                self.config.get("xiaohongshu_conf", {})
+                .get("share_output_format", "")
+                or ""
+            ).strip()
 
-        output_format = qzone_format or general_format
+        output_format = target_format or general_format
         if not output_format:
             return ""
 
-        label = "QQ 空间说说输出格式" if qzone_format else "分享文案输出格式"
+        if target_format and is_qzone:
+            label = "QQ 空间说说输出格式"
+        elif target_format and is_xiaohongshu:
+            label = "小红书输出格式"
+        else:
+            label = "分享文案输出格式"
         output_format = output_format[:1200]
         return (
             f"\n【{label}】\n"

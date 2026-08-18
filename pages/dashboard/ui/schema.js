@@ -170,8 +170,15 @@ function makeExtraInput(meta = {}) {
     input.rows = meta.items?.options ? 4 : 3;
     return input;
   }
+  if (type === "text") {
+    const input = document.createElement("textarea");
+    input.rows = 3;
+    return input;
+  }
   const input = document.createElement("input");
-  input.type = type === "int" || type === "float" || type === "number" ? "number" : "text";
+  input.type = meta._special === "secret"
+    ? "password"
+    : type === "int" || type === "float" || type === "number" ? "number" : "text";
   if (meta._special === "select_provider") {
     input.setAttribute("list", "cfgLlmProviderOptions");
     input.placeholder = "跟随默认";
@@ -192,14 +199,27 @@ function makeExtraInput(meta = {}) {
   return input;
 }
 
+const extraScheduleFields = {
+  xiaohongshu_conf: {
+    trigger_mode: "mode",
+    fixed_times: "fixed",
+    random_periods: "random",
+    cron: "cron",
+    cron_random_delay: "delay",
+  },
+};
+
 function makeExtraField({ scope, section, key, meta }) {
   const input = makeExtraInput(meta);
   const label = document.createElement("label");
   label.className = input.type === "checkbox" ? "setting-switch setting-extra-field" : "setting-field setting-extra-field";
   label.dataset.schemaExtra = "1";
+  if (meta._advanced) label.dataset.schemaAdvanced = "1";
   label.dataset.schemaScope = scope;
   if (section) label.dataset.schemaSection = section;
   label.dataset.schemaField = key;
+  const scheduleKind = extraScheduleFields[section]?.[key];
+  if (scheduleKind) label.dataset.schedule = `xiaohongshu-${scheduleKind}`;
 
   const caption = document.createElement("span");
   caption.textContent = extraFieldLabel(meta, key);
@@ -219,6 +239,20 @@ function ensureExtraGroup(section) {
   group.dataset.schemaExtraGroup = "1";
   section.append(group);
   return group;
+}
+
+function groupAdvancedSchemaFields(group) {
+  const fields = Array.from(
+    group.querySelectorAll(":scope > .setting-extra-field[data-schema-advanced='1']"),
+  );
+  if (!fields.length) return;
+
+  const details = document.createElement("details");
+  details.className = "settings-extra-advanced";
+  const summary = document.createElement("summary");
+  summary.textContent = "媒体路径映射（通常无需填写）";
+  details.append(summary, ...fields);
+  group.append(details);
 }
 
 export function ensureSchemaExtraFields(data, settingsSections) {
@@ -249,6 +283,7 @@ export function ensureSchemaExtraFields(data, settingsSections) {
   }
 
   for (const group of document.querySelectorAll("[data-schema-extra-group]")) {
+    groupAdvancedSchemaFields(group);
     if (!group.querySelector(".setting-extra-field")) group.remove();
   }
 }

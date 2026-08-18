@@ -78,6 +78,7 @@ class PanelComponent:
     extra_shares_conf = RuntimeField("extra_shares_conf")
     context_conf = RuntimeField("context_conf")
     news_conf = RuntimeField("news_conf")
+    xiaohongshu_conf = RuntimeField("xiaohongshu_conf")
     contact_aliases = RuntimeField("contact_aliases")
     _page_action_seq = RuntimeField("_page_action_seq")
     _page_action_runs = RuntimeField("_page_action_runs")

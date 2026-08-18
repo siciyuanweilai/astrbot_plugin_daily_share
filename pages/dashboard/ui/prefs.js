@@ -79,24 +79,11 @@ export function createSettingsConfig({
 
   function setConfigDirty(value) {
     state.configDirty = Boolean(value);
-    if (el.saveConfigButton) {
-      el.saveConfigButton.disabled = !state.configDirty || state.configSaving || !state.configData;
-    }
-  }
-
-  function setReloadConflict(value) {
-    if (!el.reloadConfigButton) return;
-    const conflicted = Boolean(value);
-    el.reloadConfigButton.classList.toggle("is-conflict", conflicted);
-    el.reloadConfigButton.setAttribute(
-      "aria-label",
-      conflicted ? "设置已发生冲突，请重新加载" : "重新加载设置",
-    );
   }
 
   function isConfigRevisionConflict(error) {
     const message = text(error?.message).trim();
-    return message.includes("重新加载设置") || message.includes("设置已在其他页面");
+    return message.includes("设置已在其他页面");
   }
 
   function configAutoSaveDelay(event) {
@@ -116,7 +103,7 @@ export function createSettingsConfig({
     const changeSeq = state.configChangeSeq;
     state.configAutoSaveTimer = window.setTimeout(() => {
       state.configAutoSaveTimer = 0;
-      void commitConfigSave({ auto: true, changeSeq });
+      void commitConfigSave({ changeSeq });
     }, delay);
   }
 
@@ -173,6 +160,39 @@ export function createSettingsConfig({
     return groups[kind] || null;
   }
 
+  function xiaohongshuScheduleField(kind) {
+    return el.configForm?.querySelector(
+      `[data-schedule="xiaohongshu-${kind}"]`,
+    );
+  }
+
+  function syncXiaohongshuScheduleVisibility() {
+    const modeField = el.configForm?.querySelector(
+      '[data-schema-section="xiaohongshu_conf"][data-schema-field="trigger_mode"]',
+    );
+    const modeInput = modeField?.querySelector("input, select, textarea");
+    if (!modeInput) return;
+
+    const mode = {
+      固定时间: "fixed_time",
+      随机时段: "random_period",
+      高级定时: "cron",
+    }[text(modeInput.value).trim()] || text(modeInput.value).trim() || "fixed_time";
+    const visibleKind = {
+      fixed_time: "fixed",
+      random_period: "random",
+      cron: "cron",
+    }[mode] || "fixed";
+
+    for (const kind of ["fixed", "random", "cron"]) {
+      const field = xiaohongshuScheduleField(kind);
+      if (field) field.hidden = kind !== visibleKind;
+    }
+    const delayField = xiaohongshuScheduleField("delay");
+    if (delayField) delayField.hidden = mode !== "fixed_time" && mode !== "cron";
+    syncSweetSelect(modeInput);
+  }
+
   function syncScheduleVisibility(kind) {
     const controls = scheduleControls(kind);
     if (!controls) return;
@@ -196,6 +216,7 @@ export function createSettingsConfig({
   }
 
   function handleScheduleChanged(event) {
+    syncXiaohongshuScheduleVisibility();
     const target = event?.target;
     for (const kind of ["basic", "briefing", "qzone"]) {
       const controls = scheduleControls(kind);
@@ -275,6 +296,7 @@ export function createSettingsConfig({
       adapter: el.cfgAdapterOptions,
     });
     applySchemaExtraValues(state.configData, el.configForm, syncSettingSlider);
+    syncXiaohongshuScheduleVisibility();
     state.configApplying = false;
     setConfigDirty(false);
     syncSweetSelects();
@@ -358,14 +380,15 @@ export function createSettingsConfig({
     try {
       const data = await apiGet("page/config");
       applyConfigData(data);
-      setReloadConflict(false);
       if (!quiet) setNotice("");
+      return true;
     } catch (error) {
       setNotice(error.message || "设置加载失败", "error");
+      return false;
     }
   }
 
-  async function commitConfigSave({ auto = false, changeSeq = state.configChangeSeq } = {}) {
+  async function commitConfigSave({ changeSeq = state.configChangeSeq } = {}) {
     if (!state.configDirty) return;
     if (state.configSaving) {
       state.configSaveQueued = true;
@@ -377,7 +400,6 @@ export function createSettingsConfig({
     state.configSaving = true;
     state.configSaveQueued = false;
     setConfigDirty(true);
-    if (el.reloadConfigButton) el.reloadConfigButton.disabled = true;
 
     let shouldQueueNextSave = false;
     try {
@@ -386,20 +408,22 @@ export function createSettingsConfig({
       if (shouldQueueNextSave) {
         state.configData = data;
         setConfigDirty(true);
-      } else if (auto) {
+      } else {
         state.configData = data;
         setConfigDirty(false);
-      } else {
-        applyConfigData(data);
       }
-      setReloadConflict(false);
       await loadStatus({ quiet: true });
-      if (!auto) setNotice("设置已保存。", "success");
     } catch (error) {
       shouldQueueNextSave = false;
       setConfigDirty(true);
-      setReloadConflict(isConfigRevisionConflict(error));
-      setNotice(error.message || "设置保存失败", "error");
+      if (isConfigRevisionConflict(error)) {
+        const loaded = await loadConfig({ quiet: true });
+        if (loaded) {
+          setNotice("设置已在其他页面更新，已自动加载最新设置。", "info");
+        }
+      } else {
+        setNotice(error.message || "设置保存失败", "error");
+      }
     } finally {
       state.configSaving = false;
       if (shouldQueueNextSave || state.configSaveQueued) {
@@ -407,15 +431,8 @@ export function createSettingsConfig({
         setConfigDirty(true);
         scheduleConfigAutoSave(CONFIG_AUTO_SAVE_RETRY_DELAY_MS);
       }
-      if (el.reloadConfigButton) el.reloadConfigButton.disabled = false;
       setConfigDirty(state.configDirty);
     }
-  }
-
-  async function saveConfig(event) {
-    event?.preventDefault();
-    if (event && !event.submitter && isTargetEditorElement(document.activeElement)) return;
-    await commitConfigSave({ auto: false, changeSeq: state.configChangeSeq });
   }
 
   function isTargetEditorElement(node) {
@@ -429,7 +446,6 @@ export function createSettingsConfig({
   return {
     handleConfigChanged,
     loadConfig,
-    saveConfig,
     setSettingsTab,
     updateSettingsTabFromScroll,
   };

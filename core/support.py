@@ -107,6 +107,10 @@ class SupportRuntime:
         self.plugin.qzone_conf = value
 
     @property
+    def xiaohongshu_conf(self):
+        return self.plugin.xiaohongshu_conf
+
+    @property
     def contact_aliases(self):
         return self.plugin.contact_aliases
 
@@ -213,6 +217,10 @@ class SupportService:
     @property
     def qzone_conf(self):
         return self.operations.qzone_conf
+
+    @property
+    def xiaohongshu_conf(self):
+        return self.operations.xiaohongshu_conf
 
     @property
     def receiver_conf(self):

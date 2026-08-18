@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from astrbot.api import logger
 
 from ...config import CRON_TEMPLATES
-from ...schedule import ScheduleDefinition
+from ...schedule import ScheduleDefinition, normalize_schedule_mode
 from .schedulerbase import SchedulerComponent
 
 
@@ -86,10 +86,10 @@ class TaskSchedulerCronService(SchedulerComponent):
     ) -> None:
         conf = job.config
         definition = job.schedule
-        mode = str(
-            conf.get(definition.mode_key, definition.mode_default)
-            or definition.mode_default
-        ).strip()
+        mode = normalize_schedule_mode(
+            conf.get(definition.mode_key, definition.mode_default),
+            definition.mode_default,
+        )
         if mode == "fixed_time":
             fixed_times = list(
                 conf.get(definition.fixed_key) or definition.fixed_default

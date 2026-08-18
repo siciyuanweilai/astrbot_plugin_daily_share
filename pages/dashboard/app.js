@@ -186,7 +186,6 @@ function setNotice(message, tone = "info", autoHideMs = NOTICE_AUTO_HIDE_MS) {
 const {
   handleConfigChanged,
   loadConfig,
-  saveConfig,
   setSettingsTab,
   updateSettingsTabFromScroll,
 } = createSettingsConfig({
@@ -485,11 +484,10 @@ function handleSettingSwitchClick(event) {
 }
 
 function bindEvents() {
-  el.configForm?.addEventListener("submit", saveConfig);
+  el.configForm?.addEventListener("submit", (event) => event.preventDefault());
   el.configForm?.addEventListener("input", handleConfigChanged);
   el.configForm?.addEventListener("change", handleConfigChanged);
   el.configForm?.addEventListener("click", handleSettingSwitchClick);
-  el.reloadConfigButton?.addEventListener("click", () => loadConfig());
   window.addEventListener("scroll", updateSettingsTabFromScroll, { passive: true });
   el.runForm.addEventListener("submit", runShare);
   bindMediaEvents();

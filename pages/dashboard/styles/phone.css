@@ -22,6 +22,8 @@
   .settings-section[data-settings-section="basic"],
   .settings-section[data-settings-section="briefing"],
   .settings-section[data-settings-section="qzone"],
+  .settings-section[data-settings-section="xiaohongshu"],
+  .settings-section[data-settings-section="xiaohongshuSequence"],
   .settings-section[data-settings-section="content"],
   .settings-section[data-settings-section="weixin"],
   .settings-section[data-settings-section="tts"],
@@ -34,6 +36,8 @@
   .settings-section[data-settings-section="context"],
   .settings-section[data-settings-section="sequence"],
   .settings-section[data-settings-section="qzoneSequence"],
+  .settings-section[data-settings-section="xiaohongshu"],
+  .settings-section[data-settings-section="xiaohongshuSequence"],
   .settings-section[data-settings-section="media"] {
     grid-column: span 8;
   }
@@ -81,6 +85,8 @@
   .settings-section[data-settings-section="briefing"],
   .settings-section[data-settings-section="qzone"],
   .settings-section[data-settings-section="qzoneSequence"],
+  .settings-section[data-settings-section="xiaohongshu"],
+  .settings-section[data-settings-section="xiaohongshuSequence"],
   .settings-section[data-settings-section="content"],
   .settings-section[data-settings-section="media"],
   .settings-section[data-settings-section="weixin"],
@@ -371,15 +377,6 @@
 
   .settings-panel {
     padding-right: 0;
-  }
-
-  .settings-config-actions {
-    width: 100%;
-  }
-
-  .settings-config-actions .text-button {
-    flex: 1 1 0;
-    min-width: 0;
   }
 
   .settings-section {

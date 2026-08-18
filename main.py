@@ -23,6 +23,7 @@ from .core.panel.common import (
 from .core.space import QzoneService
 from .core.support import SupportService
 from .core.tasks import TaskManager
+from .core.xhs import XiaohongshuClient
 
 
 class DailySharePlugin(Star):
@@ -39,6 +40,7 @@ class DailySharePlugin(Star):
         self.receiver_conf = self.config.get("receiver", {})
         self.extra_shares_conf = self.config.get("extra_shares", {})
         self.context_conf = self.config.get("context_conf", {})
+        self.xiaohongshu_conf = self.config.get("xiaohongshu_conf", {})
         self.news_conf = self.config.get("news_conf", {})
         self.contact_aliases = self.config.get("contact_aliases", [])
 
@@ -73,6 +75,7 @@ class DailySharePlugin(Star):
 
         # 初始化服务层
         self.daily_life_bridge = DailyLifeBridge(context)
+        self.xiaohongshu_client = XiaohongshuClient(self.xiaohongshu_conf)
         self.ctx_service = ContextService(context, config, self.daily_life_bridge)
         self.qzone_service = QzoneService(self)
         self.news_service = NewsService(config)
@@ -113,6 +116,7 @@ class DailySharePlugin(Star):
             context_conf=self.context_conf,
             receiver_conf=self.receiver_conf,
             daily_life_bridge=self.daily_life_bridge,
+            xiaohongshu_conf=self.xiaohongshu_conf,
         )
 
         # 核心逻辑解耦器

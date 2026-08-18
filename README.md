@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-ef6f8f" alt="版本 1.1.0"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.1-ef6f8f" alt="版本 1.1.1"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -19,6 +19,7 @@
   <a href="#features">核心能力</a> ·
   <a href="#news">新闻快照</a> ·
   <a href="#qzone">QQ 空间</a> ·
+  <a href="#xiaohongshu">小红书</a> ·
   <a href="#dashboard">仪表盘</a> ·
   <a href="#configuration">配置说明</a> ·
   <a href="./CHANGELOG.md">更新日志</a>
@@ -35,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.0 已发布**：配图增加人物、静物和风景的代码级视觉模式约束；角色参考图优先锁定脸部身份和体态，当天发型、妆容、美甲与服装只覆盖可变造型。`llm_timeout` 覆盖包含插件重试的整次逻辑调用，媒体提示日志收敛到 DEBUG。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.1 已发布**：新增小红书发布平台，支持独立定时、图文/视频发布、管理员手动发布、Docker 媒体路径映射和服务器后台浏览器运行；同时修正可见范围、定时模式显示并补充发布成功日志。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -52,6 +53,7 @@
 | ⏰ 灵活调度 | 支持固定时间、随机时段、智能定时、高级 Cron 和任务恢复 |
 | 🧭 多目标发送 | 支持私聊、群聊、个人微信及其他具备主动发送能力的平台 |
 | 🌐 QQ 空间 | 支持发布、查看、点赞、评论、删除、自动互动与配图识别 |
+| 📕 小红书 | 通过独立 REST 发布服务生成并发布图文或视频，不影响其他分享目标 |
 | 🖥️ 可视化管理 | 内置仪表盘，可管理设置、目标、任务、媒体、历史与 QQ 空间 |
 
 <a id="quick-start"></a>
@@ -93,6 +95,7 @@
 | 图文、视频、语音 | 安装并配置 <code>astrbot_plugin_daily_life</code>，再打开对应媒体能力 |
 | 个人微信 | 使用 <code>/sid</code> 输出的完整会话 ID，并确认框架已保存 <code>context_token</code> |
 | QQ 空间 | 使用 OneBot，并确认适配器支持 <code>get_cookies</code> |
+| 小红书 | 在仪表盘“小红书”分区填写发布服务地址；跨容器时同时填写媒体路径映射 |
 | 多个机器人 | 在目标卡片和 QQ 空间设置中分别选择负责发送的机器人实例 |
 
 ---
@@ -257,6 +260,54 @@ bot-main:FriendMessage:user-test-001
 
 普通用户只能操作自己的 QQ 空间；发布、操作其他用户或运行全局扫描需要管理员权限。
 
+<a id="xiaohongshu"></a>
+
+## 📕 小红书
+
+小红书是独立发布目标，不会影响私聊、群聊和 QQ 空间。每个 AstrBot 实例只需要配置一套桥接服务，不需要每个聊天用户单独部署。
+
+### 最短配置流程
+
+1. **准备一次浏览器登录**：在运行桥接服务的同一台机器上安装兼容 CLI，加载它的 `extension` 浏览器扩展，并登录小红书。插件目录自带 `bridge/server.py`，不需要额外的第三方发布平台。
+2. **启动桥接服务**：桥接服务负责把插件请求交给已登录的浏览器。服务正常后，打开下面两个地址检查：
+
+   ```bash
+   curl http://宿主机地址:18061/api/health
+   curl -X POST http://宿主机地址:18061/api/check-login
+   ```
+
+3. **只填写一个必填地址**：在仪表盘“小红书”设置中填写桥接服务地址，先用管理员指令 `/分享 心情 小红书` 测试，成功后再打开自动发布。
+
+Docker 中 AstrBot 访问宿主机桥接服务时，地址通常是：
+
+```text
+http://172.18.0.1:18061/api
+```
+
+这里的 `172.18.0.1` 是当前服务器的 Docker 网关，不是外部服务器。如果桥接服务和 AstrBot 在同一个容器，才使用 `http://127.0.0.1:18061/api`。
+
+### 媒体路径映射
+
+只有当 AstrBot 和桥接服务不在同一个文件系统中时，才需要填写这两个前缀。当前这台服务器的 Docker 部署填写：
+
+```text
+媒体源路径前缀：/AstrBot/data
+媒体服务路径前缀：/home/ubuntu/astrbot-docker/data/astrbot
+```
+
+其他部署只需把第二项替换为宿主机实际的 AstrBot 数据目录。第一项是容器内路径，第二项是服务器宿主机路径；两项必须成对填写。若两边共享同一目录，则留空即可。映射只改变传给发布服务的路径，不会复制或删除媒体文件。
+
+### 服务器无桌面时
+
+浏览器可以使用服务器的虚拟显示器在后台运行，不需要一直开着 Windows、VNC 或 SSH 图形窗口。登录状态会保存在浏览器配置目录；登录失效时，才需要临时使用远程桌面重新扫码。后台服务的状态可用：
+
+```bash
+systemctl --user status daily-share-xhs.service
+systemctl --user status daily-share-xhs-browser.service
+```
+
+两个服务都显示 `active (running)` 后，插件即可正常发布。不要把桥接服务绑定到 `0.0.0.0` 暴露公网，也不要把 Cookie 粘贴到聊天或日志中。
+
 ## 🎮 手动指令
 
 自然语言适合日常使用，<code>/分享</code> 指令用于确定性触发、配置与排障。
@@ -267,6 +318,7 @@ bot-main:FriendMessage:user-test-001
 | <code>/分享 新闻 [源] 图片</code> | 发送指定新闻源长图 |
 | <code>/分享 [类型] 广播</code> | 向配置中的全部群聊和私聊发送 |
 | <code>/分享 [类型] 空间</code> | 发布到 QQ 空间 |
+| <code>/分享 [类型] 小红书</code> | 管理员手动生成并发布到小红书 |
 | <code>/分享 添加当前</code> | 将当前会话加入普通分享目标 |
 | <code>/分享 添加当前 早报</code> | 将当前会话加入早报目标 |
 | <code>/分享 昵称 [名称]</code> | 设置当前会话的本地称呼 |
@@ -310,8 +362,9 @@ bot-main:FriendMessage:user-test-001
 | <code>image_conf</code> | 配图、新闻长图、视频和个人微信图片处理 |
 | <code>tts_conf</code> | 语音生成、允许类型和仅发送语音 |
 | <code>qzone_conf</code> | QQ 空间实例、定时、序列、配图与自动互动 |
+| <code>xiaohongshu_conf</code> | 小红书发布服务、媒体路径映射、标签、可见范围、独立定时和时段内容序列 |
 
-四组目标列表只由仪表盘目标管理或 `/分享` 目标指令维护，普通设置保存不会改写它们。重新进入设置页时会自动读取最新配置；存在未保存修改时不会强制刷新，发生版本冲突后可使用重新加载按钮取回当前配置。
+四组目标列表只由仪表盘目标管理或 `/分享` 目标指令维护，普通设置保存不会改写它们。设置变更会自动保存，重新进入设置页时会自动读取最新配置；发生版本冲突时会自动加载服务端最新设置。
 
 推荐起步方式：
 

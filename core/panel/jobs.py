@@ -7,6 +7,7 @@ CALENDAR_DELAYED_SOURCE_JOB_IDS = {
     "delayed_qzone_share": "qzone_share",
     "delayed_qzone_auto_interaction": "qzone_auto_interaction",
     "delayed_briefing_share": "share_briefing",
+    "delayed_xiaohongshu_share": "xiaohongshu_share",
 }
 
 
@@ -34,10 +35,12 @@ class DashboardJobsService(PanelComponent):
             "qzone_share": "QQ 空间定时分享",
             "qzone_auto_interaction": "QQ 空间自动互动",
             "share_briefing": "早报分享",
+            "xiaohongshu_share": "小红书定时发布",
             "weixin_temp_cleanup": "微信临时图片清理",
             "news_image_cleanup": "新闻源图片清理",
             "daily_random_scheduler": "每日随机分享排程",
             "daily_qzone_random_scheduler": "每日 QQ 空间随机排程",
+            "xiaohongshu_random_scheduler": "每日小红书随机排程",
             "daily_smart_scheduler": "每日智能分享排程",
             "daily_briefing_smart_scheduler": "每日早报智能排程",
             "daily_qzone_smart_scheduler": "每日 QQ 空间智能排程",
@@ -45,9 +48,11 @@ class DashboardJobsService(PanelComponent):
             "delayed_qzone_share": "QQ 空间延迟分享",
             "delayed_qzone_auto_interaction": "QQ 空间自动互动延迟",
             "delayed_briefing_share": "早报延迟分享",
+            "delayed_xiaohongshu_share": "小红书延迟发布",
             "resume_auto_share": "恢复全局延迟分享",
             "resume_qzone_share": "恢复 QQ 空间延迟分享",
             "resume_briefing_share": "恢复早报延迟分享",
+            "resume_xiaohongshu_share": "恢复小红书延迟发布",
         }
         if job_id in static_names:
             return static_names[job_id]
@@ -56,8 +61,10 @@ class DashboardJobsService(PanelComponent):
             (r"^auto_share_fixed_(\d+)$", "auto_share_fixed", 1, False),
             (r"^share_briefing_fixed_(\d+)$", "briefing_fixed", 1, False),
             (r"^qzone_share_fixed_(\d+)$", "qzone_fixed", 1, False),
+            (r"^xiaohongshu_share_fixed_(\d+)$", "xiaohongshu_fixed", 1, False),
             (r"^random_share_(\d+)$", "random", 1, False),
             (r"^qzone_random_share_(\d+)$", "qzone_random", 1, False),
+            (r"^xiaohongshu_random_share_(\d+)$", "xiaohongshu_random", 1, False),
             (r"^smart_share_(\d+)$", "smart", 1, False),
             (r"^briefing_smart_share_(\d+)$", "briefing_smart", 1, False),
             (r"^qzone_smart_share_(\d+)$", "qzone_smart", 1, False),
@@ -90,8 +97,10 @@ class DashboardJobsService(PanelComponent):
                 "auto_share_fixed": "全局固定时间 {value}",
                 "briefing_fixed": "早报固定时间 {value}",
                 "qzone_fixed": "QQ 空间固定时间 {value}",
+                "xiaohongshu_fixed": "小红书固定时间 {value}",
                 "random": "随机分享 {value}",
                 "qzone_random": "QQ 空间 · 随机分享 {value}",
+                "xiaohongshu_random": "小红书 · 随机发布 {value}",
                 "custom": "{value} · 独立分享",
                 "custom_delayed": "{value} · 延迟独立分享",
                 "custom_resume": "{value} · 恢复延迟独立分享",

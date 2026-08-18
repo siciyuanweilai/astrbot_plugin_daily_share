@@ -4,7 +4,12 @@ from astrbot.api import logger
 
 from ...config import CRON_TEMPLATES
 from ...database.keys import target_state_key
-from ...schedule import BRIEFING_SCHEDULE, GLOBAL_SCHEDULE, QZONE_SCHEDULE
+from ...schedule import (
+    BRIEFING_SCHEDULE,
+    GLOBAL_SCHEDULE,
+    QZONE_SCHEDULE,
+    XIAOHONGSHU_SCHEDULE,
+)
 from .cron import ScheduleJobDefinition
 from .schedulerbase import SchedulerComponent
 
@@ -32,6 +37,9 @@ class TaskSchedulerSetupService(SchedulerComponent):
         if self.qzone_conf.get("enable_qzone", False):
             self.setup_qzone_cron(generation=generation)
             self.schedule.auto.setup_qzone_auto_interaction_cron()
+
+        if self.xiaohongshu_conf.get("enable_xiaohongshu", False):
+            self.setup_xiaohongshu_cron(generation=generation)
 
         self.schedule.track_build(
             self.schedule.recovery._recover_pending_jobs(generation=generation),
@@ -172,6 +180,22 @@ class TaskSchedulerSetupService(SchedulerComponent):
                 smart_scheduler_job_id="daily_qzone_smart_scheduler",
                 smart_scheduler=self.schedule.smart._schedule_daily_qzone_smart_jobs,
                 schedule_smart=self.schedule.smart._schedule_daily_qzone_smart_jobs,
+            ),
+            generation=generation,
+        )
+
+    def setup_xiaohongshu_cron(self, *, generation: int | None = None):
+        """设置小红书自动发布定时触发器。"""
+        self.schedule.cron._setup_schedule_job(
+            ScheduleJobDefinition(
+                config=self.xiaohongshu_conf,
+                schedule=XIAOHONGSHU_SCHEDULE,
+                base_job_id="xiaohongshu_share",
+                label="小红书",
+                execute=self.schedule.triggers._task_wrapper_xiaohongshu,
+                random_scheduler_job_id="xiaohongshu_random_scheduler",
+                random_scheduler=self.schedule.random._schedule_daily_xiaohongshu_random_jobs,
+                schedule_random=self.schedule.random._schedule_daily_xiaohongshu_random_jobs,
             ),
             generation=generation,
         )

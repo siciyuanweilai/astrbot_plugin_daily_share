@@ -1,7 +1,12 @@
 from datetime import datetime
 
 from ..constants import TYPE_CN_MAP
-from ..database.keys import BRIEFING_TARGET_ALIASES, GLOBAL_TARGET_ID, QZONE_TARGET_ID
+from ..database.keys import (
+    BRIEFING_TARGET_ALIASES,
+    GLOBAL_TARGET_ID,
+    QZONE_TARGET_ID,
+    XIAOHONGSHU_TARGET_ID,
+)
 from .taskbase import TaskServiceBase
 
 
@@ -64,6 +69,7 @@ class TaskProgressService(TaskServiceBase):
         known = {
             GLOBAL_TARGET_ID: "全局",
             QZONE_TARGET_ID: "QQ 空间",
+            XIAOHONGSHU_TARGET_ID: "小红书",
             **dict.fromkeys(BRIEFING_TARGET_ALIASES, "早报"),
         }
         if raw in known:

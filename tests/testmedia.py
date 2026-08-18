@@ -173,7 +173,7 @@ class DashboardMediaPreviewTests(unittest.TestCase):
         self.assertIn('configRow("运行状态", runtimeText, "is-runtime")', view_source)
         self.assertIn('failed: "初始化失败"', view_source)
 
-    def test_degraded_stat_is_a_filterable_media_kind(self):
+    def test_degraded_stat_is_not_a_filterable_media_kind(self):
         status_source = (ROOT / "pages" / "dashboard" / "ui" / "status.js").read_text(
             encoding="utf-8"
         )
@@ -183,9 +183,13 @@ class DashboardMediaPreviewTests(unittest.TestCase):
         kind_source = (ROOT / "core" / "panel" / "gallery" / "kind.py").read_text(
             encoding="utf-8"
         )
+        style_source = (
+            ROOT / "pages" / "dashboard" / "styles" / "lists.css"
+        ).read_text(encoding="utf-8")
 
-        self.assertIn('mediaKind: "degraded"', status_source)
-        self.assertIn('"degraded"', kind_source)
+        self.assertNotIn('mediaKind: "degraded"', status_source)
+        self.assertNotIn('"degraded"', kind_source)
+        self.assertNotIn("is-degraded", style_source)
         self.assertNotIn("媒体已降级", item_source)
         self.assertNotIn("部分媒体能力未完成", item_source)
 

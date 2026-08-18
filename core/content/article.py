@@ -6,7 +6,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
-from ..database.keys import QZONE_TARGET_ID
+from ..database.keys import is_public_share_target, public_share_target_label
 from ..prompt import build_common_content_rules
 from .contentbase import ContentComponent
 from .evidence import strip_news_reference_links
@@ -124,9 +124,11 @@ class ContentNewsService(ContentComponent):
         return "\n".join(lines)
 
     @staticmethod
-    def _news_target_label(is_group: bool, is_qzone: bool) -> str:
+    def _news_target_label(
+        is_group: bool, is_qzone: bool, public_label: str = "QQ空间"
+    ) -> str:
         if is_qzone:
-            return "QQ空间"
+            return public_label
         return "群聊" if is_group else "私聊"
 
     def _build_news_prompt(
@@ -201,7 +203,8 @@ class ContentNewsService(ContentComponent):
             return None
 
         is_group = ctx["is_group"]
-        is_qzone = ctx.get("target_id") == QZONE_TARGET_ID
+        is_qzone = is_public_share_target(ctx.get("target_id"))
+        public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
         detect_name = ctx.get("detect_name", "")
 
@@ -242,6 +245,7 @@ class ContentNewsService(ContentComponent):
             period_label=ctx["period_label"],
             action="分享新闻",
             allow_detail=allow_detail,
+            public_label=public_label,
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
@@ -249,7 +253,7 @@ class ContentNewsService(ContentComponent):
             ctx=ctx,
             source_name=source_name,
             share_count=share_count,
-            target_label=self._news_target_label(is_group, is_qzone),
+            target_label=self._news_target_label(is_group, is_qzone, public_label),
             user_info_prompt=user_info_prompt,
             news_text=news_text,
             common_rules=common_rules,

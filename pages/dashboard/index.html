@@ -68,6 +68,7 @@
                           <option value="broadcast_groups">仅群聊</option>
                           <option value="broadcast_users">仅私聊</option>
                           <option value="qzone">QQ 空间</option>
+                          <option value="xiaohongshu">小红书</option>
                           <option value="briefing">早报</option>
                         </select>
                       </div>
@@ -278,25 +279,6 @@
             <p class="eyebrow">Daily Share · 把规则贴进奶油抽屉</p>
             <h1>设置贴纸册</h1>
             <p class="bento-subtitle">把分享、空间、素材和日程的开关收好，想调哪一格就轻轻点开。</p>
-            <div class="settings-config-actions" aria-label="设置操作">
-              <button
-                id="saveConfigButton"
-                class="text-button strong"
-                type="submit"
-                form="configForm"
-                disabled
-              >
-                立即保存
-              </button>
-              <button
-                id="reloadConfigButton"
-                class="text-button"
-                type="button"
-                title="重新读取当前已保存的设置"
-              >
-                重新加载
-              </button>
-            </div>
           </div>
           <div class="hero-badges bento-ribbon" aria-label="设置页区域">
             <button
@@ -332,11 +314,13 @@
             <a href="#settings-briefing" data-code="05">早报</a>
             <a href="#settings-qzone" data-code="06">空间</a>
             <a href="#settings-qzone-sequence" data-code="07">空间序列</a>
-            <a href="#settings-content" data-code="08">内容</a>
-            <a href="#settings-media" data-code="09">媒体</a>
-            <a href="#settings-tts" data-code="10">语音</a>
-            <a href="#settings-weixin" data-code="11">微信</a>
-            <a href="#settings-news" data-code="12">新闻</a>
+            <a href="#settings-xiaohongshu" data-code="08">小红书</a>
+            <a href="#settings-xiaohongshu-sequence" data-code="09">小红书序列</a>
+            <a href="#settings-content" data-code="10">内容</a>
+            <a href="#settings-media" data-code="11">媒体</a>
+            <a href="#settings-tts" data-code="12">语音</a>
+            <a href="#settings-weixin" data-code="13">微信</a>
+            <a href="#settings-news" data-code="14">新闻</a>
           </nav>
           <form id="configForm" class="settings-form bento-settings-grid">
             <section id="settings-target" class="settings-section active" data-settings-section="target" aria-label="目标设置">
@@ -746,6 +730,47 @@
               <label class="setting-field">
                 <span>深夜</span>
                 <textarea id="cfgQzoneLateNightSequence" rows="3" placeholder="心情&#10;问候"></textarea>
+              </label>
+            </section>
+
+            <section id="settings-xiaohongshu" class="settings-section" data-settings-section="xiaohongshu" aria-label="小红书设置">
+              <h2 class="settings-section-title">小红书</h2>
+            </section>
+
+            <section id="settings-xiaohongshu-sequence" class="settings-section" data-settings-section="xiaohongshuSequence" aria-label="小红书时段序列">
+              <h2 class="settings-section-title">小红书时段序列</h2>
+              <p class="settings-section-note">默认类型选择“自动”时，随机时段会按当前时段的序列循环选择内容类型；指定具体类型时不使用序列。</p>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_dawn_sequence">
+                <span>凌晨</span>
+                <textarea id="cfgXiaohongshuDawnSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_morning_sequence">
+                <span>早晨</span>
+                <textarea id="cfgXiaohongshuMorningSequence" rows="3" placeholder="问候&#10;心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_forenoon_sequence">
+                <span>上午</span>
+                <textarea id="cfgXiaohongshuForenoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_noon_sequence">
+                <span>中午</span>
+                <textarea id="cfgXiaohongshuNoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_afternoon_sequence">
+                <span>下午</span>
+                <textarea id="cfgXiaohongshuAfternoonSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_evening_sequence">
+                <span>傍晚</span>
+                <textarea id="cfgXiaohongshuEveningSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_night_sequence">
+                <span>夜晚</span>
+                <textarea id="cfgXiaohongshuNightSequence" rows="3" placeholder="心情"></textarea>
+              </label>
+              <label class="setting-field" data-schema-extra="1" data-schema-scope="section" data-schema-section="xiaohongshu_conf" data-schema-field="xiaohongshu_late_night_sequence">
+                <span>深夜</span>
+                <textarea id="cfgXiaohongshuLateNightSequence" rows="3" placeholder="心情&#10;问候"></textarea>
               </label>
             </section>
 

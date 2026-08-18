@@ -47,6 +47,7 @@ class SupportComponent:
     basic_conf = RuntimeField("basic_conf")
     extra_shares_conf = RuntimeField("extra_shares_conf")
     qzone_conf = RuntimeField("qzone_conf")
+    xiaohongshu_conf = RuntimeField("xiaohongshu_conf")
     contact_aliases = RuntimeField("contact_aliases")
     _is_terminated = RuntimeField("_is_terminated")
     _cached_adapter_id = RuntimeField("_cached_adapter_id")

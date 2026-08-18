@@ -17,7 +17,7 @@ class DashboardRouteConfigService(PanelComponent):
                         requested_revision,
                         settings_config_revision(self.config),
                         conflict_message=(
-                            "设置已在其他页面或运行过程中更新，请重新加载设置后重试"
+                            "设置已在其他页面或运行过程中更新，请基于最新设置重试"
                         ),
                     )
 

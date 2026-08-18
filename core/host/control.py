@@ -64,8 +64,10 @@ class PluginManualShareService(SupportComponent):
             return False, None
         return True, factory()
 
-    def _parse_manual_news_source(self, parts: list[str]) -> str | None:
-        for part in parts[2:]:
+    def _parse_manual_news_source(
+        self, parts: list[str], *, start_index: int = 2
+    ) -> str | None:
+        for part in parts[start_index:]:
             if part in ["图片", "广播", "空间"]:
                 continue
             if part in SOURCE_CN_MAP:

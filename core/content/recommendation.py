@@ -4,7 +4,7 @@ import re
 
 from astrbot.api import logger
 
-from ..database.keys import QZONE_TARGET_ID
+from ..database.keys import is_public_share_target, public_share_target_label
 from ..prompt import (
     build_common_content_rules,
     build_opening_integrity_rule,
@@ -58,7 +58,8 @@ class ContentRecommendationService(ContentComponent):
             return None
 
         is_group = ctx["is_group"]
-        is_qzone = ctx.get("target_id") == QZONE_TARGET_ID
+        is_qzone = is_public_share_target(ctx.get("target_id"))
+        public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
         detect_name = ctx.get("detect_name", "")
 
@@ -115,10 +116,11 @@ class ContentRecommendationService(ContentComponent):
             period_label=ctx["period_label"],
             action="推荐",
             allow_detail=allow_detail,
+            public_label=public_label,
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
-        target_str = "QQ空间" if is_qzone else ("群聊" if is_group else "私聊")
+        target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         opening_guide = self._recommendation_opening_guide(is_qzone, is_group)
         opening_rule = build_opening_integrity_rule(
             f"- {opening_guide}\n- 可以用“最近发现了一个...”或“最近在重温...”这类自然开头。\n- 不要评价群聊气氛。"

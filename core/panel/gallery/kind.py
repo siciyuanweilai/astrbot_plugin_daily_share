@@ -63,7 +63,7 @@ class DashboardMediaKindService(PanelComponent):
     @staticmethod
     def _page_dynamic_media_kind(value: str) -> str:
         raw = str(value or "all").strip().lower()
-        allowed = {"all", "today", "text", "image", "video", "degraded"}
+        allowed = {"all", "today", "text", "image", "video"}
         return raw if raw in allowed else "all"
 
     @staticmethod

@@ -70,10 +70,16 @@ def build_private_target_prompt(
     )
 
 
-def build_audience_rule(*, is_group: bool, is_qzone: bool, action: str = "分享") -> str:
+def build_audience_rule(
+    *,
+    is_group: bool,
+    is_qzone: bool,
+    action: str = "分享",
+    public_label: str = "QQ 空间",
+) -> str:
     if is_qzone:
         return (
-            f"QQ 空间：这是你的个人动态，按第一人称记录或表达{action}；"
+            f"{public_label}：这是你的个人动态，按第一人称记录或表达{action}；"
             "不要写成群公告、私聊消息或向某个特定对象喊话。"
         )
     if is_group:
@@ -96,6 +102,7 @@ def build_common_content_rules(
     period_label: str,
     action: str,
     allow_detail: bool = False,
+    public_label: str = "QQ 空间",
 ) -> str:
     privacy_rule = (
         "群聊里可以轻量提及适合公开的状态，但不要暴露具体地点、行程、关系和备忘录。"
@@ -106,7 +113,7 @@ def build_common_content_rules(
     return compact_prompt(
         "【通用表达规则】",
         f"- 当前本地时间：{date_text} {time_text}（{period_label}）。涉及早晚、白天、夜晚、晚安等表达时，以这个时间为准。",
-        f"- 目标关系：{build_audience_rule(is_group=is_group, is_qzone=is_qzone, action=action)}",
+        f"- 目标关系：{build_audience_rule(is_group=is_group, is_qzone=is_qzone, action=action, public_label=public_label)}",
         f"- 隐私边界：{privacy_rule}",
         f"- 场景一致性：{scene_rule}",
         "- 表达方式：自然、具体、有人味；不要像客服、营销号、机器人或模板文案。",

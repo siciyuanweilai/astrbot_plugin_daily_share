@@ -30,6 +30,7 @@ class TaskManager:
         self.delivery_assets = self.services.delivery_assets
         self.weixin_delivery = self.services.weixin_delivery
         self.delivery = self.services.delivery
+        self.xiaohongshu_share = self.services.xiaohongshu_share
 
     def update_configs(
         self,
@@ -41,6 +42,7 @@ class TaskManager:
         tts: dict | None = None,
         context: dict | None = None,
         receiver: dict | None = None,
+        xiaohongshu: dict | None = None,
     ) -> None:
         """原子替换所有任务服务读取的配置引用。"""
 
@@ -58,6 +60,8 @@ class TaskManager:
             self.config.context = context
         if receiver is not None:
             self.config.receiver = receiver
+        if xiaohongshu is not None:
+            self.config.xiaohongshu = xiaohongshu
 
     @property
     def qzone_auto_interaction_lock(self):

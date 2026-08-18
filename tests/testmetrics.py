@@ -762,7 +762,6 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summary["total"], 3)
             self.assertEqual(summary["success"], 2)
             self.assertEqual(summary["failed"], 1)
-            self.assertEqual(summary["degraded"], 1)
             self.assertEqual(summary["today"], 2)
             self.assertEqual(summary["dynamic"], 2)
             self.assertEqual(summary["media"], 1)
@@ -930,9 +929,6 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             text_items = await db.get_recent_dynamics(limit=10, media_kind="text")
             image_items = await db.get_recent_dynamics(limit=10, media_kind="image")
             video_items = await db.get_recent_dynamics(limit=10, media_kind="video")
-            degraded_items = await db.get_recent_dynamics(
-                limit=10, media_kind="degraded"
-            )
             news_images = await db.get_recent_dynamics(
                 limit=10,
                 media_kind="image",
@@ -951,9 +947,6 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                 [item["content"] for item in video_items], ["typed video greeting"]
             )
             self.assertEqual(
-                [item["content"] for item in degraded_items], ["degraded text"]
-            )
-            self.assertEqual(
                 [item["content"] for item in news_images], ["typed image news"]
             )
 
@@ -961,7 +954,6 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summary["text"], 2)
             self.assertEqual(summary["image"], 2)
             self.assertEqual(summary["video"], 1)
-            self.assertEqual(summary["degraded"], 1)
 
     async def test_target_stats_use_share_type_to_separate_briefing(self):
         mod = _load_db_module()

@@ -2,7 +2,13 @@ from datetime import datetime
 
 from astrbot.api import logger
 
-from ...database.keys import BRIEFING_STATE_KEY, GLOBAL_STATE_KEY, QZONE_STATE_KEY
+from ...database.keys import (
+    BRIEFING_STATE_KEY,
+    GLOBAL_STATE_KEY,
+    QZONE_STATE_KEY,
+    XIAOHONGSHU_STATE_KEY,
+)
+from ...schedule import normalize_schedule_mode
 from ..qinteract import QZONE_AUTO_INTERACTION_STATE_KEY
 from .schedulerbase import SchedulerComponent
 
@@ -19,9 +25,9 @@ class TaskSchedulerTriggerService(SchedulerComponent):
         delay_key: str,
         mode_default: str = "llm_smart",
     ) -> int:
-        mode = str(
-            (mode_conf or {}).get(mode_key, mode_default) or mode_default
-        ).strip()
+        mode = normalize_schedule_mode(
+            (mode_conf or {}).get(mode_key, mode_default), mode_default
+        )
         if mode not in {"fixed_time", "cron"}:
             return 0
         return self.schedule.delay._read_delay_minutes(delay_conf or {}, delay_key)
@@ -167,4 +173,43 @@ class TaskSchedulerTriggerService(SchedulerComponent):
             delayed_func=execute_delayed_qzone_auto_interaction,
             delayed_job_id="delayed_qzone_auto_interaction",
             log_label="QQ 空间自动互动任务",
+        )
+
+    async def _task_wrapper_xiaohongshu(self):
+        """小红书自动发布任务入口。"""
+        if self.plugin._is_terminated or not self.xiaohongshu_conf.get(
+            "enable_xiaohongshu", False
+        ):
+            return
+        random_delay = self._scheduled_random_delay_minutes(
+            mode_conf=self.xiaohongshu_conf,
+            mode_key="trigger_mode",
+            delay_conf=self.xiaohongshu_conf,
+            delay_key="cron_random_delay",
+            mode_default="fixed_time",
+        )
+        await self.schedule.delay._schedule_or_execute_delayed(
+            state_key=XIAOHONGSHU_STATE_KEY,
+            delay_minutes=random_delay,
+            delayed_func=self._execute_delayed_xiaohongshu,
+            delayed_job_id="delayed_xiaohongshu_share",
+            log_label="小红书任务",
+        )
+
+    async def _execute_delayed_xiaohongshu(self):
+        if not self.xiaohongshu_conf.get("enable_xiaohongshu", False):
+            await self.db.update_share_state(
+                XIAOHONGSHU_STATE_KEY, {"pending_delay_job": None}
+            )
+            return
+
+        async def run_share():
+            logger.info("[日常分享] 开始小红书发布任务...")
+            await self.services.xiaohongshu_share.execute_xiaohongshu_share()
+
+        await self.schedule.delay._run_tracked_pending_job(
+            XIAOHONGSHU_STATE_KEY,
+            run_share,
+            lock=self._lock,
+            locked_warning="[日常分享] 上一个任务仍在进行，已跳过本次小红书触发",
         )

@@ -29,6 +29,10 @@ class DashboardRouteActionService(PanelComponent):
     def _ensure_page_share_targets(
         self, target: str, specific_target: str = ""
     ) -> None:
+        if target == "xiaohongshu":
+            if str(self.xiaohongshu_conf.get("server_url", "") or "").strip():
+                return
+            raise RuntimeError("请先在小红书设置中填写发布服务地址。")
         if target in {"qzone", "briefing"} or specific_target:
             return
         target_scope = _page_broadcast_target_scope(target)
@@ -65,6 +69,15 @@ class DashboardRouteActionService(PanelComponent):
                     if not ok:
                         raise RuntimeError("QQ 空间分享失败，请查看日志")
                     success_message = "QQ 空间分享成功"
+                elif target == "xiaohongshu":
+                    ok = await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
+                        force_type=force_type,
+                        news_source=source_key,
+                        source_type=SOURCE_MANUAL,
+                    )
+                    if not ok:
+                        raise RuntimeError("小红书发布失败，请查看日志")
+                    success_message = "小红书发布成功"
                 elif target == "briefing":
                     ok = await self.task_manager.briefing.execute_briefing_share(
                         source_type=SOURCE_MANUAL
@@ -106,6 +119,7 @@ class DashboardRouteActionService(PanelComponent):
                 "broadcast_groups",
                 "broadcast_users",
                 "qzone",
+                "xiaohongshu",
                 "briefing",
             }:
                 raise RuntimeError(f"不支持的分享目标: {target}")

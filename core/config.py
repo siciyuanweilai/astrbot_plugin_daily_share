@@ -358,6 +358,18 @@ SHARE_TYPE_SEQUENCES = {
     ],
 }
 
+# 小红书按时段的默认内容序列；与仪表盘中的小红书时段序列保持一致。
+XIAOHONGSHU_SHARE_TYPE_SEQUENCES = {
+    TimePeriod.DAWN: ["心情"],
+    TimePeriod.MORNING: ["问候", "心情"],
+    TimePeriod.FORENOON: ["心情"],
+    TimePeriod.NOON: ["心情"],
+    TimePeriod.AFTERNOON: ["心情"],
+    TimePeriod.EVENING: ["心情"],
+    TimePeriod.NIGHT: ["心情"],
+    TimePeriod.LATE_NIGHT: ["心情", "问候"],
+}
+
 # 默认知识库细分
 DEFAULT_KNOWLEDGE_CATS = {
     "有趣的冷知识": "动物行为, 人体奥秘, 地理奇观, 历史误区, 语言文字, 植物智慧, 海洋生物, 昆虫视界, 真菌世界, 人体极限",

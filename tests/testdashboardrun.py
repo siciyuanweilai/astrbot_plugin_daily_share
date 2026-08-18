@@ -80,16 +80,19 @@ class _TaskManager:
         execute_result=True,
         qzone_result=True,
         briefing_result=True,
+        xiaohongshu_result=True,
     ):
         self.groups = list(groups or [])
         self.users = list(users or [])
         self.execute_result = execute_result
         self.qzone_result = qzone_result
         self.briefing_result = briefing_result
+        self.xiaohongshu_result = xiaohongshu_result
         self.execute_calls = []
         self.share = self
         self.qzone_share = self
         self.briefing = self
+        self.xiaohongshu_share = self
 
     def resolve_execute_share_targets(
         self,
@@ -117,6 +120,10 @@ class _TaskManager:
     async def execute_briefing_share(self, **kwargs):
         self.execute_calls.append({"briefing": kwargs})
         return self.briefing_result
+
+    async def execute_xiaohongshu_share(self, **kwargs):
+        self.execute_calls.append({"xiaohongshu": kwargs})
+        return self.xiaohongshu_result
 
 
 class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
@@ -146,6 +153,7 @@ class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
                 self._page_action_runs = {}
                 self._page_action_seq = 0
                 self.tracked = []
+                self.xiaohongshu_conf = {"server_url": "http://127.0.0.1:18061/api"}
 
             async def _page_json(self, callback, headers=None):
                 try:
@@ -269,6 +277,32 @@ class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run["status"], "error")
         self.assertEqual(run["message"], "早报分享失败，请查看日志")
 
+    async def test_page_run_allows_configured_xiaohongshu_target(self):
+        dashboard = self.Dashboard(
+            {"target": "xiaohongshu", "share_type": "心情"}, _TaskManager()
+        )
+
+        result = await dashboard.page_run()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["run"]["target"], "xiaohongshu")
+        self.assertEqual(len(dashboard.tracked), 1)
+
+    async def test_run_page_action_marks_failed_xiaohongshu_as_error(self):
+        manager = _TaskManager(xiaohongshu_result=False)
+        dashboard = self.Dashboard({"target": "xiaohongshu"}, manager)
+        dashboard._page_action_runs["run-1"] = {
+            "id": "run-1",
+            "status": "running",
+            "started_at": "",
+        }
+
+        await dashboard._run_page_action("run-1", "xiaohongshu", "心情", "")
+
+        run = dashboard._page_action_runs["run-1"]
+        self.assertEqual(run["status"], "error")
+        self.assertEqual(run["message"], "小红书发布失败，请查看日志")
+
     async def test_run_page_retry_action_marks_failed_global_retry_as_error(self):
         manager = _TaskManager(execute_result=False)
         dashboard = self.Dashboard({}, manager)
@@ -304,6 +338,23 @@ class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
         run = dashboard._page_action_runs["retry-1"]
         self.assertEqual(run["status"], "error")
         self.assertEqual(run["message"], "早报重试失败，请查看日志")
+
+    async def test_run_page_retry_action_routes_xiaohongshu_history(self):
+        manager = _TaskManager(xiaohongshu_result=True)
+        dashboard = self.Dashboard({}, manager)
+        dashboard._page_action_runs["retry-1"] = {
+            "id": "retry-1",
+            "status": "running",
+            "started_at": "",
+        }
+
+        await dashboard._run_page_retry_action(
+            "retry-1",
+            {"target_id": self.keys.XIAOHONGSHU_TARGET_ID, "type": "心情"},
+        )
+
+        self.assertEqual(dashboard._page_action_runs["retry-1"]["status"], "done")
+        self.assertEqual(manager.execute_calls[0]["xiaohongshu"]["force_type"], "心情")
 
 
 if __name__ == "__main__":

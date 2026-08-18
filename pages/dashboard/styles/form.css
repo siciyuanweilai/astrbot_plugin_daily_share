@@ -8,27 +8,6 @@
   backdrop-filter: none;
 }
 
-.settings-config-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  max-width: 100%;
-  margin-block-start: 6px;
-}
-
-.settings-config-actions .text-button {
-  min-width: 96px;
-  min-height: 40px;
-}
-
-.settings-config-actions .is-conflict {
-  border-color: var(--danger);
-  color: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger-soft);
-}
-
 .settings-form {
   min-width: 0;
   width: 100%;
@@ -79,6 +58,7 @@
 
 .settings-section[data-settings-section="sequence"],
 .settings-section[data-settings-section="qzoneSequence"],
+.settings-section[data-settings-section="xiaohongshu"],
 .settings-section[data-settings-section="llm"],
 .settings-section[data-settings-section="tts"] {
   --section-accent: var(--blue);
@@ -134,6 +114,8 @@
 
 .settings-section[data-settings-section="sequence"],
 .settings-section[data-settings-section="qzoneSequence"],
+.settings-section[data-settings-section="xiaohongshu"],
+.settings-section[data-settings-section="xiaohongshuSequence"],
 .settings-section[data-settings-section="basic"] {
   grid-column: span 6;
   min-height: 320px;
@@ -204,6 +186,14 @@
   order: 120;
 }
 
+.settings-section[data-settings-section="xiaohongshu"] {
+  order: 125;
+}
+
+.settings-section[data-settings-section="xiaohongshuSequence"] {
+  order: 126;
+}
+
 .settings-section[data-settings-section="llm"] {
   order: 130;
 }
@@ -252,6 +242,35 @@
 
 .settings-extra-fields {
   display: contents;
+}
+
+.settings-extra-advanced {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 15px 18px;
+  min-width: 0;
+  margin-top: -2px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(190, 157, 174, 0.56);
+}
+
+.settings-extra-advanced > summary {
+  grid-column: 1 / -1;
+  cursor: pointer;
+  color: #8a6678;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+  user-select: none;
+}
+
+.settings-extra-advanced > summary::marker {
+  color: var(--section-accent);
+}
+
+.settings-extra-advanced[open] > summary {
+  margin-bottom: -2px;
 }
 
 /* 字段 */
@@ -402,7 +421,10 @@
 }
 
 .settings-section[data-settings-section="sequence"] .setting-field,
-.settings-section[data-settings-section="qzoneSequence"] .setting-field {
+.settings-section[data-settings-section="qzoneSequence"] .setting-field,
+.settings-section[data-settings-section="xiaohongshu"] .setting-field,
+.settings-section[data-settings-section="xiaohongshuSequence"] .setting-field,
+.settings-section[data-settings-section="xiaohongshu"] .setting-switch {
   grid-column: span 6;
 }
 

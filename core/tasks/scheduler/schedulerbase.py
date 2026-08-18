@@ -61,6 +61,10 @@ class SchedulerComponent:
         return self.schedule.qzone_conf
 
     @property
+    def xiaohongshu_conf(self):
+        return self.schedule.xiaohongshu_conf
+
+    @property
     def receiver_conf(self):
         return self.schedule.receiver_conf
 

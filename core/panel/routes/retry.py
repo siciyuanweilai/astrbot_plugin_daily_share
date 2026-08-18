@@ -9,6 +9,7 @@ from ...database.keys import (
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
+    XIAOHONGSHU_TARGET_ID,
 )
 from ..panelcomponent import PanelComponent
 
@@ -16,6 +17,8 @@ from ..panelcomponent import PanelComponent
 def _retry_failure_message(target_id: str) -> str:
     if target_id == QZONE_TARGET_ID:
         return "QQ 空间重试失败，请查看日志"
+    if target_id == XIAOHONGSHU_TARGET_ID:
+        return "小红书重试失败，请查看日志"
     if target_id in BRIEFING_TARGET_ALIASES:
         return "早报重试失败，请查看日志"
     return "重试失败，请查看日志"
@@ -33,6 +36,11 @@ class DashboardRouteRetryService(PanelComponent):
             async with self._lock:
                 if target_id == QZONE_TARGET_ID:
                     ok = await self.task_manager.qzone_share.execute_qzone_share(
+                        force_type=force_type,
+                        source_type=SOURCE_MANUAL,
+                    )
+                elif target_id == XIAOHONGSHU_TARGET_ID:
+                    ok = await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
                         force_type=force_type,
                         source_type=SOURCE_MANUAL,
                     )

@@ -36,22 +36,33 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.1.0", metadata)
-        self.assertIn("version-1.1.0", readme)
-        self.assertIn("v1.1.0 已发布", readme)
+        self.assertIn("version: 1.1.1", metadata)
+        self.assertIn("version-1.1.1", readme)
+        self.assertIn("v1.1.1 已发布", readme)
+        self.assertIn("分享 [类型] 小红书", readme)
+        self.assertIn("小红书", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
+        self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        release = changelog.split("## 🛡️ v1.1.0", 1)[1].split("## 🎨 v1.0.9", 1)[0]
-        self.assertIn("数据库结构保持 v2", release)
-        self.assertIn("person", release)
-        self.assertIn("object", release)
-        self.assertIn("landscape", release)
-        self.assertIn("角色参考图身份锚点", release)
-        self.assertIn("总等待时间", release)
-        self.assertIn("DEBUG", release)
-        self.assertIn("568 项", release)
+        current_release = changelog.split("## 📕 v1.1.1", 1)[1].split(
+            "## 🛡️ v1.1.0", 1
+        )[0]
+        self.assertIn("数据库结构保持 v2", current_release)
+        self.assertIn("分享 [类型] 小红书", current_release)
+
+        previous_release = changelog.split("## 🛡️ v1.1.0", 1)[1].split(
+            "## 🎨 v1.0.9", 1
+        )[0]
+        self.assertIn("数据库结构保持 v2", previous_release)
+        self.assertIn("person", previous_release)
+        self.assertIn("object", previous_release)
+        self.assertIn("landscape", previous_release)
+        self.assertIn("角色参考图身份锚点", previous_release)
+        self.assertIn("总等待时间", previous_release)
+        self.assertIn("DEBUG", previous_release)
+        self.assertIn("568 项", previous_release)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
@@ -354,13 +365,11 @@ class TaskArchitectureTests(unittest.TestCase):
         for element_id in element_ids:
             self.assertRegex(html, rf'\bid=["\']{re.escape(element_id)}["\']')
 
-        self.assertIn('id="saveConfigButton"', html)
-        self.assertIn('form="configForm"', html)
-        self.assertIn('id="reloadConfigButton"', html)
-        self.assertLess(
-            html.index('class="settings-config-actions"'),
-            html.index('class="panel settings-panel bento-settings-board"'),
-        )
+        self.assertNotIn('id="saveConfigButton"', html)
+        self.assertNotIn('id="reloadConfigButton"', html)
+        self.assertNotIn("settings-config-actions", html)
+        self.assertIn("void commitConfigSave({ changeSeq })", scripts)
+        self.assertIn("已自动加载最新设置", scripts)
 
     def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
         html = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")

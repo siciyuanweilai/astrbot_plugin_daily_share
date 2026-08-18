@@ -2,9 +2,19 @@ from datetime import datetime
 
 from astrbot.api import logger
 
-from ..config import SHARE_TYPE_SEQUENCES, ShareType, TimePeriod
+from ..config import (
+    SHARE_TYPE_SEQUENCES,
+    XIAOHONGSHU_SHARE_TYPE_SEQUENCES,
+    ShareType,
+    TimePeriod,
+)
 from ..constants import normalize_share_type_sequence, normalize_share_type_token
-from ..database.keys import GLOBAL_STATE_KEY, QZONE_STATE_KEY, target_state_key
+from ..database.keys import (
+    GLOBAL_STATE_KEY,
+    QZONE_STATE_KEY,
+    XIAOHONGSHU_TARGET_ID,
+    target_state_key,
+)
 from .taskbase import TaskServiceBase
 
 
@@ -54,13 +64,22 @@ class TaskTypeSelectorService(TaskServiceBase):
                             f"[日常分享] 自定义序列包含无效分享类型 {selected_str!r}，使用时段默认序列。"
                         )
 
-        conf_node = self.qzone_conf if is_qzone else self.basic_conf
-        prefix = "qzone_" if is_qzone else ""
+        default_sequences = SHARE_TYPE_SEQUENCES
+        if is_qzone:
+            conf_node = self.qzone_conf
+            prefix = "qzone_"
+        elif target_id == XIAOHONGSHU_TARGET_ID:
+            conf_node = self.xiaohongshu_conf
+            prefix = "xiaohongshu_"
+            default_sequences = XIAOHONGSHU_SHARE_TYPE_SEQUENCES
+        else:
+            conf_node = self.basic_conf
+            prefix = ""
         config_key = f"{prefix}{current_period.value}_sequence"
         seq = conf_node.get(config_key, [])
 
         if not seq:
-            seq = SHARE_TYPE_SEQUENCES.get(current_period, ["问候"])
+            seq = default_sequences.get(current_period, ["问候"])
 
         idx_key = f"index_{current_period.value}"
         idx = state.get(idx_key, 0)

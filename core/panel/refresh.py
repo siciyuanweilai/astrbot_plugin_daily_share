@@ -19,6 +19,7 @@ class DashboardConfigRefreshService(PanelComponent):
         self.extra_shares_conf = self.config.setdefault("extra_shares", {})
         self.context_conf = self.config.setdefault("context_conf", {})
         self.news_conf = self.config.setdefault("news_conf", {})
+        self.xiaohongshu_conf = self.config.setdefault("xiaohongshu_conf", {})
         self.contact_aliases = self.config.get("contact_aliases", [])
 
         self.ctx_service.config = self.config
@@ -72,7 +73,10 @@ class DashboardConfigRefreshService(PanelComponent):
             tts=self.tts_conf,
             context=self.context_conf,
             receiver=self.receiver_conf,
+            xiaohongshu=self.xiaohongshu_conf,
         )
+
+        self.plugin.xiaohongshu_client.config = self.xiaohongshu_conf
 
         self.command_handler.config = self.config
         self.command_handler.basic_conf = self.basic_conf

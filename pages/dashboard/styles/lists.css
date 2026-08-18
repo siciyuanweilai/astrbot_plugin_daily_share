@@ -424,13 +424,6 @@ button.media-stat-chip.active {
   --stat-border: rgba(176, 210, 236, 0.84);
 }
 
-.media-stat-chip.is-degraded {
-  --stat-accent: #d56b3f;
-  --stat-ink: #8b442c;
-  --stat-soft: rgba(255, 235, 218, 0.94);
-  --stat-border: rgba(238, 174, 132, 0.86);
-}
-
 .media-stat-chip.is-today {
   --stat-accent: #d88935;
   --stat-ink: #8c5522;

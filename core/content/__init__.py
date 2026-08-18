@@ -3,7 +3,10 @@ from datetime import datetime
 from astrbot.api import logger
 
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS, ShareType, TimePeriod
-from ..database.keys import QZONE_TARGET_ID
+from ..database.keys import (
+    is_public_share_target,
+    public_share_target_label,
+)
 from ..identity import build_content_system_prompt
 from ..integrations import DailyLifeBridge
 from .article import ContentNewsService
@@ -59,6 +62,7 @@ class ContentService:
         self.news_conf = self.config.get("news_conf", {})
         self.context_conf = self.config.get("context_conf", {})
         self.qzone_conf = self.config.get("qzone_conf", {})
+        self.xiaohongshu_conf = self.config.get("xiaohongshu_conf", {})
 
         self.topic = ContentTopicService(self)
         self.recommendation = ContentRecommendationService(self)
@@ -118,8 +122,10 @@ class ContentService:
                 persona_info.get("prompt", "")
             ),
             "output_format_hint": self.support._build_output_format_prompt(
-                target_id == QZONE_TARGET_ID
+                target_id
             ),
+            "public_target": is_public_share_target(target_id),
+            "public_target_label": public_share_target_label(target_id),
             "period_label": self.support._get_period_label(period),
             "date_str": date_str,
             "time_str": time_str,

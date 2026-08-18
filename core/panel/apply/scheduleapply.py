@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...schedule import ScheduleDefinition
+from ...schedule import ScheduleDefinition, normalize_schedule_mode
 from ..panelcomponent import PanelComponent
 
 
@@ -17,7 +17,9 @@ class DashboardApplyScheduleService(PanelComponent):
             definition,
         )
 
-        mode = str(target.get(definition.mode_key) or definition.mode_default).strip()
+        mode = normalize_schedule_mode(
+            target.get(definition.mode_key), definition.mode_default
+        )
         if mode == "fixed_time" and not target.get(definition.fixed_key):
             raise RuntimeError(f"{definition.fixed_label}不能为空")
         if mode == "random_period" and not target.get(definition.random_key):
@@ -40,7 +42,9 @@ class DashboardApplyScheduleService(PanelComponent):
         smart_prompt_key = definition.smart_prompt_key
         if mode_key in source:
             target[mode_key] = self.validation._page_choice_value(
-                source.get(mode_key),
+                normalize_schedule_mode(
+                    source.get(mode_key), definition.mode_default
+                ),
                 definition.mode_options,
                 definition.mode_default,
                 definition.mode_label,

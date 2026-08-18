@@ -3,7 +3,12 @@ from datetime import datetime, timedelta
 
 from astrbot.api import logger
 
-from ...database.keys import BRIEFING_STATE_KEY, GLOBAL_STATE_KEY, QZONE_STATE_KEY
+from ...database.keys import (
+    BRIEFING_STATE_KEY,
+    GLOBAL_STATE_KEY,
+    QZONE_STATE_KEY,
+    XIAOHONGSHU_STATE_KEY,
+)
 from .schedulerbase import SchedulerComponent
 
 
@@ -149,5 +154,17 @@ class TaskSchedulerRandomService(SchedulerComponent):
             job_prefix="qzone_random_share_",
             func=self.schedule.triggers._task_wrapper_qzone,
             label="QQ 空间",
+            generation=generation,
+        )
+
+    async def _schedule_daily_xiaohongshu_random_jobs(
+        self, *, generation: int | None = None
+    ):
+        await self._schedule_daily_random_schedule_jobs(
+            state_key=XIAOHONGSHU_STATE_KEY,
+            periods=self.xiaohongshu_conf.get("random_periods", ["19:00-21:00"]),
+            job_prefix="xiaohongshu_random_share_",
+            func=self.schedule.triggers._task_wrapper_xiaohongshu,
+            label="小红书",
             generation=generation,
         )

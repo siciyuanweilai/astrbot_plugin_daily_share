@@ -898,6 +898,279 @@
       }
     }
   },
+  "xiaohongshu_conf": {
+    "description": "📕 小红书发布设置",
+    "type": "object",
+    "hint": "通过兼容 REST 接口的小红书发布服务，独立生成并发布日常分享。",
+    "items": {
+      "enable_xiaohongshu": {
+        "description": "启用小红书自动发布",
+        "type": "bool",
+        "default": false,
+        "hint": "自动发布还需要开启全局自动分享总开关；关闭本项时仍可使用管理员指令 /分享 [类型] 小红书 手动发布。"
+      },
+      "server_url": {
+        "description": "发布服务地址",
+        "type": "string",
+        "default": "",
+        "hint": "填写小红书发布服务提供的 REST 地址，例如 http://127.0.0.1:18061/api。Docker 部署请填写 AstrBot 能访问到的服务地址。"
+      },
+      "cookie": {
+        "description": "登录 Cookie",
+        "type": "string",
+        "default": "",
+        "_special": "secret",
+        "hint": "仅在发布服务要求时填写；不会写入日志。"
+      },
+      "timeout_seconds": {
+        "description": "请求超时秒数",
+        "type": "int",
+        "default": 120,
+        "slider": {
+          "min": 10,
+          "max": 600,
+          "step": 10
+        }
+      },
+      "media_path_source": {
+        "description": "媒体源路径前缀",
+        "type": "string",
+        "default": "",
+        "hint": "仅当发布服务看不到 AstrBot 容器内的媒体路径时填写；同机或共享目录部署请留空。"
+      },
+      "media_path_target": {
+        "description": "媒体服务路径前缀",
+        "type": "string",
+        "default": "",
+        "hint": "填写发布服务实际可访问的对应目录，并与媒体源路径前缀成对使用；通常无需填写。"
+      },
+      "trigger_mode": {
+        "description": "自动发布定时模式",
+        "type": "string",
+        "default": "固定时间",
+        "options": [
+          "固定时间",
+          "随机时段",
+          "高级定时"
+        ]
+      },
+      "fixed_times": {
+        "description": "自动发布固定时间",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "20:30"
+        ],
+        "hint": "格式 HH:MM，可一行一个。"
+      },
+      "random_periods": {
+        "description": "自动发布随机时段",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "19:00-21:00"
+        ],
+        "hint": "格式 HH:MM-HH:MM，结束时间必须晚于开始时间。"
+      },
+      "cron": {
+        "description": "自动发布高级 cron",
+        "type": "string",
+        "default": "30 20 * * *",
+        "hint": "标准 5 位 cron 表达式。"
+      },
+      "cron_random_delay": {
+        "description": "自动发布随机延迟(分钟)",
+        "type": "int",
+        "default": 0,
+        "slider": {
+          "min": 0,
+          "max": 60,
+          "step": 1
+        }
+      },
+      "share_type": {
+        "description": "默认分享类型",
+        "type": "string",
+        "default": "自动",
+        "options": [
+          "自动",
+          "问候",
+          "新闻",
+          "心情",
+          "知识",
+          "推荐"
+        ],
+        "hint": "常规定时使用的默认类型。选择“自动”时，会按下方的小红书时段序列轮换。"
+      },
+      "share_output_format": {
+        "description": "小红书输出格式",
+        "type": "text",
+        "default": "",
+        "hint": "可选。留空时沿用全局分享文案格式；可填写：像小红书日常笔记，分成 2-4 段，不要标题和编号。"
+      },
+      "xiaohongshu_dawn_sequence": {
+        "description": "【序列】凌晨时段 (00:00-06:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_morning_sequence": {
+        "description": "【序列】早晨时段 (06:00-09:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "问候",
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_forenoon_sequence": {
+        "description": "【序列】上午时段 (09:00-12:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_noon_sequence": {
+        "description": "【序列】中午时段 (12:00-14:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_afternoon_sequence": {
+        "description": "【序列】下午时段 (14:00-16:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_evening_sequence": {
+        "description": "【序列】傍晚时段 (16:00-19:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_night_sequence": {
+        "description": "【序列】夜晚时段 (19:00-22:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "xiaohongshu_late_night_sequence": {
+        "description": "【序列】深夜时段 (22:00-24:00)",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "心情",
+          "问候"
+        ],
+        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
+      },
+      "enable_image": {
+        "description": "启用小红书配图",
+        "type": "bool",
+        "default": true,
+        "hint": "还需要开启媒体设置中的生成配图总开关。"
+      },
+      "require_image": {
+        "description": "发布前必须有配图",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后允许只发布文字；建议保持开启。"
+      },
+      "image_enabled_types": {
+        "description": "允许配图的类型",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "问候",
+          "心情",
+          "知识",
+          "推荐"
+        ]
+      },
+      "enable_video": {
+        "description": "启用小红书视频",
+        "type": "bool",
+        "default": false,
+        "hint": "需要媒体设置开启视频，并确保发布服务可以访问视频路径。"
+      },
+      "default_tags": {
+        "description": "默认话题标签",
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": [],
+        "hint": "每行一个标签，可带或不带 #。"
+      },
+      "enable_smart_tags": {
+        "description": "启用智能话题标签",
+        "type": "bool",
+        "default": true,
+        "hint": "根据分享类型和正文调用 LLM 自动生成标签；生成失败时回退到默认话题标签。关闭后只使用上面的默认话题标签。"
+      },
+      "smart_tag_count": {
+        "description": "智能标签数量",
+        "type": "int",
+        "default": 3,
+        "slider": {
+          "min": 1,
+          "max": 8,
+          "step": 1
+        },
+        "hint": "最多自动补充的标签数量，不包含默认话题标签。"
+      },
+      "visibility": {
+        "description": "可见范围",
+        "type": "string",
+        "default": "公开可见",
+        "options": [
+          "公开可见",
+          "仅自己可见",
+          "仅互关好友可见"
+        ]
+      }
+    }
+  },
   "qzone_conf": {
     "description": "🌟 QQ空间说说分享设置",
     "type": "object",

@@ -230,6 +230,14 @@ class PanelRuntime:
         self.plugin.news_conf = value
 
     @property
+    def xiaohongshu_conf(self):
+        return self.plugin.xiaohongshu_conf
+
+    @xiaohongshu_conf.setter
+    def xiaohongshu_conf(self, value) -> None:
+        self.plugin.xiaohongshu_conf = value
+
+    @property
     def contact_aliases(self):
         return self.plugin.contact_aliases
 

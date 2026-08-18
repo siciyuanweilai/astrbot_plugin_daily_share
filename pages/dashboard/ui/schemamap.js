@@ -25,6 +25,12 @@ export const settingsSectionSchema = {
     title: "QQ空间时段序列",
     hint: "当本次说说类型为自动时，会按当前时段的序列循环选择说说类型；智能定时若指定具体类型，会优先使用计划类型。",
   },
+  xiaohongshu: { section: "xiaohongshu_conf" },
+  xiaohongshuSequence: {
+    section: "xiaohongshu_conf",
+    title: "小红书时段序列",
+    hint: "当小红书默认类型为自动时，会按当前时段的序列循环选择内容类型。",
+  },
 };
 
 export const settingsFieldSchema = {
@@ -110,6 +116,14 @@ export const settingsFieldSchema = {
   cfgQzoneEveningSequence: { section: "qzone_conf", field: "qzone_evening_sequence" },
   cfgQzoneNightSequence: { section: "qzone_conf", field: "qzone_night_sequence" },
   cfgQzoneLateNightSequence: { section: "qzone_conf", field: "qzone_late_night_sequence" },
+  cfgXiaohongshuDawnSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_dawn_sequence" },
+  cfgXiaohongshuMorningSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_morning_sequence" },
+  cfgXiaohongshuForenoonSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_forenoon_sequence" },
+  cfgXiaohongshuNoonSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_noon_sequence" },
+  cfgXiaohongshuAfternoonSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_afternoon_sequence" },
+  cfgXiaohongshuEveningSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_evening_sequence" },
+  cfgXiaohongshuNightSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_night_sequence" },
+  cfgXiaohongshuLateNightSequence: { section: "xiaohongshu_conf", field: "xiaohongshu_late_night_sequence" },
   cfgKnowledgePrefix: { section: "content_library", field: "show_knowledge_type_prefix" },
   cfgRecPrefix: { section: "content_library", field: "show_rec_type_prefix" },
   cfgKnowledgeCats: { section: "content_library", field: "knowledge_cats" },
