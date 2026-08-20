@@ -6,15 +6,12 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from astrbot.api import logger
-
 from .database.history import DatabaseHistoryService
 from .database.maintenance import DatabaseMaintenanceService
 from .database.metrics import DatabaseDashboardService
-from .database.migrations import (
+from .database.schema import (
     SchemaInitializationResult,
     initialize_schema,
-    schema_requires_backup,
 )
 from .database.newssnapshot import DatabaseNewsSnapshotService
 from .database.state import DatabaseStateService
@@ -26,7 +23,6 @@ class DatabaseManager:
 
     def __init__(self, data_dir: Path, *, initialize: bool = True):
         self.db_path = Path(data_dir) / "daily_share.db"
-        self.backup_path = Path(data_dir) / "daily_share.backup.db"
         self._initialized = False
         self._closed = False
         self._initialize_lock = asyncio.Lock()
@@ -77,37 +73,14 @@ class DatabaseManager:
             cursor = conn.execute(sql, params)
             return int(cursor.rowcount or 0)
 
-    def _backup_database(self, source_conn: sqlite3.Connection) -> None:
-        temporary_path = self.backup_path.with_suffix(".db.tmp")
-        temporary_path.unlink(missing_ok=True)
-        backup_conn = None
-        try:
-            backup_conn = sqlite3.connect(temporary_path)
-            source_conn.backup(backup_conn)
-            backup_conn.close()
-            backup_conn = None
-            temporary_path.replace(self.backup_path)
-        except Exception:
-            if backup_conn is not None:
-                backup_conn.close()
-            temporary_path.unlink(missing_ok=True)
-            raise
-
     def _init_db(self) -> SchemaInitializationResult:
         # 数据库自身负责创建目录，首次安装和独立测试无需依赖外部生命周期顺序。
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
-            if schema_requires_backup(conn):
-                self._backup_database(conn)
             result = initialize_schema(conn)
 
         self._initialized = True
-        if result.migrated:
-            logger.info(
-                f"[日常分享] 数据库已从结构版本 {result.previous_version} "
-                f"升级到 {result.current_version}"
-            )
         return result
 
     async def clean_expired_data(self, days_limit: int):

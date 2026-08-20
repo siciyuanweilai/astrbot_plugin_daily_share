@@ -26,70 +26,80 @@ class TaskXiaohongshuService(TaskServiceBase):
     def _configured(self) -> bool:
         return bool(str(self.xiaohongshu_conf.get("server_url", "") or "").strip())
 
-    def _title(self, content: str) -> str:
-        first_line = next(
-            (line.strip() for line in str(content or "").splitlines() if line.strip()),
-            "",
-        )
-        title = first_line.strip("# 【】[]()（）:：，,。！？!？ ")[:20].strip()
-        return title or "今日分享"
-
-    async def _tags(self, content: str = "", stype: ShareType | None = None) -> list[str]:
+    def _default_tags(self) -> list[str]:
         tags = []
         for item in self.xiaohongshu_conf.get("default_tags", []) or []:
             tag = str(item or "").strip().lstrip("#").strip()
             if tag and tag not in tags:
                 tags.append(tag[:40])
-        if not self.xiaohongshu_conf.get("enable_smart_tags", True):
-            return tags[:10]
+        return tags[:10]
 
+    async def _metadata(self, content: str, stype: ShareType) -> tuple[str, list[str]]:
+        tags = self._default_tags()
+        smart_tags_enabled = bool(self.xiaohongshu_conf.get("enable_smart_tags", True))
         smart_count = max(
             1,
             min(int(self.xiaohongshu_conf.get("smart_tag_count", 3) or 3), 8),
         )
+        tag_requirement = (
+            f"同时生成 {smart_count} 个贴切、自然的话题标签。"
+            if smart_tags_enabled
+            else "tags 必须返回空数组。"
+        )
         prompt = f"""
-你是小红书话题标签编辑。请根据下面的分享类型和正文，生成 {smart_count} 个最贴切的话题标签。
+你是小红书笔记编辑。请根据分享类型和正文，为这篇笔记生成标题和话题标签。
 
-分享类型：{getattr(stype, "value", stype) or "未知"}
+分享类型：{stype.value}
 正文：
 {str(content or "")[:4000]}
 
 要求：
-1. 只返回 JSON 字符串数组，例如：["日常记录", "生活分享"]。
-2. 不要返回解释、Markdown、序号或井号。
-3. 标签要具体、自然，避免泛化、重复和营销词。
+1. 标题必须概括正文的核心内容，不要直接照抄正文首句。
+2. 使用自然中文，不夸张、不营销、不使用标题党。
+3. 标题不超过 20 个字符，不要井号、引号、Markdown、序号或解释。
+4. {tag_requirement} 标签不要井号、解释、泛化词、重复或营销词。
+5. 只返回 JSON 对象，例如：{{"title":"傍晚散步时的小发现","tags":["散步日常","傍晚时光"]}}。
 """
         try:
             result = await self.plugin.call_llm(
                 prompt=prompt,
-                system_prompt="你只负责生成小红书话题标签，必须严格返回 JSON 字符串数组。",
+                system_prompt="你只负责生成小红书标题和标签，必须严格返回 JSON 对象。",
                 timeout=15,
                 max_retries=1,
                 umo=XIAOHONGSHU_TARGET_ID,
             )
             raw = str(result or "").strip()
-            raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            raw = (
+                raw.removeprefix("```json")
+                .removeprefix("```")
+                .removesuffix("```")
+                .strip()
+            )
             parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                parsed = parsed.get("tags", [])
-            if not isinstance(parsed, list):
-                raise ValueError("智能标签返回格式不是数组")
+            if not isinstance(parsed, dict):
+                raise ValueError("小红书元数据返回格式不是对象")
+            title = " ".join(str(parsed.get("title", "") or "").splitlines()).strip()
+            if not title:
+                raise ValueError("智能标题为空")
         except Exception as exc:
-            logger.debug(f"[日常分享] 小红书智能标签生成失败，使用默认标签: {exc}")
-            return tags[:10]
+            logger.debug(f"[日常分享] 小红书智能标题生成失败，已停止发布: {exc}")
+            raise XiaohongshuPublishError("小红书智能标题生成失败，已停止发布") from exc
 
-        added = 0
-        for item in parsed:
-            tag = str(item or "").strip().lstrip("#").strip()
-            if not tag:
-                continue
-            if tag in tags:
-                continue
-            tags.append(tag[:40])
-            added += 1
-            if len(tags) >= 10 or added >= smart_count:
-                break
-        return tags[:10]
+        if smart_tags_enabled:
+            parsed_tags = parsed.get("tags", [])
+            if isinstance(parsed_tags, list):
+                added = 0
+                for item in parsed_tags:
+                    tag = str(item or "").strip().lstrip("#").strip()
+                    if not tag or tag in tags:
+                        continue
+                    tags.append(tag[:40])
+                    added += 1
+                    if len(tags) >= 10 or added >= smart_count:
+                        break
+            else:
+                logger.debug("[日常分享] 小红书智能标签格式无效，继续使用默认标签")
+        return title[:20].strip(), tags[:10]
 
     async def _load_news(
         self,
@@ -359,10 +369,11 @@ class TaskXiaohongshuService(TaskServiceBase):
                 progress_id, "send", message="正在发布到小红书"
             )
             client = self.plugin.xiaohongshu_client
+            title, tags = await self._metadata(content, stype)
             publish_args = {
-                "title": self._title(content),
+                "title": title,
                 "content": content,
-                "tags": await self._tags(content, stype),
+                "tags": tags,
                 "visibility": self.xiaohongshu_conf.get("visibility", "公开可见"),
             }
             if video_path:
@@ -394,7 +405,19 @@ class TaskXiaohongshuService(TaskServiceBase):
                 progress_id, success=True, message="小红书发布完成"
             )
             if event:
-                await self.send_event(event, event.plain_result("小红书发布完成。"))
+                try:
+                    await self.services.executor_helpers.sync_qzone_result_to_event(
+                        event,
+                        content,
+                        image_path,
+                        video_path,
+                    )
+                except Exception as sync_error:
+                    log_exception(
+                        "[日常分享] 同步小红书发布结果到会话失败",
+                        sync_error,
+                        with_traceback=False,
+                    )
             return True
         except Exception as exc:
             log_exception("[日常分享] 小红书发布失败", exc, with_traceback=False)

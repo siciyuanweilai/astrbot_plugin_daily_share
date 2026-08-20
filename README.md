@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.1-ef6f8f" alt="版本 1.1.1"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.2-ef6f8f" alt="版本 1.1.2"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.1 已发布**：新增小红书发布平台，支持独立定时、图文/视频发布、管理员手动发布、Docker 媒体路径映射和服务器后台浏览器运行；同时修正可见范围、定时模式显示并补充发布成功日志。数据库结构保持 v2，无需迁移。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.2 已发布**：小红书发布改为插件自带的一键部署、扫码登录与验证流程，支持常见 Linux 包管理器自动准备运行环境。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -53,7 +53,7 @@
 | ⏰ 灵活调度 | 支持固定时间、随机时段、智能定时、高级 Cron 和任务恢复 |
 | 🧭 多目标发送 | 支持私聊、群聊、个人微信及其他具备主动发送能力的平台 |
 | 🌐 QQ 空间 | 支持发布、查看、点赞、评论、删除、自动互动与配图识别 |
-| 📕 小红书 | 通过独立 REST 发布服务生成并发布图文或视频，不影响其他分享目标 |
+| 📕 小红书 | 通过独立 REST 发布服务生成并发布图文或视频 |
 | 🖥️ 可视化管理 | 内置仪表盘，可管理设置、目标、任务、媒体、历史与 QQ 空间 |
 
 <a id="quick-start"></a>
@@ -126,7 +126,7 @@
 - 新闻源可固定选择，也可从配置列表中随机选择。
 - QQ 群聊和私聊会优先下载远程长图后发送，提高富媒体稳定性。
 - 查询链接时不会重新抓取远程新闻，只读取成功发送时保存的 JSON 快照。
-- 新闻序号参数支持阿拉伯数字、全角数字和中文数字，并拒绝年份、多序号等有歧义的输入；普通查询文本仍按新闻标题和摘要检索，不使用关键词规则猜测用户指令。
+- 新闻序号参数支持阿拉伯数字、全角数字和中文数字，并拒绝年份、多序号等有歧义的输入；普通查询文本仍按新闻标题和摘要检索。
 
 快照查询规则：
 
@@ -268,15 +268,32 @@ bot-main:FriendMessage:user-test-001
 
 ### 最短配置流程
 
-1. **准备一次浏览器登录**：在运行桥接服务的同一台机器上安装兼容 CLI，加载它的 `extension` 浏览器扩展，并登录小红书。插件目录自带 `bridge/server.py`，不需要额外的第三方发布平台。
-2. **启动桥接服务**：桥接服务负责把插件请求交给已登录的浏览器。服务正常后，打开下面两个地址检查：
+1. **自动安装一次发布组件**：插件目录自带安装器和 `bridge/server.py`。在运行 AstrBot 的 Linux 服务器进入插件目录后执行：
 
    ```bash
-   curl http://宿主机地址:18061/api/health
-   curl -X POST http://宿主机地址:18061/api/check-login
+   python3 bridge/xhssetup.py setup --install-system-deps --target-dir ~/xiaohongshu-skills
    ```
 
-3. **只填写一个必填地址**：在仪表盘“小红书”设置中填写桥接服务地址，先用管理员指令 `/分享 心情 小红书` 测试，成功后再打开自动发布。
+   该命令会自动识别 `apt`、`dnf`、`yum`、`pacman`、`zypper` 或 `apk`，并在需要时请求 `sudo` 密码。它会安装浏览器、虚拟显示和 Python 环境依赖，下载发布组件、安装 Python 依赖并启动后台服务。该组件提供浏览器扩展和本地命令行工具；每个 AstrBot 实例只需要安装一次。
+
+   后台服务使用 `systemd`。没有 `systemd` 的 Linux 系统可改用 `bootstrap --install-system-deps` 只完成组件安装，再由自身服务管理器保持桥接和浏览器进程运行。
+
+2. **扫码登录一次**：后台服务会自动加载 `~/xiaohongshu-skills/extension` 浏览器扩展。在同一台服务器执行：
+
+   ```bash
+   python3 bridge/xhssetup.py login --container astrbot
+   ```
+
+   根据终端显示的二维码信息完成扫码；命令会自动等待登录完成。登录信息保存在该机器的专用浏览器配置目录中。
+3. **验证服务**：扫码完成后执行：
+
+   ```bash
+   python3 bridge/xhssetup.py verify --container astrbot
+   ```
+
+   验证会检查桥接服务、浏览器服务、容器连通、登录状态和媒体路径映射。
+
+4. **只填写一个必填地址**：在仪表盘“小红书”设置中填写桥接服务地址，先用管理员指令 `/分享 心情 小红书` 测试，成功后再打开自动发布。
 
 Docker 中 AstrBot 访问宿主机桥接服务时，地址通常是：
 
@@ -397,7 +414,7 @@ python -m ruff check .
 python -m ruff format --check .
 ~~~
 
-测试覆盖配置、命令、新闻解析、新闻快照、调度恢复、多平台路由、权限、媒体、LLM 工具、QQ 空间、自动互动、仪表盘、数据库迁移和插件生命周期。
+测试覆盖配置、命令、新闻解析、新闻快照、调度恢复、多平台路由、权限、媒体、LLM 工具、QQ 空间、自动互动、仪表盘、数据库结构校验和插件生命周期。
 
 ## 📜 许可证
 

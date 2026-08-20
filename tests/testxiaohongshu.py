@@ -249,10 +249,10 @@ class XiaohongshuSelectorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(selected, ShareType.MOOD)
 
 
-class XiaohongshuTagTests(unittest.IsolatedAsyncioTestCase):
+class XiaohongshuMetadataTests(unittest.IsolatedAsyncioTestCase):
     def _service(self, config):
         async def call_llm(**_kwargs):
-            return '["咖啡日常", "学习分享", "生活记录"]'
+            return '{"title":"咖啡和学习的小收获","tags":["咖啡日常","学习分享","生活记录"]}'
 
         return TaskXiaohongshuService(
             SimpleNamespace(plugin=SimpleNamespace(call_llm=call_llm)),
@@ -260,7 +260,7 @@ class XiaohongshuTagTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(),
         )
 
-    async def test_smart_tags_keep_defaults_and_use_llm_result(self):
+    async def test_smart_metadata_keeps_defaults_and_uses_llm_result(self):
         service = self._service(
             {
                 "default_tags": ["我的日常", "#生活"],
@@ -269,19 +269,54 @@ class XiaohongshuTagTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        tags = await service._tags("今天喝咖啡，学习也有了新的收获。", ShareType.MOOD)
+        title, tags = await service._metadata(
+            "今天喝咖啡，学习也有了新的收获。", ShareType.MOOD
+        )
 
+        self.assertEqual(title, "咖啡和学习的小收获")
         self.assertEqual(tags[:2], ["我的日常", "生活"])
         self.assertIn("咖啡日常", tags)
         self.assertIn("学习分享", tags)
         self.assertLessEqual(len(tags), 5)
 
-    async def test_smart_tags_can_be_disabled(self):
+    async def test_smart_tags_can_be_disabled_without_disabling_smart_title(self):
         service = self._service(
             {"default_tags": ["日常"], "enable_smart_tags": False}
         )
 
-        self.assertEqual(await service._tags("今天喝咖啡", ShareType.MOOD), ["日常"])
+        title, tags = await service._metadata("今天喝咖啡", ShareType.MOOD)
+
+        self.assertEqual(title, "咖啡和学习的小收获")
+        self.assertEqual(tags, ["日常"])
+
+    async def test_smart_title_failure_stops_publish_metadata_generation(self):
+        async def call_llm(**_kwargs):
+            raise RuntimeError("模型不可用")
+
+        service = TaskXiaohongshuService(
+            SimpleNamespace(plugin=SimpleNamespace(call_llm=call_llm)),
+            SimpleNamespace(xiaohongshu={"default_tags": ["日常"]}),
+            SimpleNamespace(),
+        )
+        with self.assertRaisesRegex(XiaohongshuPublishError, "智能标题生成失败"):
+            await service._metadata("这句正文不能作为标题。", ShareType.MOOD)
+
+    async def test_invalid_smart_tags_keep_title_and_default_tags(self):
+        service = self._service(
+            {
+                "default_tags": ["日常"],
+                "enable_smart_tags": True,
+            }
+        )
+
+        async def call_llm(**_kwargs):
+            return '{"title":"今天的生活记录","tags":"无效"}'
+
+        service.plugin.call_llm = call_llm
+        title, tags = await service._metadata("正文", ShareType.MOOD)
+
+        self.assertEqual(title, "今天的生活记录")
+        self.assertEqual(tags, ["日常"])
 
 
 if __name__ == "__main__":

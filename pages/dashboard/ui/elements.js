@@ -25,6 +25,8 @@ export function getDashboardElements() {
     settingsPageButton: document.getElementById("settingsPageButton"),
     settingsBackButton: document.getElementById("settingsBackButton"),
     configForm: document.getElementById("configForm"),
+    settingsNav: document.querySelector(".settings-dock"),
+    settingsNavItems: [...document.querySelectorAll(".settings-dock [data-settings-tab]")],
     settingsSections: [...document.querySelectorAll("[data-settings-section]")],
     targetGroupsGuideTitle: document.getElementById("targetGroupsGuideTitle"),
     targetGroupsGuideHint: document.getElementById("targetGroupsGuideHint"),

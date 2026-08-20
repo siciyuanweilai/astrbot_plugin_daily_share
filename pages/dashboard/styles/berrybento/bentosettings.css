@@ -35,7 +35,7 @@
   display: block;
   margin-block-end: 2px;
   color: var(--accent-strong);
-  content: "贴纸索引";
+  content: "配置导航";
   font-family: var(--bento-font-display);
   font-size: 20px;
   font-weight: 950;
@@ -156,6 +156,15 @@ html[data-theme="dark"] .bento-sticker-nav a[aria-current="true"] {
   container-type: inline-size;
   gap: clamp(16px, 2vw, 24px);
   padding-block-end: 30px;
+}
+
+/* 设置页按分类切换，只保留当前分类参与布局。 */
+.bento-settings-grid > .settings-section:not(.active) {
+  display: none;
+}
+
+.bento-settings-grid > .settings-section.active {
+  grid-column: 1 / -1;
 }
 
 .bento-settings-grid .settings-section:nth-of-type(3n + 1) {

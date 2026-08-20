@@ -117,8 +117,6 @@ export function createDashboardState() {
     sakuraSynced: false,
     sakuraToggleBound: false,
     pageSwitchBound: false,
-    settingsScrollFrame: 0,
-    settingsScrollLockUntil: 0,
     watchedRuns: new Map(),
     bridgeReady: false,
   };

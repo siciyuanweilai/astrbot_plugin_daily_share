@@ -8,7 +8,6 @@ import types
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "core" / "db.py"
@@ -178,11 +177,11 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
 
     def test_schema_validation_accepts_equivalent_column_order(self):
         _load_db_module()
-        migration_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.migrations"]
+        schema_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.schema"]
         conn = sqlite3.connect(":memory:")
         try:
             conn.execute("CREATE TABLE sample (second TEXT, first TEXT)")
-            migration_module._validate_tables(conn, {"sample": ("first", "second")})
+            schema_module._validate_tables(conn, {"sample": ("first", "second")})
         finally:
             conn.close()
 
@@ -207,7 +206,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 conn.close()
 
-    async def test_unversioned_current_database_is_adopted_without_data_loss(self):
+    async def test_unversioned_database_is_rejected_without_repair(self):
         mod = _load_db_module()
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp)
@@ -221,21 +220,25 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 conn.close()
 
-            reopened = mod.DatabaseManager(data_dir)
+            reopened = mod.DatabaseManager(data_dir, initialize=False)
             try:
-                self.assertEqual(
-                    await reopened.get_share_state("global"), {"kept": True}
-                )
-                conn = sqlite3.connect(reopened.db_path)
-                try:
-                    self.assertEqual(
-                        conn.execute("PRAGMA user_version").fetchone()[0], 2
-                    )
-                finally:
-                    conn.close()
-                self.assertFalse(reopened.backup_path.exists())
+                with self.assertRaisesRegex(RuntimeError, "不会自动迁移旧数据"):
+                    await reopened.initialize()
             finally:
                 await reopened.close()
+
+            conn = sqlite3.connect(first.db_path)
+            try:
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 0
+                )
+                self.assertIsNotNone(
+                    conn.execute(
+                        "SELECT value FROM plugin_state WHERE domain = 'share' AND key = 'global'"
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
 
     async def test_database_rejects_newer_schema_version(self):
         mod = _load_db_module()
@@ -250,112 +253,12 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
 
             db = mod.DatabaseManager(Path(tmp), initialize=False)
             try:
-                with self.assertRaisesRegex(RuntimeError, "高于插件支持的版本"):
+                with self.assertRaisesRegex(RuntimeError, "不受当前插件支持"):
                     await db.initialize()
             finally:
                 await db.close()
 
-    async def test_versioned_migration_backs_up_and_preserves_data(self):
-        mod = _load_db_module()
-        migration_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.migrations"]
-        schema_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.dbschema"]
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = Path(tmp)
-            first = mod.DatabaseManager(data_dir)
-            await first.set_share_state("global", {"kept": True})
-            await first.close()
-
-            columns = dict(schema_module.CURRENT_TABLE_COLUMNS)
-            columns["plugin_state"] = (*columns["plugin_state"], "marker")
-            migration = migration_module.SchemaMigration(
-                version=3,
-                statements=("ALTER TABLE plugin_state ADD COLUMN marker TEXT",),
-            )
-            with (
-                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 3),
-                mock.patch.object(schema_module, "CURRENT_TABLE_COLUMNS", columns),
-                mock.patch.object(migration_module, "SCHEMA_MIGRATIONS", (migration,)),
-            ):
-                upgraded = mod.DatabaseManager(data_dir)
-                try:
-                    self.assertEqual(
-                        await upgraded.get_share_state("global"), {"kept": True}
-                    )
-                    conn = sqlite3.connect(upgraded.db_path)
-                    try:
-                        self.assertEqual(
-                            conn.execute("PRAGMA user_version").fetchone()[0], 3
-                        )
-                        column_names = {
-                            row[1]
-                            for row in conn.execute(
-                                "PRAGMA table_info(plugin_state)"
-                            ).fetchall()
-                        }
-                    finally:
-                        conn.close()
-                    self.assertIn("marker", column_names)
-                    self.assertTrue(upgraded.backup_path.exists())
-                    backup = sqlite3.connect(upgraded.backup_path)
-                    try:
-                        self.assertEqual(
-                            backup.execute("PRAGMA user_version").fetchone()[0], 2
-                        )
-                    finally:
-                        backup.close()
-                finally:
-                    await upgraded.close()
-
-    async def test_failed_migration_rolls_back_and_keeps_backup(self):
-        mod = _load_db_module()
-        migration_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.migrations"]
-        schema_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.dbschema"]
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = Path(tmp)
-            first = mod.DatabaseManager(data_dir)
-            await first.set_share_state("global", {"kept": True})
-            await first.close()
-
-            columns = dict(schema_module.CURRENT_TABLE_COLUMNS)
-            columns["plugin_state"] = (*columns["plugin_state"], "transient")
-            migration = migration_module.SchemaMigration(
-                version=3,
-                statements=(
-                    "ALTER TABLE plugin_state ADD COLUMN transient TEXT",
-                    "INSERT INTO missing_table(value) VALUES (1)",
-                ),
-            )
-            with (
-                mock.patch.object(schema_module, "CURRENT_SCHEMA_VERSION", 3),
-                mock.patch.object(schema_module, "CURRENT_TABLE_COLUMNS", columns),
-                mock.patch.object(migration_module, "SCHEMA_MIGRATIONS", (migration,)),
-            ):
-                failed = mod.DatabaseManager(data_dir, initialize=False)
-                try:
-                    with self.assertRaisesRegex(RuntimeError, "数据库迁移失败"):
-                        await failed.initialize()
-                finally:
-                    await failed.close()
-
-            conn = sqlite3.connect(data_dir / "daily_share.db")
-            try:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
-                column_names = {
-                    row[1]
-                    for row in conn.execute(
-                        "PRAGMA table_info(plugin_state)"
-                    ).fetchall()
-                }
-                value = conn.execute(
-                    "SELECT value FROM plugin_state WHERE domain = 'share' AND key = 'global'"
-                ).fetchone()[0]
-            finally:
-                conn.close()
-            self.assertNotIn("transient", column_names)
-            self.assertIn('"kept": true', value)
-            self.assertTrue((data_dir / "daily_share.backup.db").exists())
-
-    async def test_v1_database_migrates_degradation_fields_without_data_loss(self):
+    async def test_v1_database_is_rejected_without_data_changes(self):
         mod = _load_db_module()
         schema_module = sys.modules[f"{CORE_PACKAGE_NAME}.database.dbschema"]
         with tempfile.TemporaryDirectory() as tmp:
@@ -397,22 +300,23 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 conn.close()
 
-            db = mod.DatabaseManager(data_dir)
+            db = mod.DatabaseManager(data_dir, initialize=False)
             try:
-                history = await db.get_recent_history(limit=1)
-                self.assertEqual(history[0]["content"], "kept")
-                self.assertFalse(history[0]["degraded"])
-                self.assertEqual(history[0]["degradation_reason"], "")
-                conn = sqlite3.connect(db.db_path)
-                try:
-                    self.assertEqual(
-                        conn.execute("PRAGMA user_version").fetchone()[0], 2
-                    )
-                finally:
-                    conn.close()
-                self.assertTrue(db.backup_path.exists())
+                with self.assertRaisesRegex(RuntimeError, "不会自动迁移旧数据"):
+                    await db.initialize()
             finally:
                 await db.close()
+
+            conn = sqlite3.connect(db_path)
+            try:
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+                columns = {
+                    row[1] for row in conn.execute("PRAGMA table_info(sent_history)")
+                }
+            finally:
+                conn.close()
+            self.assertNotIn("degraded", columns)
+            self.assertNotIn("degradation_reason", columns)
 
     async def test_database_indexes_are_created(self):
         mod = _load_db_module()

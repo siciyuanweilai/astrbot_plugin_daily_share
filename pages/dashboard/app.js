@@ -187,7 +187,6 @@ const {
   handleConfigChanged,
   loadConfig,
   setSettingsTab,
-  updateSettingsTabFromScroll,
 } = createSettingsConfig({
   state,
   elements: el,
@@ -248,7 +247,6 @@ const {
   scheduleCalendarPanelLayout,
   loadConfig,
   setSettingsTab,
-  updateSettingsTabFromScroll,
 });
 
 function setTargetsDirty(value) {
@@ -488,7 +486,12 @@ function bindEvents() {
   el.configForm?.addEventListener("input", handleConfigChanged);
   el.configForm?.addEventListener("change", handleConfigChanged);
   el.configForm?.addEventListener("click", handleSettingSwitchClick);
-  window.addEventListener("scroll", updateSettingsTabFromScroll, { passive: true });
+  el.settingsNav?.addEventListener("click", (event) => {
+    const item = event.target?.closest?.("[data-settings-tab]");
+    if (!item || !el.settingsNav.contains(item)) return;
+    event.preventDefault();
+    setSettingsTab(item.dataset.settingsTab, { scroll: false });
+  });
   el.runForm.addEventListener("submit", runShare);
   bindMediaEvents();
   bindQzoneEvents();

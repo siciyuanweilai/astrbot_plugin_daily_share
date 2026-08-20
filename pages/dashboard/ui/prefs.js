@@ -322,7 +322,19 @@ export function createSettingsConfig({
   function setSettingsTab(tab, { scroll = true, sync = true } = {}) {
     state.settingsTab = tab || "target";
     for (const section of el.settingsSections) {
-      section.classList.toggle("active", section.dataset.settingsSection === state.settingsTab);
+      const active = section.dataset.settingsSection === state.settingsTab;
+      section.classList.toggle("active", active);
+      section.hidden = !active;
+      section.setAttribute("aria-hidden", active ? "false" : "true");
+    }
+    for (const item of el.settingsNavItems || []) {
+      const active = item.dataset.settingsTab === state.settingsTab;
+      item.classList.toggle("active", active);
+      if (active) {
+        item.setAttribute("aria-current", "true");
+      } else {
+        item.removeAttribute("aria-current");
+      }
     }
     if (sync) {
       closeSweetSelects();
@@ -331,48 +343,9 @@ export function createSettingsConfig({
     if (!scroll) return;
     const section = el.settingsSections.find((item) => item.dataset.settingsSection === state.settingsTab);
     if (section) {
-      state.settingsScrollLockUntil = Date.now() + 720;
       const top = Math.max(0, section.getBoundingClientRect().top + window.scrollY - 16);
       window.scrollTo({ top, behavior: "smooth" });
     }
-  }
-
-  function settingsVisiblePixels(section, viewportTop, viewportBottom) {
-    const rect = section.getBoundingClientRect();
-    return Math.max(0, Math.min(rect.bottom, viewportBottom) - Math.max(rect.top, viewportTop));
-  }
-
-  function resolveSettingsTabFromViewport() {
-    if (state.activeView !== "settings" || !el.settingsSections.length) return;
-    if (Date.now() < state.settingsScrollLockUntil) return;
-    const viewportTop = Math.min(180, Math.max(96, window.innerHeight * 0.14));
-    const viewportBottom = window.innerHeight - 24;
-    let active = state.settingsTab || el.settingsSections[0].dataset.settingsSection || "target";
-    let activeVisible = 0;
-    let best = active;
-    let bestVisible = 0;
-
-    for (const section of el.settingsSections) {
-      const tab = section.dataset.settingsSection || "";
-      const visible = settingsVisiblePixels(section, viewportTop, viewportBottom);
-      if (tab === active) activeVisible = visible;
-      if (visible > bestVisible) {
-        best = tab || best;
-        bestVisible = visible;
-      }
-    }
-
-    if (best && best !== state.settingsTab && (activeVisible < 64 || bestVisible - activeVisible > 96)) {
-      setSettingsTab(best, { scroll: false, sync: false });
-    }
-  }
-
-  function updateSettingsTabFromScroll() {
-    if (state.settingsScrollFrame) return;
-    state.settingsScrollFrame = window.requestAnimationFrame(() => {
-      state.settingsScrollFrame = 0;
-      resolveSettingsTabFromViewport();
-    });
   }
 
   async function loadConfig({ quiet = false } = {}) {
@@ -447,6 +420,5 @@ export function createSettingsConfig({
     handleConfigChanged,
     loadConfig,
     setSettingsTab,
-    updateSettingsTabFromScroll,
   };
 }

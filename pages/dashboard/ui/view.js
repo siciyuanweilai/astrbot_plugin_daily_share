@@ -9,7 +9,6 @@ export function createViewController({
   scheduleCalendarPanelLayout,
   loadConfig,
   setSettingsTab,
-  updateSettingsTabFromScroll,
 } = {}) {
   function setActiveView(view, { scroll = true, behavior = "smooth" } = {}) {
     const nextView = view === "settings" ? "settings" : "dashboard";
@@ -35,7 +34,6 @@ export function createViewController({
     if (!state.configDirty && !state.configSaving) {
       await loadConfig({ quiet: true });
     }
-    window.setTimeout(updateSettingsTabFromScroll, 220);
   }
 
   function openDashboardPage() {

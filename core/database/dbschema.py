@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .keys import HISTORY_SHARE_BRIEFING
 
-BASELINE_SCHEMA_VERSION = 1
 CURRENT_SCHEMA_VERSION = 2
 
 TABLE_STATEMENTS = (
@@ -68,7 +67,7 @@ INDEX_STATEMENTS = (
     "CREATE INDEX idx_plugin_state_updated_at ON plugin_state(updated_at)",
 )
 
-BASELINE_TABLE_COLUMNS = {
+CURRENT_TABLE_COLUMNS = {
     "sent_history": (
         "id",
         "target_id",
@@ -81,6 +80,8 @@ BASELINE_TABLE_COLUMNS = {
         "media_path",
         "source_type",
         "created_at",
+        "degraded",
+        "degradation_reason",
     ),
     "topic_history": (
         "id",
@@ -100,13 +101,6 @@ BASELINE_TABLE_COLUMNS = {
         "created_at",
     ),
 }
-
-CURRENT_TABLE_COLUMNS = dict(BASELINE_TABLE_COLUMNS)
-CURRENT_TABLE_COLUMNS["sent_history"] = (
-    *BASELINE_TABLE_COLUMNS["sent_history"],
-    "degraded",
-    "degradation_reason",
-)
 CURRENT_INDEX_NAMES = tuple(
     statement.split(" ", 3)[2] for statement in INDEX_STATEMENTS
 )
