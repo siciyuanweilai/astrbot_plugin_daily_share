@@ -19,7 +19,7 @@ class XiaohongshuPublishError(RuntimeError):
 
 
 class XiaohongshuClient:
-    """调用兼容 REST 接口的小红书发布服务。"""
+    """调用插件自带的小红书桥接服务。"""
 
     def __init__(self, config: dict | None = None) -> None:
         self.config = config if isinstance(config, dict) else {}
@@ -39,8 +39,8 @@ class XiaohongshuClient:
         return aiohttp.ClientTimeout(total=max(10, min(seconds, 600)))
 
     def _headers(self) -> dict[str, str]:
-        cookie = str(self.config.get("cookie", "") or "").strip()
-        return {"X-Xhs-Cookie": cookie} if cookie else {}
+        token = str(self.config.get("bridge_token", "") or "").strip()
+        return {"Authorization": f"Bearer {token}"} if token else {}
 
     def _media_path(self, value: str) -> str:
         path = str(value or "").strip()

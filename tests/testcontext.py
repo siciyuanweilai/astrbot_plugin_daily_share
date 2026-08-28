@@ -253,6 +253,25 @@ def _service(history=None, context_conf=None, platform_records=None, stars=None)
 
 
 class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
+    def test_onebot_history_skips_invalid_time_without_dropping_valid_messages(self):
+        _, service = _service()
+        output = []
+
+        sequences, added = service.onebot_history._merge_history_batch(
+            [
+                {"message_id": 1, "message_seq": 10, "time": None},
+                {"message_id": 2, "message_seq": 9, "time": "200"},
+            ],
+            all_messages=output,
+            seen_ids=set(),
+            cutoff_time=100,
+        )
+
+        self.assertEqual(sequences, [10, 9])
+        self.assertEqual(added, 1)
+        self.assertEqual(output[0]["message_id"], 2)
+        self.assertEqual(output[0]["time"], 200.0)
+
     async def test_onebot_action_uses_current_client_contract(self):
         _, service = _service()
 

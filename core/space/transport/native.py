@@ -118,7 +118,16 @@ class QzoneH5NativeService(QzoneMethodSet):
                         response["status"] = 0
                 elif key_text.lower() == "content-encoding":
                     response["encoding"] = value_text
+                elif key_text.lower() == "content-length":
+                    try:
+                        if int(value_text) > self._H5_MAX_RESPONSE_BYTES:
+                            raise RuntimeError("QQ 空间 H5 响应过大")
+                    except ValueError:
+                        pass
         elif isinstance(event, h2.events.DataReceived):
+            response["size"] += len(event.data)
+            if response["size"] > self._H5_MAX_RESPONSE_BYTES:
+                raise RuntimeError("QQ 空间 H5 响应过大")
             response["chunks"].append(event.data)
             conn.acknowledge_received_data(
                 event.flow_controlled_length, event.stream_id
@@ -134,7 +143,12 @@ class QzoneH5NativeService(QzoneMethodSet):
     async def _read_h5_native_h2_response(
         self, reader: Any, writer: Any, conn: Any
     ) -> tuple[int, str]:
-        response: dict[str, Any] = {"status": 0, "encoding": "", "chunks": []}
+        response: dict[str, Any] = {
+            "status": 0,
+            "encoding": "",
+            "chunks": [],
+            "size": 0,
+        }
         while True:
             data = await asyncio.wait_for(
                 reader.read(65535), timeout=self._api_timeout_seconds()

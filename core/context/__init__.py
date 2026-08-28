@@ -45,6 +45,7 @@ class ContextService:
         self.life_conf = unified_conf
         self.history_conf = unified_conf
         self.memory_conf = unified_conf
+        self._memory_write_locks: dict[str, asyncio.Lock] = {}
 
         self.image_conf = self.config.get("image_conf", {})
         self.tts_conf = self.config.get("tts_conf", {})

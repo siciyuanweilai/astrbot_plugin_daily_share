@@ -30,8 +30,8 @@ _PAGE_BRIEFING_SCHEDULE_MODE_OPTIONS = {
 }
 _PAGE_NEWS_RANDOM_MODE_OPTIONS = {"fixed", "random", "config", "time_based"}
 _PAGE_CONTEXT_STRATEGY_OPTIONS = {"cautious", "active", "minimal"}
-_PAGE_RECENT_ACTION_LIMIT = 1
-_PAGE_RECENT_SHARE_LIMIT = 1
+_PAGE_RECENT_ACTION_LIMIT = 8
+_PAGE_RECENT_SHARE_LIMIT = 8
 _PAGE_SHARE_SOURCE_LABELS = {
     "manual": "手动",
     "scheduled": "定时",

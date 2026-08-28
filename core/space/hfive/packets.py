@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gzip
 import json
 import zlib
 from typing import Any
@@ -10,6 +9,8 @@ from ..methodset import QzoneMethodSet
 
 class QzoneH5BaseService(QzoneMethodSet):
     """H5 传输基础工具。"""
+
+    _H5_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
     @staticmethod
     def _h5_json_body(payload: dict[str, Any]) -> bytes:
@@ -22,12 +23,29 @@ class QzoneH5BaseService(QzoneMethodSet):
         enc = str(encoding or "").strip().lower()
         try:
             if enc == "gzip":
-                return gzip.decompress(raw)
+                decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+                decoded = decoder.decompress(
+                    raw, QzoneH5BaseService._H5_MAX_RESPONSE_BYTES + 1
+                )
+                if len(decoded) > QzoneH5BaseService._H5_MAX_RESPONSE_BYTES:
+                    raise RuntimeError("QQ 空间 H5 响应解压后过大")
+                return decoded
             if enc == "deflate":
                 try:
-                    return zlib.decompress(raw)
+                    decoder = zlib.decompressobj()
+                    decoded = decoder.decompress(
+                        raw, QzoneH5BaseService._H5_MAX_RESPONSE_BYTES + 1
+                    )
                 except zlib.error:
-                    return zlib.decompress(raw, -zlib.MAX_WBITS)
+                    decoder = zlib.decompressobj(-zlib.MAX_WBITS)
+                    decoded = decoder.decompress(
+                        raw, QzoneH5BaseService._H5_MAX_RESPONSE_BYTES + 1
+                    )
+                if len(decoded) > QzoneH5BaseService._H5_MAX_RESPONSE_BYTES:
+                    raise RuntimeError("QQ 空间 H5 响应解压后过大")
+                return decoded
+        except RuntimeError:
+            raise
         except Exception:
             return raw
         return raw

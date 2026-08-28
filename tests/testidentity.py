@@ -466,7 +466,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("不得因时段或场景替换为睡衣或其他服装", prompt)
         self.assertIn("浅蓝外套和白裙子", prompt)
 
-    async def test_image_self_judge_prompt_uses_first_person_hidden_reasoning(self):
+    async def test_image_self_judge_prompt_requires_boolean_answer_only(self):
         _, image_module = _load_daily_share_modules()
         calls = []
 
@@ -490,9 +490,8 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(result)
-        self.assertIn("隐藏推理口吻", calls[0]["system_prompt"])
-        self.assertIn("只保留一句以“我”开头的角色内心判断", calls[0]["system_prompt"])
-        self.assertIn("不要写“我们分析”“我们根据”", calls[0]["system_prompt"])
+        self.assertIn("请回答 YES 或 NO，不要解释", calls[0]["system_prompt"])
+        self.assertNotIn("隐藏推理", calls[0]["system_prompt"])
 
     async def test_image_prompt_uses_llm_selected_composition(self):
         _, image_module = _load_daily_share_modules()

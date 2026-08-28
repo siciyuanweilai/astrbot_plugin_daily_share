@@ -192,6 +192,7 @@ class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
             def track_task(self, coro):
                 self.tracked.append(coro)
                 coro.close()
+                return object()
 
             def _page_prune_actions(self):
                 return None

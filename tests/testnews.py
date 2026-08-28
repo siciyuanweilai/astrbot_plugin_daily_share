@@ -76,6 +76,23 @@ def _load_news_module():
 
 
 class NewsPayloadDecodingTests(unittest.TestCase):
+    def test_invalid_configured_sources_fall_back_to_zhihu(self):
+        mod = _load_news_module()
+        fixed = mod.NewsService(
+            {"news_conf": {"news_random_mode": "fixed", "news_api_source": "invalid"}}
+        )
+        timed = mod.NewsService(
+            {
+                "news_conf": {
+                    "news_random_mode": "time_based",
+                    "news_random_sources": ["invalid", None],
+                }
+            }
+        )
+
+        self.assertEqual(fixed.select_news_source(), "zhihu")
+        self.assertEqual(timed.select_news_source(), "zhihu")
+
     def test_baike_success_flag_rejects_explicit_failure_and_accepts_code_fallback(
         self,
     ):

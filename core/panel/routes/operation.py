@@ -51,55 +51,59 @@ class DashboardRouteActionService(PanelComponent):
         share_type: str,
         news_source: str,
         specific_target: str = "",
+        share_lock=None,
     ) -> None:
         run = self._page_action_runs.get(run_id)
         if not run:
+            if share_lock is not None and share_lock.locked():
+                share_lock.release()
             return
         try:
             force_type = self.validation._page_share_type(share_type)
             source_key = self.validation._page_news_source(news_source)
             success_message = "分享成功"
-            async with self._lock:
-                if target == "qzone":
-                    ok = await self.task_manager.qzone_share.execute_qzone_share(
+            if target == "qzone":
+                ok = await self.task_manager.qzone_share.execute_qzone_share(
+                    force_type=force_type,
+                    news_source=source_key,
+                    source_type=SOURCE_MANUAL,
+                )
+                if not ok:
+                    raise RuntimeError("QQ 空间分享失败，请查看日志")
+                success_message = "QQ 空间分享成功"
+            elif target == "xiaohongshu":
+                ok = (
+                    await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
                         force_type=force_type,
                         news_source=source_key,
                         source_type=SOURCE_MANUAL,
                     )
-                    if not ok:
-                        raise RuntimeError("QQ 空间分享失败，请查看日志")
-                    success_message = "QQ 空间分享成功"
-                elif target == "xiaohongshu":
-                    ok = await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
-                        force_type=force_type,
-                        news_source=source_key,
-                        source_type=SOURCE_MANUAL,
-                    )
-                    if not ok:
-                        raise RuntimeError("小红书发布失败，请查看日志")
-                    success_message = "小红书发布成功"
-                elif target == "briefing":
-                    ok = await self.task_manager.briefing.execute_briefing_share(
-                        source_type=SOURCE_MANUAL
-                    )
-                    if not ok:
-                        raise RuntimeError("早报分享失败，请查看日志")
-                    success_message = "早报分享成功"
-                else:
-                    ok = await self.task_manager.share.execute_share(
-                        force_type=force_type,
-                        news_source=source_key,
-                        specific_target=specific_target or None,
-                        target_scope=_page_broadcast_target_scope(target),
-                        source_type=SOURCE_MANUAL,
-                        exclude_custom_cron=False,
-                    )
-                    if not ok:
-                        raise RuntimeError("分享失败，请查看日志")
-                    success_message = {
-                        "broadcast_groups": "群聊分享成功",
-                        "broadcast_users": "私聊分享成功",
-                    }.get(target, "分享成功")
+                )
+                if not ok:
+                    raise RuntimeError("小红书发布失败，请查看日志")
+                success_message = "小红书发布成功"
+            elif target == "briefing":
+                ok = await self.task_manager.briefing.execute_briefing_share(
+                    source_type=SOURCE_MANUAL
+                )
+                if not ok:
+                    raise RuntimeError("早报分享失败，请查看日志")
+                success_message = "早报分享成功"
+            else:
+                ok = await self.task_manager.share.execute_share(
+                    force_type=force_type,
+                    news_source=source_key,
+                    specific_target=specific_target or None,
+                    target_scope=_page_broadcast_target_scope(target),
+                    source_type=SOURCE_MANUAL,
+                    exclude_custom_cron=False,
+                )
+                if not ok:
+                    raise RuntimeError("分享失败，请查看日志")
+                success_message = {
+                    "broadcast_groups": "群聊分享成功",
+                    "broadcast_users": "私聊分享成功",
+                }.get(target, "分享成功")
             run["status"] = "done"
             run["message"] = success_message
         except Exception as exc:
@@ -107,6 +111,8 @@ class DashboardRouteActionService(PanelComponent):
             run["status"] = "error"
             run["message"] = str(exc) or "分享失败"
         finally:
+            if share_lock is not None and share_lock.locked():
+                share_lock.release()
             run["finished_at"] = datetime.now().isoformat(timespec="seconds")
             self.activity._page_prune_actions()
 
@@ -144,6 +150,10 @@ class DashboardRouteActionService(PanelComponent):
                 else ""
             )
 
+            # 标签解析可能让出事件循环，因此在创建记录前再次检查并立即占用全局锁。
+            if self.is_share_busy(global_scope=True):
+                raise BlockingIOError("已有任务正在分享，请稍后再试")
+            await self._lock.acquire()
             self._page_action_seq += 1
             run_id = f"dashboard-{self._page_action_seq}"
             run = {
@@ -162,11 +172,25 @@ class DashboardRouteActionService(PanelComponent):
                 "finished_at": "",
             }
             self._page_action_runs[run_id] = run
-            self.track_task(
-                self.action_routes._run_page_action(
-                    run_id, target, share_type, news_source, specific_target
-                )
+            action_coro = self.action_routes._run_page_action(
+                run_id,
+                target,
+                share_type,
+                news_source,
+                specific_target,
+                share_lock=self._lock,
             )
+            try:
+                task = self.track_task(action_coro)
+            except Exception:
+                action_coro.close()
+                self._lock.release()
+                self._page_action_runs.pop(run_id, None)
+                raise
+            if task is None:
+                self._lock.release()
+                self._page_action_runs.pop(run_id, None)
+                raise RuntimeError("插件正在停止，无法启动分享任务")
             return {"ok": True, "data": {"run": run}, "message": "任务已开始"}
 
         return await self.server._page_json(handler)

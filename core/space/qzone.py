@@ -43,6 +43,7 @@ class QzoneService:
 
     _REMOTE_IMAGE_CHUNK_SIZE = 64 * 1024
     _REMOTE_IMAGE_MAX_BYTES = 24 * 1024 * 1024
+    _H5_MAX_RESPONSE_BYTES = QzoneH5BaseService._H5_MAX_RESPONSE_BYTES
 
     def _ensure_qzone_image_size(self, image_data: bytes) -> bytes:
         if len(image_data) > self._REMOTE_IMAGE_MAX_BYTES:
@@ -162,6 +163,7 @@ class QzoneService:
         self.ctx_service = plugin.ctx_service
         self._ctx: QzoneContext | None = None
         self._ctx_at = 0.0
+        self._ctx_fetch_lock = asyncio.Lock()
         self._session = None
         self._h2_session = None
         self._session_lock = asyncio.Lock()
@@ -348,6 +350,7 @@ class QzoneService:
     )
     _request: Any = QzoneClientGateway._request
     _request_text: Any = QzoneClientGateway._request_text
+    _refresh_request_credentials: Any = QzoneClientGateway._refresh_request_credentials
     _safe_post_detail: Any = QzoneFeedDetailService._safe_post_detail
     _self_reply_thread_state: Any = classmethod(
         cast(Any, QzoneReplyTargetService._self_reply_thread_state).__func__
@@ -613,6 +616,35 @@ class QzoneService:
             )
         return payload
 
+    @staticmethod
+    def _normalized_publish_text(value: str) -> str:
+        return " ".join(str(value or "").strip().split())
+
+    async def _confirm_ambiguous_publish(
+        self,
+        ctx: QzoneContext,
+        *,
+        text: str,
+        started_at: int,
+    ) -> QzonePost | None:
+        expected = self._normalized_publish_text(text)
+        if not expected:
+            return None
+        self._invalidate_qzone_cache(target_id=str(ctx.uin))
+        try:
+            posts = await self.query_posts(target_id=str(ctx.uin), num=5)
+        except Exception as exc:
+            logger.warning(f"[日常分享] QQ 空间发布结果核验失败: {exc}")
+            return None
+        for post in posts:
+            if int(post.uin or 0) != int(ctx.uin):
+                continue
+            if int(post.create_time or 0) < started_at - 30:
+                continue
+            if self._normalized_publish_text(post.text) == expected:
+                return post
+        return None
+
     async def publish_post(
         self, *, text: str = "", images: list | None = None
     ) -> QzonePost:
@@ -633,6 +665,7 @@ class QzoneService:
             pic_bos=pic_bos,
             richvals=richvals,
         )
+        submit_started_at = int(time.time())
         try:
             payload = await self._submit_post(ctx, data)
         except Exception as exc:
@@ -649,18 +682,20 @@ class QzoneService:
                 )
             ):
                 logger.warning(
-                    f"[日常分享] QQ 空间说说发布失败: {message}，2 秒后复用已上传图片重试一次。"
+                    f"[日常分享] QQ 空间说说提交状态未知: {message}，正在核验最新动态。"
                 )
                 await asyncio.sleep(2)
-                try:
-                    payload = await self._submit_post(ctx, data)
-                except Exception as retry_exc:
-                    retry_message = (
-                        str(retry_exc).strip() or retry_exc.__class__.__name__
-                    )
-                    raise RuntimeError(
-                        f"QQ 空间说说重试发布仍失败: {retry_message}"
-                    ) from retry_exc
+                confirmed = await self._confirm_ambiguous_publish(
+                    ctx,
+                    text=text,
+                    started_at=submit_started_at,
+                )
+                if confirmed is not None:
+                    logger.info("[日常分享] 已从最新动态确认 QQ 空间说说发布成功。")
+                    return confirmed
+                raise RuntimeError(
+                    "QQ 空间说说提交状态未知，为避免重复发布已停止自动重试；请先检查空间动态"
+                ) from exc
             else:
                 raise RuntimeError(f"QQ 空间说说发布失败: {message}") from exc
         raw_data = payload.get("data")

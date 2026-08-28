@@ -593,6 +593,23 @@ def _manager(mod):
 
 
 class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
+    def test_cron_weekday_uses_standard_crontab_sunday_mapping(self):
+        mod = _load_tasks_module()
+        manager = _manager(mod)
+
+        self.assertEqual(
+            manager.schedule.parse_cron_to_kwargs("0 8 * * 0")["day_of_week"],
+            "6",
+        )
+        self.assertEqual(
+            manager.schedule.parse_cron_to_kwargs("0 8 * * 7")["day_of_week"],
+            "6",
+        )
+        self.assertEqual(
+            manager.schedule.parse_cron_to_kwargs("0 8 * * 1-5")["day_of_week"],
+            "0,1,2,3,4",
+        )
+
     def test_cron_validation_rejects_invalid_field_without_removing_old_job(self):
         mod = _load_tasks_module()
         plugin = _Plugin()

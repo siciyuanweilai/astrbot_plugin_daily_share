@@ -30,7 +30,13 @@ class DailySharePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(
+            job_defaults={
+                "misfire_grace_time": 300,
+                "coalesce": True,
+                "max_instances": 1,
+            }
+        )
 
         # 配置引用
         self.basic_conf = self.config.get("basic_conf", {})
@@ -43,9 +49,6 @@ class DailySharePlugin(Star):
         self.xiaohongshu_conf = self.config.get("xiaohongshu_conf", {})
         self.news_conf = self.config.get("news_conf", {})
         self.contact_aliases = self.config.get("contact_aliases", [])
-
-        # 分享内容记录条数
-        self.history_limit = 100
 
         # 锁与防抖
         self._lock = asyncio.Lock()
@@ -316,7 +319,7 @@ class DailySharePlugin(Star):
         post_id: str = "",
         target_id: str = "",
         content: str = "",
-        images: list | None = None,
+        images: list[str] | None = None,
         pos: int = 0,
         num: int = 5,
     ):
@@ -332,7 +335,7 @@ class DailySharePlugin(Star):
             post_id (string): 说说 ID，来自 list/detail 返回中的 ID，格式为 uin:tid。点赞、评论、自动评论、详情必填。
             target_id (string): 可选，要查看的 QQ 号。留空表示查看自己的 QQ 空间说说；填 QQ 号表示查看该 QQ 空间说说。
             content (string): 发布说说或评论的正文。publish/comment 必填。comment 时必须是用户明确要求发送的原文；需要模型代写评论时不要填写本参数直发，改用 action=auto_comment。
-            images (list): 发布说说附带的图片路径或图片 URL 列表，可留空。
+            images (array[string]): 发布说说附带的图片路径或图片 URL 列表，可留空。
             pos (number): 查看说说起始位置，默认 0。
             num (number): 查看说说数量，默认 5，最多 10。
         """

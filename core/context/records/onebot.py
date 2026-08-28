@@ -108,7 +108,15 @@ class ContextHistoryOnebotFetchService(ContextComponent):
             if message_key in seen_ids:
                 continue
             seen_ids.add(message_key)
-            if int(message.get("time", 0)) >= cutoff_time:
+            try:
+                message_time = float(message.get("time") or 0)
+            except (TypeError, ValueError):
+                logger.debug(
+                    f"[日常分享] 跳过无法解析的消息时间: {message.get('time')}"
+                )
+                continue
+            if message_time >= cutoff_time:
+                message["time"] = message_time
                 all_messages.append(message)
                 added_count += 1
         return sequences, added_count

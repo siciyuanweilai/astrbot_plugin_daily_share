@@ -25,42 +25,47 @@ def _retry_failure_message(target_id: str) -> str:
 
 
 class DashboardRouteRetryService(PanelComponent):
-    async def _run_page_retry_action(self, run_id: str, history_item: dict) -> None:
+    async def _run_page_retry_action(
+        self, run_id: str, history_item: dict, share_lock=None
+    ) -> None:
         run = self._page_action_runs.get(run_id)
         if not run:
+            if share_lock is not None and share_lock.locked():
+                share_lock.release()
             return
         try:
             target_id = str(history_item.get("target_id") or "").strip()
             raw_type = str(history_item.get("type") or "auto").strip()
             force_type = self.validation._page_share_type(raw_type)
-            async with self._lock:
-                if target_id == QZONE_TARGET_ID:
-                    ok = await self.task_manager.qzone_share.execute_qzone_share(
+            if target_id == QZONE_TARGET_ID:
+                ok = await self.task_manager.qzone_share.execute_qzone_share(
+                    force_type=force_type,
+                    source_type=SOURCE_MANUAL,
+                )
+            elif target_id == XIAOHONGSHU_TARGET_ID:
+                ok = (
+                    await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
                         force_type=force_type,
                         source_type=SOURCE_MANUAL,
                     )
-                elif target_id == XIAOHONGSHU_TARGET_ID:
-                    ok = await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
-                        force_type=force_type,
-                        source_type=SOURCE_MANUAL,
-                    )
-                elif target_id in BRIEFING_TARGET_ALIASES:
-                    ok = await self.task_manager.briefing.execute_briefing_share(
-                        source_type=SOURCE_MANUAL
-                    )
-                elif target_id == GLOBAL_TARGET_ID:
-                    ok = await self.task_manager.share.execute_share(
-                        force_type=force_type,
-                        source_type=SOURCE_MANUAL,
-                    )
-                else:
-                    ok = await self.task_manager.share.execute_share(
-                        force_type=force_type,
-                        specific_target=target_id,
-                        source_type=SOURCE_MANUAL,
-                    )
-                if not ok:
-                    raise RuntimeError(_retry_failure_message(target_id))
+                )
+            elif target_id in BRIEFING_TARGET_ALIASES:
+                ok = await self.task_manager.briefing.execute_briefing_share(
+                    source_type=SOURCE_MANUAL
+                )
+            elif target_id == GLOBAL_TARGET_ID:
+                ok = await self.task_manager.share.execute_share(
+                    force_type=force_type,
+                    source_type=SOURCE_MANUAL,
+                )
+            else:
+                ok = await self.task_manager.share.execute_share(
+                    force_type=force_type,
+                    specific_target=target_id,
+                    source_type=SOURCE_MANUAL,
+                )
+            if not ok:
+                raise RuntimeError(_retry_failure_message(target_id))
             run["status"] = "done"
             run["message"] = "重试完成"
         except Exception as exc:
@@ -68,6 +73,8 @@ class DashboardRouteRetryService(PanelComponent):
             run["status"] = "error"
             run["message"] = str(exc) or "重试失败"
         finally:
+            if share_lock is not None and share_lock.locked():
+                share_lock.release()
             run["finished_at"] = datetime.now().isoformat(timespec="seconds")
             self.activity._page_prune_actions()
 
@@ -82,19 +89,24 @@ class DashboardRouteRetryService(PanelComponent):
                 raise FileNotFoundError("未找到失败记录")
             if item.get("success"):
                 raise RuntimeError("该记录不是失败记录，无需重试")
+            target_id = str(item.get("target_id") or "").strip()
+            target_label = await self.labels._resolve_page_target_label(
+                target_id,
+                item.get("kind", ""),
+            )
             if self.is_share_busy(global_scope=True):
                 raise BlockingIOError("已有任务正在分享，请稍后再试")
 
+            if self.is_share_busy(global_scope=True):
+                raise BlockingIOError("已有任务正在分享，请稍后再试")
+            await self._lock.acquire()
             self._page_action_seq += 1
             run_id = f"retry-{self._page_action_seq}"
             run = {
                 "id": run_id,
                 "target": "retry",
-                "target_id": item.get("target_id", ""),
-                "target_label": await self.labels._resolve_page_target_label(
-                    item.get("target_id", ""),
-                    item.get("kind", ""),
-                ),
+                "target_id": target_id,
+                "target_label": target_label,
                 "kind": item.get("kind", ""),
                 "share_type": item.get("type") or "auto",
                 "news_source": "",
@@ -107,7 +119,20 @@ class DashboardRouteRetryService(PanelComponent):
                 "finished_at": "",
             }
             self._page_action_runs[run_id] = run
-            self.track_task(self.retry_routes._run_page_retry_action(run_id, item))
+            action_coro = self.retry_routes._run_page_retry_action(
+                run_id, item, share_lock=self._lock
+            )
+            try:
+                task = self.track_task(action_coro)
+            except Exception:
+                action_coro.close()
+                self._lock.release()
+                self._page_action_runs.pop(run_id, None)
+                raise
+            if task is None:
+                self._lock.release()
+                self._page_action_runs.pop(run_id, None)
+                raise RuntimeError("插件正在停止，无法启动重试任务")
             return {"ok": True, "data": {"run": run}, "message": "重试任务已开始"}
 
         return await self.server._page_json(handler)

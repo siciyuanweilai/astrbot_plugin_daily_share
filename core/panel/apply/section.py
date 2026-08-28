@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 
 from ...config import NEWS_SOURCE_MAP
-from ..common import _PAGE_CONTEXT_STRATEGY_OPTIONS, _PAGE_NEWS_RANDOM_MODE_OPTIONS
+from ..common import (
+    _PAGE_CONTEXT_STRATEGY_OPTIONS,
+    _PAGE_NEWS_RANDOM_MODE_OPTIONS,
+)
 from ..panelcomponent import PanelComponent
 
 

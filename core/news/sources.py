@@ -12,6 +12,14 @@ class NewsSourceService(NewsParserService):
 
     conf: dict
 
+    @staticmethod
+    def _valid_sources(value) -> list[str]:
+        if not isinstance(value, (list, tuple, set)):
+            return []
+        return [
+            item for item in value if isinstance(item, str) and item in NEWS_SOURCE_MAP
+        ]
+
     def _get_current_period(self) -> TimePeriod:
         hour = datetime.now().hour
         if 0 <= hour < 6:
@@ -37,6 +45,9 @@ class NewsSourceService(NewsParserService):
 
         if mode == "fixed":
             source = self.conf.get("news_api_source", "zhihu")
+            if not isinstance(source, str) or source not in NEWS_SOURCE_MAP:
+                logger.warning(f"[新闻] 固定新闻源无效: {source}，回退知乎")
+                source = "zhihu"
             logger.debug(f"[新闻] 固定模式: {source}")
             return source
         elif mode == "random":
@@ -48,7 +59,7 @@ class NewsSourceService(NewsParserService):
             return source
         elif mode == "config":
             c = self.conf.get("news_random_sources", ["zhihu", "weibo"])
-            valid = [s for s in c if s in NEWS_SOURCE_MAP]
+            valid = self._valid_sources(c)
             if not valid:
                 valid = ["zhihu"]
 
@@ -79,10 +90,13 @@ class NewsSourceService(NewsParserService):
                 del prefs[excluded_source]
                 logger.debug(f"[新闻] 已排除上次使用的源: {excluded_source}")
 
-        conf = self.conf.get("news_random_sources", None)
+        raw_conf = self.conf.get("news_random_sources", None)
+        conf = self._valid_sources(raw_conf)
 
         selected = "zhihu"
-        if conf:
+        if raw_conf is not None and not conf:
+            logger.warning("[新闻] 时间段新闻源列表没有有效值，回退知乎")
+        elif conf:
             # 如果配置了限制列表，取交集
             valid = [s for s in conf if s in prefs]
 
@@ -99,7 +113,7 @@ class NewsSourceService(NewsParserService):
                 selected = random.choices(valid, weights=weights, k=1)[0]
             else:
                 # 没交集则从配置里随机
-                selected = random.choice(conf)
+                selected = random.choice(conf) if conf else "zhihu"
         else:
             # 默认使用所有偏好
             if not prefs:

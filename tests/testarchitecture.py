@@ -36,21 +36,23 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.1.1", metadata)
-        self.assertIn("version-1.1.1", readme)
-        self.assertIn("v1.1.1 已发布", readme)
+        self.assertIn("version: 1.1.3", metadata)
+        self.assertIn("version-1.1.3", readme)
+        self.assertIn("v1.1.3 已发布", readme)
         self.assertIn("分享 [类型] 小红书", readme)
         self.assertIn("小红书", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
+        self.assertLess(changelog.index("v1.1.3"), changelog.index("v1.1.2"))
+        self.assertLess(changelog.index("v1.1.2"), changelog.index("v1.1.1"))
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        current_release = changelog.split("## 📕 v1.1.1", 1)[1].split(
-            "## 🛡️ v1.1.0", 1
-        )[0]
+        current_release = changelog.split("## 🛡️ v1.1.3", 1)[1].split("## 🚀 v1.1.2", 1)[
+            0
+        ]
+        self.assertIn("桥接", current_release)
         self.assertIn("数据库结构保持 v2", current_release)
-        self.assertIn("分享 [类型] 小红书", current_release)
 
         previous_release = changelog.split("## 🛡️ v1.1.0", 1)[1].split(
             "## 🎨 v1.0.9", 1
@@ -901,29 +903,50 @@ class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(plugin.news_service.close_calls, 1)
             self.assertEqual(plugin.qzone_service.close_calls, 1)
 
-    async def test_resources_close_when_background_task_cannot_stop(self):
+    async def test_resources_close_after_background_task_exits(self):
         mod = _load_main_module()
         with tempfile.TemporaryDirectory() as temp_dir:
             plugin = _LifecyclePlugin(Path(temp_dir))
             runtime = mod.RuntimeService(plugin)
             plugin._is_initialized = True
-            pending_marker = object()
-            plugin._bg_tasks.add(pending_marker)
+            cancellation_seen = asyncio.Event()
+            release = asyncio.Event()
 
-            async def report_pending_tasks(*, timeout=5.0):
-                return 1
+            async def wait_for_release_after_cancel():
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    cancellation_seen.set()
+                    await release.wait()
 
-            runtime.cancel_background_tasks = report_pending_tasks
+            task = runtime.track_task(wait_for_release_after_cancel())
+            await asyncio.sleep(0)
+            cancel_background_tasks = runtime.cancel_background_tasks
+
+            async def cancel_with_short_timeout(*, timeout=5.0):
+                return await cancel_background_tasks(timeout=0.01)
+
+            runtime.cancel_background_tasks = cancel_with_short_timeout
             await runtime.terminate()
+            self.assertTrue(cancellation_seen.is_set())
 
             self.assertTrue(plugin._is_terminated)
             self.assertFalse(plugin._is_initialized)
             self.assertEqual(plugin.scheduler.shutdown_calls, 1)
             self.assertEqual(plugin.schedule_build_invalidations, 1)
+            self.assertEqual(plugin.db.close_calls, 0)
+            self.assertEqual(plugin.news_service.close_calls, 0)
+            self.assertEqual(plugin.qzone_service.close_calls, 0)
+            self.assertEqual(plugin._runtime_state, "terminating")
+
+            release.set()
+            await asyncio.wait_for(task, timeout=1)
+            await asyncio.wait_for(runtime._resource_close_task, timeout=1)
+
             self.assertEqual(plugin.db.close_calls, 1)
             self.assertEqual(plugin.news_service.close_calls, 1)
             self.assertEqual(plugin.qzone_service.close_calls, 1)
-            self.assertEqual(plugin._bg_tasks, {pending_marker})
+            self.assertEqual(plugin._runtime_state, "terminated")
 
     async def test_initialize_failure_cleans_resources_and_reports_failed_state(
         self,

@@ -9,11 +9,11 @@ from pathlib import Path
 from .database.history import DatabaseHistoryService
 from .database.maintenance import DatabaseMaintenanceService
 from .database.metrics import DatabaseDashboardService
+from .database.newssnapshot import DatabaseNewsSnapshotService
 from .database.schema import (
     SchemaInitializationResult,
     initialize_schema,
 )
-from .database.newssnapshot import DatabaseNewsSnapshotService
 from .database.state import DatabaseStateService
 from .database.topics import DatabaseTopicService
 

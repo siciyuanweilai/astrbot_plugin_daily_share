@@ -21,6 +21,50 @@ from .parse import parse_qzone_response
 
 
 class QzoneClientGateway(QzoneMethodSet):
+    def _refresh_request_credentials(
+        self,
+        old_ctx: QzoneContext,
+        new_ctx: QzoneContext,
+        *,
+        params=None,
+        data=None,
+        headers=None,
+    ) -> tuple[Any, Any, Any]:
+        refreshed_params = dict(params) if isinstance(params, dict) else params
+        refreshed_data = dict(data) if isinstance(data, dict) else data
+        refreshed_headers = dict(headers) if isinstance(headers, dict) else headers
+
+        for values in (refreshed_params, refreshed_data):
+            if not isinstance(values, dict):
+                continue
+            for key in ("g_tk", "gtk", "g_tk2", "gtk2"):
+                if key in values:
+                    values[key] = new_ctx.gtk2
+            replacements = {
+                "uin": new_ctx.uin,
+                "hostuin": new_ctx.uin,
+                "skey": new_ctx.skey,
+                "p_skey": new_ctx.p_skey,
+            }
+            for key, value in replacements.items():
+                if key in values:
+                    values[key] = value
+
+        if isinstance(refreshed_headers, dict):
+            cookie_key = next(
+                (key for key in refreshed_headers if str(key).lower() == "cookie"),
+                None,
+            )
+            if cookie_key:
+                cookie_values = self._cookie_values_from_header(
+                    str(refreshed_headers[cookie_key] or "")
+                )
+                cookie_values.update(new_ctx.cookies)
+                refreshed_headers[cookie_key] = self._cookie_header_from_values(
+                    cookie_values
+                )
+        return refreshed_params, refreshed_data, refreshed_headers
+
     async def close(self) -> None:
         async with self._session_lock:
             if self._session and not self._session.closed:
@@ -65,11 +109,16 @@ class QzoneClientGateway(QzoneMethodSet):
         if self._ctx and time.monotonic() - self._ctx_at < self.COOKIE_TTL_SECONDS:
             return self._ctx
 
-        cookie = await self._fetch_bot_cookie()
-        ctx = await self._context_from_cookie(cookie)
-        self._ctx = ctx
-        self._ctx_at = time.monotonic()
-        return ctx
+        async with self._ctx_fetch_lock:
+            now = time.monotonic()
+            if self._ctx and now - self._ctx_at < self.COOKIE_TTL_SECONDS:
+                return self._ctx
+            cookie = await self._fetch_bot_cookie()
+            ctx = await self._context_from_cookie(cookie)
+
+            self._ctx = ctx
+            self._ctx_at = time.monotonic()
+            return ctx
 
     def _get_bot(self):
         conf = self._qzone_config()
@@ -275,6 +324,7 @@ class QzoneClientGateway(QzoneMethodSet):
         payload["_raw_blank"] = not str(text or "").strip()
         retryable_parse_error = (
             retry_parse_error
+            and str(method or "").upper() in {"GET", "HEAD", "OPTIONS"}
             and payload.get("code") == -1
             and str(payload.get("message") or "").startswith("QQ 空间")
         )
@@ -288,7 +338,16 @@ class QzoneClientGateway(QzoneMethodSet):
                 logger.debug(
                     f"[日常分享] QQ 空间返回暂不可解析，刷新登录态后重试。接口状态码 {status}，响应片段: {preview}"
                 )
+            old_ctx = ctx
             self.invalidate()
+            new_ctx = await self.context()
+            params, data, headers = self._refresh_request_credentials(
+                old_ctx,
+                new_ctx,
+                params=params,
+                data=data,
+                headers=headers,
+            )
             return await self._request(
                 method,
                 url,
@@ -334,7 +393,16 @@ class QzoneClientGateway(QzoneMethodSet):
         except aiohttp.ClientError as exc:
             raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
         if retry and status in {401, 403}:
+            old_ctx = ctx
             self.invalidate()
+            new_ctx = await self.context()
+            params, data, headers = self._refresh_request_credentials(
+                old_ctx,
+                new_ctx,
+                params=params,
+                data=data,
+                headers=headers,
+            )
             return await self._request_text(
                 method,
                 url,

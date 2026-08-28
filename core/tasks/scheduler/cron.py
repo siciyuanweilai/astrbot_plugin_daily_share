@@ -29,14 +29,64 @@ class ScheduleJobDefinition:
 
 
 class TaskSchedulerCronService(SchedulerComponent):
+    @staticmethod
+    def _normalize_crontab_weekday(field: str) -> str | None:
+        """Convert standard crontab Sunday=0/7 to APScheduler Monday=0."""
+        text = str(field or "").strip().lower()
+        if text == "*":
+            return "*"
+        names = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
+        values: set[int] = set()
+        for raw_part in text.split(","):
+            part = raw_part.strip()
+            if not part:
+                return None
+            base, separator, step_text = part.partition("/")
+            if separator:
+                try:
+                    step = int(step_text)
+                except (TypeError, ValueError):
+                    return None
+                if step < 1:
+                    return None
+            else:
+                step = 1
+            if base == "*":
+                start, end = 0, 6
+            elif "-" in base:
+                start_text, end_text = base.split("-", 1)
+                try:
+                    start = (
+                        names[start_text] if start_text in names else int(start_text)
+                    )
+                    end = names[end_text] if end_text in names else int(end_text)
+                except (TypeError, ValueError):
+                    return None
+                if not (0 <= start <= end <= 7):
+                    return None
+            else:
+                try:
+                    start = end = names[base] if base in names else int(base)
+                except (TypeError, ValueError):
+                    return None
+            values.update(
+                6 if value in (0, 7) else value - 1
+                for value in range(start, end + 1, step)
+            )
+        return ",".join(str(value) for value in sorted(values)) or None
+
     def parse_cron_to_kwargs(self, cron_str: str) -> dict | None:
         """解析标准 5 位定时表达式：分、时、日、月、周。"""
         text = str(cron_str or "").strip()
         parts = text.split()
         if len(parts) != 5:
             return None
+        normalized_weekday = self._normalize_crontab_weekday(parts[4])
+        if normalized_weekday is None:
+            return None
+        normalized_parts = [*parts[:4], normalized_weekday]
         try:
-            CronTrigger.from_crontab(text)
+            CronTrigger.from_crontab(" ".join(normalized_parts))
         except (TypeError, ValueError):
             return None
         return {
@@ -44,7 +94,7 @@ class TaskSchedulerCronService(SchedulerComponent):
             "hour": parts[1],
             "day": parts[2],
             "month": parts[3],
-            "day_of_week": parts[4],
+            "day_of_week": normalized_weekday,
         }
 
     @staticmethod

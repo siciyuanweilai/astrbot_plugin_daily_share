@@ -1,8 +1,10 @@
-"""通过本地小红书 CLI 提供兼容 daily_share 的 REST 接口。"""
+"""通过本地小红书 CLI 提供小红书桥接 REST 接口。"""
 
 from __future__ import annotations
 
 import argparse
+import hmac
+import ipaddress
 import json
 import os
 import subprocess
@@ -27,6 +29,8 @@ class BridgeConfig:
     skills_dir: Path
     uv_command: str = "uv"
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+    access_token: str = ""
+    allowed_clients: tuple[str, ...] = ()
 
     @property
     def cli_path(self) -> Path:
@@ -81,7 +85,7 @@ def _visibility(value: Any) -> str:
 
 
 class CliRunner:
-    """把 REST 请求转换成 CLI 调用，不保存 Cookie 或媒体副本。"""
+    """把 REST 请求转换成 CLI 调用，不保存浏览器登录信息或媒体副本。"""
 
     def __init__(self, config: BridgeConfig):
         config.validate()
@@ -185,29 +189,49 @@ def _json_request(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 def _write_json(handler: BaseHTTPRequestHandler, status: int, value: Any) -> None:
     if status == HTTPStatus.NO_CONTENT:
         handler.send_response(status)
-        handler.send_header("Access-Control-Allow-Origin", "*")
-        handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        handler.send_header("Access-Control-Allow-Headers", "Content-Type")
         handler.end_headers()
         return
     body = json.dumps(value, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
     handler.end_headers()
     handler.wfile.write(body)
 
 
+def _normalized_address(value: str) -> str:
+    try:
+        return str(ipaddress.ip_address(str(value or "").strip()))
+    except ValueError:
+        return ""
+
+
+def _authorized(handler: BaseHTTPRequestHandler, config: BridgeConfig) -> bool:
+    peer = _normalized_address(handler.client_address[0])
+    allowed = {_normalized_address(item) for item in config.allowed_clients}
+    if peer and peer in allowed:
+        return True
+    expected = config.access_token.strip()
+    if not expected:
+        return False
+    authorization = str(handler.headers.get("Authorization", "") or "").strip()
+    supplied = (
+        authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+    )
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
 def make_handler(runner: CliRunner):
+    config = runner.config
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
             print(f"[小红书桥接] {format % args}")
 
         def do_OPTIONS(self) -> None:  # noqa: N802
-            _write_json(self, HTTPStatus.NO_CONTENT, {})
+            _write_json(
+                self, HTTPStatus.METHOD_NOT_ALLOWED, {"error": "不支持浏览器跨域调用"}
+            )
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path in {"/health", "/api/health"}:
@@ -216,6 +240,10 @@ def make_handler(runner: CliRunner):
             _write_json(self, HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if not _authorized(self, config):
+                print(f"[小红书桥接] 拒绝未授权来源: {self.client_address[0]}")
+                _write_json(self, HTTPStatus.UNAUTHORIZED, {"error": "未授权访问"})
+                return
             endpoint = self.path.removeprefix("/api/").strip("/")
             try:
                 if endpoint == "check-login":
@@ -257,6 +285,17 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_TIMEOUT_SECONDS,
         help="单次 CLI 调用超时秒数",
     )
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("XHS_BRIDGE_TOKEN", ""),
+        help="可选访问令牌；优先通过 XHS_BRIDGE_TOKEN 环境变量提供",
+    )
+    parser.add_argument(
+        "--allow-client",
+        action="append",
+        default=[],
+        help="允许访问的精确客户端 IP，可重复指定",
+    )
     return parser
 
 
@@ -264,10 +303,26 @@ def main() -> int:
     args = _parser().parse_args()
     if not args.skills_dir:
         raise SystemExit("请通过 --skills-dir 或 XHS_SKILLS_DIR 指定 CLI 目录")
+    allowed_clients = tuple(
+        address
+        for address in (_normalized_address(item) for item in args.allow_client)
+        if address
+    )
+    try:
+        bind_address = ipaddress.ip_address(args.host)
+    except ValueError as exc:
+        raise SystemExit("--host 必须是 IP 地址") from exc
+    if not args.token.strip() and not allowed_clients:
+        if bind_address.is_loopback:
+            allowed_clients = (str(bind_address),)
+        else:
+            raise SystemExit("非回环监听必须配置 --allow-client 或 XHS_BRIDGE_TOKEN")
     config = BridgeConfig(
         skills_dir=Path(args.skills_dir).expanduser().resolve(),
         uv_command=args.uv_command,
         timeout_seconds=max(10, min(args.timeout, 600)),
+        access_token=args.token.strip(),
+        allowed_clients=allowed_clients,
     )
     runner = CliRunner(config)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(runner))

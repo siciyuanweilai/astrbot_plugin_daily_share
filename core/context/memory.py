@@ -1,6 +1,11 @@
 import asyncio
 import json
 
+try:
+    from astrbot.core.utils.session_lock import session_lock_manager
+except Exception:  # pragma: no cover - standalone tests do not ship AstrBot internals
+    session_lock_manager = None
+
 from .contextbase import ContextComponent
 from .shared import (
     DAILY_SHARE_MEMORY_PROMPT,
@@ -10,6 +15,14 @@ from .shared import (
 
 
 class ContextMemoryService(ContextComponent):
+    def _memory_write_lock(self, target_umo: str) -> asyncio.Lock:
+        key = str(target_umo or "").strip()
+        lock = self.service._memory_write_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.service._memory_write_locks[key] = lock
+        return lock
+
     def _clean_share_text_for_memory(self, content: str) -> str:
         return str(content or "").strip()
 
@@ -40,6 +53,23 @@ class ContextMemoryService(ContextComponent):
             return
 
         try:
+            async with self._memory_write_lock(target_umo):
+                if session_lock_manager is None:
+                    await self._record_bot_reply_to_history_locked(
+                        target_umo, final_content
+                    )
+                else:
+                    async with session_lock_manager.acquire_lock(target_umo):
+                        await self._record_bot_reply_to_history_locked(
+                            target_umo, final_content
+                        )
+        except Exception as e:
+            logger.warning(f"[上下文] 写入对话历史失败: {e}")
+
+    async def _record_bot_reply_to_history_locked(
+        self, target_umo: str, final_content: str
+    ) -> None:
+        try:
             conv_manager = self.context.conversation_manager
             get_curr = conv_manager.get_curr_conversation_id
             get_conversation = conv_manager.get_conversation
@@ -62,8 +92,8 @@ class ContextMemoryService(ContextComponent):
             await update_conversation(target_umo, conversation_id, history=history)
             logger.debug(f"[上下文] 已写入分享历史: {target_umo}")
 
-        except Exception as e:
-            logger.warning(f"[上下文] 写入对话历史失败: {e}")
+        except Exception:
+            raise
 
     async def record_external_share(
         self,

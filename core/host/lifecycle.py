@@ -14,6 +14,8 @@ class RuntimeService:
         self.plugin = plugin
         self._lifecycle_lock = asyncio.Lock()
         self._config_transaction_lock = asyncio.Lock()
+        self._resource_close_task: asyncio.Task | None = None
+        self._resources_closed = False
 
     def set_runtime_state(self, state: str, error: str = "") -> None:
         """更新插件运行状态和最近一次初始化错误。"""
@@ -96,6 +98,60 @@ class RuntimeService:
                 f"[日常分享] 后台任务取消超时，仍有 {len(pending)} 个任务未结束"
             )
         return len(pending)
+
+    async def _close_resources(self) -> None:
+        """关闭本运行时拥有的资源；在后台任务全部退出后调用。"""
+        if self._resources_closed:
+            return
+        self._resources_closed = True
+        plugin = self.plugin
+        for name, service in (
+            ("新闻服务", plugin.news_service),
+            ("QQ 空间服务", plugin.qzone_service),
+            ("数据库", plugin.db),
+        ):
+            try:
+                await service.close()
+            except Exception as exc:
+                log_exception(
+                    f"[日常分享] 关闭{name}失败",
+                    exc,
+                    level="warning",
+                    with_traceback=False,
+                )
+
+    async def _close_resources_after_tasks(self) -> None:
+        """等待未响应取消的旧任务退出，避免其访问已关闭资源。"""
+        plugin = self.plugin
+        tasks = [
+            task
+            for task in plugin._bg_tasks
+            if isinstance(task, asyncio.Future) and not task.done()
+        ]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        await self._close_resources()
+        self.set_runtime_state("terminated")
+        logger.info("[日常分享] 延后资源清理完成")
+
+    def _defer_resource_close(self) -> None:
+        task = self._resource_close_task
+        if task and not task.done():
+            return
+        task = asyncio.create_task(self._close_resources_after_tasks())
+        self._resource_close_task = task
+
+        def report_failure(done_task: asyncio.Task) -> None:
+            if done_task.cancelled():
+                return
+            try:
+                error = done_task.exception()
+            except asyncio.CancelledError:
+                return
+            if error:
+                log_exception("[日常分享] 延后资源清理失败", error)
+
+        task.add_done_callback(report_failure)
 
     def get_share_lock(
         self, target_uid: str | None = None, *, global_scope: bool = False
@@ -215,36 +271,28 @@ class RuntimeService:
                 level="warning",
                 with_traceback=False,
             )
+            remaining_tasks = sum(
+                1
+                for task in plugin._bg_tasks
+                if isinstance(task, asyncio.Future) and not task.done()
+            )
 
         if remaining_tasks:
             logger.warning(
                 f"[日常分享] 仍有 {remaining_tasks} 个后台任务未响应取消，"
-                "插件将继续关闭数据库和网络服务"
+                "将保留数据库和网络服务直到这些任务退出"
             )
-
-        for name, service in (
-            ("新闻服务", plugin.news_service),
-            ("QQ 空间服务", plugin.qzone_service),
-            ("数据库", plugin.db),
-        ):
-            try:
-                await service.close()
-            except Exception as exc:
-                log_exception(
-                    f"[日常分享] 关闭{name}失败",
-                    exc,
-                    level="warning",
-                    with_traceback=False,
-                )
-
         plugin._is_initialized = False
-        self.set_runtime_state("terminated")
         if remaining_tasks:
+            self._defer_resource_close()
             logger.warning(
-                f"[日常分享] 插件资源已关闭，但仍有 {remaining_tasks} 个后台任务未响应取消"
+                f"[日常分享] 插件已停止接收新任务，仍等待 {remaining_tasks} 个后台任务退出"
             )
-        else:
-            logger.info("[日常分享] 插件已停止，资源清理完成")
+            return
+
+        await self._close_resources()
+        self.set_runtime_state("terminated")
+        logger.info("[日常分享] 插件已停止，资源清理完成")
 
     async def save_config_file(self) -> None:
         async with self.config_transaction():

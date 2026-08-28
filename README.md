@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.2-ef6f8f" alt="版本 1.1.2"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.3-ef6f8f" alt="版本 1.1.3"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.2 已发布**：小红书发布改为插件自带的一键部署、扫码登录与验证流程，支持常见 Linux 包管理器自动准备运行环境。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.3 已发布**：集中加固小红书桥接、QQ 空间、调度、并发与插件停止流程。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -53,7 +53,7 @@
 | ⏰ 灵活调度 | 支持固定时间、随机时段、智能定时、高级 Cron 和任务恢复 |
 | 🧭 多目标发送 | 支持私聊、群聊、个人微信及其他具备主动发送能力的平台 |
 | 🌐 QQ 空间 | 支持发布、查看、点赞、评论、删除、自动互动与配图识别 |
-| 📕 小红书 | 通过独立 REST 发布服务生成并发布图文或视频 |
+| 📕 小红书 | 通过插件自带 REST 桥接服务生成并发布图文或视频 |
 | 🖥️ 可视化管理 | 内置仪表盘，可管理设置、目标、任务、媒体、历史与 QQ 空间 |
 
 <a id="quick-start"></a>
@@ -152,7 +152,7 @@
 | 固定时间 | 按每日指定时间执行 |
 | 随机时段 | 在配置时段内生成随机执行时间 |
 | 智能定时 | 结合配置策略生成执行任务 |
-| 高级 Cron | 支持 5 位、6 位和 7 位表达式 |
+| 高级 Cron | 支持标准 5 位表达式（星期字段按 crontab 约定：0/7 为周日） |
 | 独立目标定时 | 每个群聊或私聊可设置自己的时间和类型序列 |
 | QQ 空间定时 | 使用独立时间、类型序列和随机延迟 |
 
@@ -274,7 +274,9 @@ bot-main:FriendMessage:user-test-001
    python3 bridge/xhssetup.py setup --install-system-deps --target-dir ~/xiaohongshu-skills
    ```
 
-   该命令会自动识别 `apt`、`dnf`、`yum`、`pacman`、`zypper` 或 `apk`，并在需要时请求 `sudo` 密码。它会安装浏览器、虚拟显示和 Python 环境依赖，下载发布组件、安装 Python 依赖并启动后台服务。该组件提供浏览器扩展和本地命令行工具；每个 AstrBot 实例只需要安装一次。
+   该命令会自动识别 `apt`、`dnf`、`yum`、`pacman`、`zypper` 或 `apk`，并在需要时请求 `sudo` 密码。它会安装浏览器、虚拟显示和 Python 环境依赖，下载固定版本的发布组件、安装锁定依赖并启动后台服务。Ubuntu 启用 AppArmor userns 限制时，安装器还会为所选 Chromium 写入路径级 `userns` 规则，使 Chromium 可以继续启用自身沙箱。该组件提供浏览器扩展和本地命令行工具；每个 AstrBot 实例只需要安装一次。
+
+   安装器默认使用插件内置的已验证组件版本；需要主动测试其他上游版本时，才显式追加 `--ref <版本或提交>`。
 
    后台服务使用 `systemd`。没有 `systemd` 的 Linux 系统可改用 `bootstrap --install-system-deps` 只完成组件安装，再由自身服务管理器保持桥接和浏览器进程运行。
 
@@ -293,7 +295,7 @@ bot-main:FriendMessage:user-test-001
 
    验证会检查桥接服务、浏览器服务、容器连通、登录状态和媒体路径映射。
 
-4. **只填写一个必填地址**：在仪表盘“小红书”设置中填写桥接服务地址，先用管理员指令 `/分享 心情 小红书` 测试，成功后再打开自动发布。
+4. **只填写一个必填地址**：在仪表盘“小红书”设置中填写桥接服务地址，先用管理员指令 `/分享 心情 小红书` 测试，成功后再打开自动发布。自动安装会把发布接口限制到当前 AstrBot 容器的精确 IP；自定义远程部署还可在桥接进程设置 `XHS_BRIDGE_TOKEN`，并在插件中填写相同的“桥接访问令牌”。
 
 Docker 中 AstrBot 访问宿主机桥接服务时，地址通常是：
 
@@ -323,7 +325,7 @@ systemctl --user status daily-share-xhs.service
 systemctl --user status daily-share-xhs-browser.service
 ```
 
-两个服务都显示 `active (running)` 后，插件即可正常发布。不要把桥接服务绑定到 `0.0.0.0` 暴露公网，也不要把 Cookie 粘贴到聊天或日志中。
+两个服务都显示 `active (running)` 后，插件即可正常发布。不要把桥接服务绑定到 `0.0.0.0` 暴露公网，也不要把桥接令牌粘贴到聊天或日志中。
 
 ## 🎮 手动指令
 

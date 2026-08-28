@@ -43,7 +43,7 @@ class XiaohongshuClientTests(unittest.IsolatedAsyncioTestCase):
         port = self.site._server.sockets[0].getsockname()[1]
         self.config = {
             "server_url": f"http://127.0.0.1:{port}/api",
-            "cookie": "session=secret",
+            "bridge_token": "bridge-secret",
             "media_path_source": "/srv/astrbot",
             "media_path_target": "/mnt/share",
         }
@@ -62,13 +62,23 @@ class XiaohongshuClientTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["data"]["id"], "note-1")
         headers, payload = self.received[0]
-        self.assertEqual(headers["X-Xhs-Cookie"], "session=secret")
+        self.assertEqual(headers["Authorization"], "Bearer bridge-secret")
         self.assertEqual(
             payload["images"],
             ["/mnt/share/temp/image.png", "https://example.test/a.png"],
         )
         self.assertEqual(payload["tags"], ["日常", "#生活"])
         self.assertEqual(payload["visibility"], "公开可见")
+
+    async def test_missing_bridge_token_sends_no_authorization_header(self):
+        client = XiaohongshuClient({**self.config, "bridge_token": ""})
+        await client.publish(
+            title="记录", content="正文", images=["/srv/astrbot/a.png"]
+        )
+
+        headers, _payload = self.received[0]
+        self.assertNotIn("Authorization", headers)
+        self.assertNotIn("X-Xhs-Cookie", headers)
 
     def test_visibility_values_are_normalized(self):
         self.assertEqual(normalize_xiaohongshu_visibility(""), "公开可见")
@@ -107,6 +117,8 @@ class XiaohongshuSchemaTests(unittest.TestCase):
         settings = schema["xiaohongshu_conf"]
         self.assertFalse(settings["items"]["enable_xiaohongshu"]["default"])
         self.assertEqual(settings["items"]["server_url"]["default"], "")
+        self.assertNotIn("cookie", settings["items"])
+        self.assertIn("bridge_token", settings["items"])
         self.assertEqual(
             settings["items"]["visibility"]["options"],
             ["公开可见", "仅自己可见", "仅互关好友可见"],
@@ -136,9 +148,7 @@ class XiaohongshuSchemaTests(unittest.TestCase):
             self.assertIn(f"xiaohongshu_{period}_sequence", settings["items"])
 
     def test_dashboard_has_dedicated_xiaohongshu_sequence_section(self):
-        page = (ROOT / "pages" / "dashboard" / "index.html").read_text(
-            encoding="utf-8"
-        )
+        page = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")
         self.assertIn('data-settings-section="xiaohongshuSequence"', page)
         self.assertIn('id="cfgXiaohongshuNightSequence"', page)
         self.assertIn(
@@ -260,7 +270,7 @@ class XiaohongshuMetadataTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(),
         )
 
-    async def test_smart_metadata_keeps_defaults_and_uses_llm_result(self):
+    async def test_smart_metadata_uses_only_llm_tags_when_generation_succeeds(self):
         service = self._service(
             {
                 "default_tags": ["我的日常", "#生活"],
@@ -274,22 +284,22 @@ class XiaohongshuMetadataTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(title, "咖啡和学习的小收获")
-        self.assertEqual(tags[:2], ["我的日常", "生活"])
+        self.assertEqual(tags, ["咖啡日常", "学习分享", "生活记录"])
+        self.assertNotIn("我的日常", tags)
+        self.assertNotIn("生活", tags)
         self.assertIn("咖啡日常", tags)
         self.assertIn("学习分享", tags)
-        self.assertLessEqual(len(tags), 5)
+        self.assertLessEqual(len(tags), 3)
 
     async def test_smart_tags_can_be_disabled_without_disabling_smart_title(self):
-        service = self._service(
-            {"default_tags": ["日常"], "enable_smart_tags": False}
-        )
+        service = self._service({"default_tags": ["日常"], "enable_smart_tags": False})
 
         title, tags = await service._metadata("今天喝咖啡", ShareType.MOOD)
 
         self.assertEqual(title, "咖啡和学习的小收获")
         self.assertEqual(tags, ["日常"])
 
-    async def test_smart_title_failure_stops_publish_metadata_generation(self):
+    async def test_smart_metadata_failure_keeps_default_tags_and_empty_title(self):
         async def call_llm(**_kwargs):
             raise RuntimeError("模型不可用")
 
@@ -298,8 +308,10 @@ class XiaohongshuMetadataTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(xiaohongshu={"default_tags": ["日常"]}),
             SimpleNamespace(),
         )
-        with self.assertRaisesRegex(XiaohongshuPublishError, "智能标题生成失败"):
-            await service._metadata("这句正文不能作为标题。", ShareType.MOOD)
+        title, tags = await service._metadata("这句正文不能作为标题。", ShareType.MOOD)
+
+        self.assertEqual(title, "")
+        self.assertEqual(tags, ["日常"])
 
     async def test_invalid_smart_tags_keep_title_and_default_tags(self):
         service = self._service(

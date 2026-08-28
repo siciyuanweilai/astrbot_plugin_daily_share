@@ -1,17 +1,42 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from astrbot_plugin_daily_share.bridge.server import (
     BridgeConfig,
     BridgeError,
     CliRunner,
+    _authorized,
     _json_output,
 )
 
 
 class BridgeHelpersTests(unittest.TestCase):
+    def test_authorization_accepts_exact_client_or_bearer_token(self):
+        config = BridgeConfig(
+            Path("."), access_token="bridge-secret", allowed_clients=("172.18.0.3",)
+        )
+        allowed = SimpleNamespace(client_address=("172.18.0.3", 1234), headers={})
+        token = SimpleNamespace(
+            client_address=("172.18.0.4", 1234),
+            headers={"Authorization": "Bearer bridge-secret"},
+        )
+        denied = SimpleNamespace(
+            client_address=("172.18.0.4", 1234),
+            headers={"Authorization": "Bearer wrong"},
+        )
+        legacy = SimpleNamespace(
+            client_address=("172.18.0.4", 1234),
+            headers={"X-Xhs-Cookie": "bridge-secret"},
+        )
+
+        self.assertTrue(_authorized(allowed, config))
+        self.assertTrue(_authorized(token, config))
+        self.assertFalse(_authorized(denied, config))
+        self.assertFalse(_authorized(legacy, config))
+
     def test_json_output_accepts_json_after_cli_logs(self):
         self.assertEqual(
             _json_output('日志\n{"code": 0, "data": {"id": "note-1"}}'),

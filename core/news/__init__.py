@@ -63,7 +63,7 @@ class NewsService(NewsSourceService):
         # 确定备选池范围
         if mode in ["config", "time_based"]:
             configured = self.conf.get("news_random_sources", ["zhihu", "weibo"])
-            pool = [s for s in configured if s in NEWS_SOURCE_MAP]
+            pool = self._valid_sources(configured)
         else:
             # 从所有可用源中找
             pool = list(NEWS_SOURCE_MAP.keys())

@@ -35,9 +35,6 @@ class ImageVisualJudgeService(ImageVisualExtractService):
   1. 纯客观描述 ("今天天气很好" "这朵花很美")
   2. 推荐具体物品 ("推荐这本书" "这个电影很好看")
   3. 分享新闻/知识 ("据说..." "你知道吗...")
-隐藏推理口吻：
-- 如果服务端记录隐藏推理，只保留一句以“我”开头的角色内心判断。
-- 不要写“我们分析”“我们根据”“用户内容”“判断标准”这类旁观、审题或样本解析口吻。
 请回答 YES 或 NO，不要解释。"""
             user_prompt = (
                 f"类型：{share_type.value} {type_hint}\n内容：{content}\n\n是否含人物？"

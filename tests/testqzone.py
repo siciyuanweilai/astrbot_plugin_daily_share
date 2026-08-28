@@ -2215,6 +2215,49 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.gtk, expected)
         self.assertEqual(ctx.gtk2, expected)
 
+    async def test_refresh_request_credentials_rebuilds_signed_fields_and_cookie(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module, types.SimpleNamespace())
+        old_ctx = service_module.QzoneContext(
+            uin=100000001,
+            skey="old-skey",
+            p_skey="old-p-skey",
+            cookie_values={"extra": "old"},
+        )
+        new_ctx = service_module.QzoneContext(
+            uin=200000002,
+            skey="new-skey",
+            p_skey="new-p-skey",
+            cookie_values={"extra": "new"},
+        )
+
+        params, data, headers = service._refresh_request_credentials(
+            old_ctx,
+            new_ctx,
+            params={"g_tk": old_ctx.gtk2, "uin": old_ctx.uin, "target": "keep"},
+            data={
+                "gtk2": old_ctx.gtk2,
+                "hostuin": old_ctx.uin,
+                "skey": old_ctx.skey,
+                "p_skey": old_ctx.p_skey,
+                "value": "keep",
+            },
+            headers={"Cookie": service._cookie_header_from_values(old_ctx.cookies)},
+        )
+
+        self.assertEqual(params["g_tk"], new_ctx.gtk2)
+        self.assertEqual(params["uin"], new_ctx.uin)
+        self.assertEqual(params["target"], "keep")
+        self.assertEqual(data["gtk2"], new_ctx.gtk2)
+        self.assertEqual(data["hostuin"], new_ctx.uin)
+        self.assertEqual(data["skey"], new_ctx.skey)
+        self.assertEqual(data["p_skey"], new_ctx.p_skey)
+        self.assertEqual(data["value"], "keep")
+        self.assertIn("uin=o200000002", headers["Cookie"])
+        self.assertIn("skey=new-skey", headers["Cookie"])
+        self.assertIn("p_skey=new-p-skey", headers["Cookie"])
+        self.assertIn("extra=new", headers["Cookie"])
+
     async def test_h5_success_falls_back_to_code_when_ret_is_null(self):
         service_module = _load_qzone_service()
         service = _new_qzone_service(service_module, types.SimpleNamespace())
@@ -2381,6 +2424,24 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.p_skey, "p_skey")
         self.assertEqual(ctx.cookie_values["pt4_token"], "pt-token")
         self.assertEqual(ctx.cookie_values["ptcz"], "ptcz-value")
+
+    async def test_context_retries_after_failure(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module)
+        attempts = 0
+
+        async def unavailable_cookie():
+            nonlocal attempts
+            attempts += 1
+            raise RuntimeError("OneBot 暂不可用")
+
+        service._fetch_bot_cookie = unavailable_cookie
+
+        with self.assertRaisesRegex(RuntimeError, "OneBot 暂不可用"):
+            await service.context()
+        with self.assertRaisesRegex(RuntimeError, "OneBot 暂不可用"):
+            await service.context()
+        self.assertEqual(attempts, 2)
 
     async def test_request_does_not_mix_explicit_cookie_header_with_cookie_jar(self):
         service_module = _load_qzone_service()
@@ -2795,7 +2856,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("传输: HTTP/2", message)
         self.assertNotIn("返回内容不是结构化数据", message)
 
-    async def test_publish_retry_reuses_uploaded_images_after_submit_timeout(self):
+    async def test_publish_timeout_confirms_existing_post_without_resubmitting(self):
         service_module = _load_qzone_service()
 
         class Service(service_module.QzoneService):
@@ -2822,9 +2883,17 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 self.submit_calls += 1
                 if data.get("pic_bo") != "picbo" or data.get("richval") != "richval":
                     raise AssertionError("没有复用已上传图片参数")
-                if self.submit_calls == 1:
-                    raise RuntimeError("QQ 空间请求超时（60秒）")
-                return {"code": 0, "tid": "123", "now": 1718000000}
+                raise RuntimeError("QQ 空间请求超时（60秒）")
+
+            async def query_posts(self, **_kwargs):
+                return [
+                    service_module.QzonePost(
+                        tid="123",
+                        uin=100000001,
+                        text="测试",
+                        create_time=int(service_module.time.time()),
+                    )
+                ]
 
         async def no_sleep(_seconds):
             return None
@@ -2835,7 +2904,35 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(post.tid, "123")
         self.assertEqual(service.upload_calls, 1)
-        self.assertEqual(service.submit_calls, 2)
+        self.assertEqual(service.submit_calls, 1)
+
+    async def test_publish_timeout_does_not_resubmit_when_result_is_unknown(self):
+        service_module = _load_qzone_service()
+
+        class Service(service_module.QzoneService):
+            def __init__(self):
+                super().__init__(_qzone_plugin())
+                self.submit_calls = 0
+
+            async def context(self):
+                return service_module.QzoneContext(100000001, "skey", "p_skey")
+
+            async def _submit_post(self, ctx, data):
+                self.submit_calls += 1
+                raise RuntimeError("QQ 空间请求超时（60秒）")
+
+            async def query_posts(self, **_kwargs):
+                return []
+
+        async def no_sleep(_seconds):
+            return None
+
+        service = Service()
+        with patch.object(service_module.asyncio, "sleep", no_sleep):
+            with self.assertRaisesRegex(RuntimeError, "状态未知.*停止自动重试"):
+                await service.publish_post(text="测试")
+
+        self.assertEqual(service.submit_calls, 1)
 
     async def test_reply_comment_rejects_synthetic_short_own_thread_reply_before_submit(
         self,

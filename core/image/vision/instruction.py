@@ -16,9 +16,6 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         target_umo: str | None = None,
     ) -> str:
         prompts: list[str] = []
-        quality_tags = (
-            "8K分辨率, 高质量, 写实, 高分辨率, 细节丰富, 色彩鲜艳, 电影级光影效果"
-        )
 
         if involves_self:
             await self._append_self_visual_prompts(prompts, visuals, target_umo)
@@ -39,7 +36,9 @@ class ImageVisualPromptService(ImageVisualPersonaService):
             if outfit_consistency:
                 prompts.append(outfit_consistency)
 
-        prompts.append(quality_tags)
+        prompts.append(
+            "8K分辨率, 高质量, 写实, 高分辨率, 细节丰富, 色彩鲜艳, 电影级光影效果"
+        )
         return ", ".join(filter(None, prompts))
 
     async def _append_self_visual_prompts(

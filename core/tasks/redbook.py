@@ -35,7 +35,7 @@ class TaskXiaohongshuService(TaskServiceBase):
         return tags[:10]
 
     async def _metadata(self, content: str, stype: ShareType) -> tuple[str, list[str]]:
-        tags = self._default_tags()
+        default_tags = self._default_tags()
         smart_tags_enabled = bool(self.xiaohongshu_conf.get("enable_smart_tags", True))
         smart_count = max(
             1,
@@ -82,24 +82,32 @@ class TaskXiaohongshuService(TaskServiceBase):
             if not title:
                 raise ValueError("智能标题为空")
         except Exception as exc:
-            logger.debug(f"[日常分享] 小红书智能标题生成失败，已停止发布: {exc}")
-            raise XiaohongshuPublishError("小红书智能标题生成失败，已停止发布") from exc
+            logger.warning(
+                "[日常分享] 小红书智能标题和标签生成失败，"
+                f"已留空标题并使用默认标签继续发布: {exc}"
+            )
+            return "", default_tags
 
-        if smart_tags_enabled:
-            parsed_tags = parsed.get("tags", [])
-            if isinstance(parsed_tags, list):
-                added = 0
-                for item in parsed_tags:
-                    tag = str(item or "").strip().lstrip("#").strip()
-                    if not tag or tag in tags:
-                        continue
-                    tags.append(tag[:40])
-                    added += 1
-                    if len(tags) >= 10 or added >= smart_count:
-                        break
-            else:
-                logger.debug("[日常分享] 小红书智能标签格式无效，继续使用默认标签")
-        return title[:20].strip(), tags[:10]
+        if not smart_tags_enabled:
+            return title[:20].strip(), default_tags
+
+        parsed_tags = parsed.get("tags")
+        if not isinstance(parsed_tags, list):
+            logger.warning("[日常分享] 小红书智能标签格式无效，使用默认标签")
+            return title[:20].strip(), default_tags
+
+        smart_tags: list[str] = []
+        for item in parsed_tags:
+            tag = str(item or "").strip().lstrip("#").strip()
+            if not tag or tag in smart_tags:
+                continue
+            smart_tags.append(tag[:40])
+            if len(smart_tags) >= smart_count or len(smart_tags) >= 10:
+                break
+        if not smart_tags:
+            logger.warning("[日常分享] 小红书智能标签为空，使用默认标签")
+            return title[:20].strip(), default_tags
+        return title[:20].strip(), smart_tags
 
     async def _load_news(
         self,
