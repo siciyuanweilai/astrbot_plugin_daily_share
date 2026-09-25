@@ -6,6 +6,33 @@ from ..contextbase import ContextComponent
 class ContextLifeMemoryService(ContextComponent):
     """格式化生活插件的记忆、关系、地点和事件数据。"""
 
+    def format_qzone_relationship(self, relationships) -> str:
+        """只保留目标人物的身份与关系线索，不导入私聊记忆点和备注。"""
+        if not isinstance(relationships, list):
+            return ""
+        records = [item for item in relationships if isinstance(item, dict)]
+        if len(records) != 1:
+            return ""
+        item = records[0]
+        fields = (
+            ("name", "档案姓名", 40),
+            ("alias", "别名", 40),
+            ("subjective_name", "熟悉称呼", 40),
+            ("persona_hint", "身份关系线索", 180),
+            ("relationship_story", "关系描述", 220),
+        )
+        lines = []
+        for key, label, limit in fields:
+            value = self._compact_life_text(item.get(key), limit)
+            if value:
+                lines.append(f"{label}：{value}")
+        tags = item.get("subjective_tags", [])
+        if isinstance(tags, list):
+            values = [self._compact_life_text(tag, 24) for tag in tags[:5] if tag]
+            if values:
+                lines.append(f"关系标签：{'、'.join(values)}")
+        return "\n".join(lines)
+
     def _compact_life_text(self, value, limit: int = 120) -> str:
         text = str(value or "").strip()
         text = " ".join(text.split())

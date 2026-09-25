@@ -36,23 +36,39 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn("version: 1.1.3", metadata)
-        self.assertIn("version-1.1.3", readme)
-        self.assertIn("v1.1.3 已发布", readme)
+        self.assertRegex(metadata, r"(?m)^version: 1\.1\.4$")
+        self.assertIn("version-1.1.4", readme)
+        self.assertIn('alt="版本 1.1.4"', readme)
+        self.assertIn("v1.1.4 版本更新", readme)
         self.assertIn("分享 [类型] 小红书", readme)
         self.assertIn("小红书", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
+        release_headers = re.findall(
+            r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
+        )
+        self.assertEqual(release_headers[0], ("1.1.4", "2026-09-25"))
+        self.assertNotIn("## 未发布", changelog)
+        self.assertLess(changelog.index("v1.1.4"), changelog.index("v1.1.3"))
         self.assertLess(changelog.index("v1.1.3"), changelog.index("v1.1.2"))
         self.assertLess(changelog.index("v1.1.2"), changelog.index("v1.1.1"))
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        current_release = changelog.split("## 🛡️ v1.1.3", 1)[1].split("## 🚀 v1.1.2", 1)[
+        current_release = changelog.split("## 🌐 v1.1.4", 1)[1].split("## 🛡️ v1.1.3", 1)[
             0
         ]
-        self.assertIn("桥接", current_release)
+        self.assertIn("QQ 空间", current_release)
+        self.assertIn("daily_life", current_release)
+        self.assertIn("context_conf.enable_life_context", current_release)
         self.assertIn("数据库结构保持 v2", current_release)
+        self.assertIn("重载", current_release)
+
+        hardening_release = changelog.split("## 🛡️ v1.1.3", 1)[1].split(
+            "## 🚀 v1.1.2", 1
+        )[0]
+        self.assertIn("桥接", hardening_release)
+        self.assertIn("数据库结构保持 v2", hardening_release)
 
         previous_release = changelog.split("## 🛡️ v1.1.0", 1)[1].split(
             "## 🎨 v1.0.9", 1

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.3-ef6f8f" alt="版本 1.1.3"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.4-ef6f8f" alt="版本 1.1.4"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -31,12 +31,12 @@
 > ### 四次元未来 AI 模型 API 服务平台
 > **语言模型 · 图像生成 · 多模型聚合 · 一站式接入**  
 > 低价稳定丨多模型可选丨按张计费丨快速生成  
-> **[立即体验：https://siciyuanweilai.com](https://siciyuanweilai.com)**
+> **[立即体验：https://api.scywl.cc](https://api.scywl.cc)**
 
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.3 已发布**：集中加固小红书桥接、QQ 空间、调度、并发与插件停止流程。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.4 版本更新**：修复 QQ 空间自动评论、回评和楼中楼续评的关系识别，按实际互动对象联动 daily_life 人物档案，并明确公开互动的上下文边界。从 v1.1.3 升级无需迁移配置或数据库，更新后重载 daily_share 插件即可生效。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -232,6 +232,8 @@ bot-main:FriendMessage:user-test-001
 - 自动评论好友动态，带图时可先使用视觉模型识别；
 - 好友在机器人评论楼层下回评后自动续评；
 - 自动回复自己说说下的一级评论与多级楼层；
+- 启用生活上下文并安装 daily_life 后，评论按动态作者、回评和续评按当前被回复者的 QQ 号读取关系档案；使用实际 QQ 空间机器人实例定位，不按昵称或触发指令的用户猜测关系；
+- 关系摘要独立保留，支持档案名、别名、熟悉称呼与空间昵称对应；没有档案或无法确认实例时使用中性称呼，不额外导入私聊摘要、备忘录和约定；
 - 合并好友动态和“与我相关”入口，提高提及与回评命中率；
 - 使用评论 ID、回复目标与楼层关系校验落点，降低回错楼层的概率。
 

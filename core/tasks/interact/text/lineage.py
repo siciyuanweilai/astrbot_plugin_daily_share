@@ -18,7 +18,7 @@ def _qzone_auto_reply_comment_summary(post, comment) -> str:
         [
             f"我的说说：{post_content or '（没有文字，可能主要是图片或视频）'}",
             f"说说发布时间：{_format_qzone_local_datetime(getattr(post, 'create_time', 0))}",
-            f"评论人：{getattr(comment, 'nickname', '') or getattr(comment, 'uin', '')}",
+            f"评论人：{_qzone_comment_label(comment)}",
             f"评论时间：{_format_qzone_local_datetime(getattr(comment, 'create_time', 0))}",
             f"对方评论：{comment_content}",
         ]
@@ -26,12 +26,14 @@ def _qzone_auto_reply_comment_summary(post, comment) -> str:
 
 
 def _qzone_comment_label(comment) -> str:
-    return (
+    name = (
         str(
             getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
         ).strip()
         or "未知用户"
     )
+    uin = str(getattr(comment, "uin", "") or "").strip()
+    return f"{name}（QQ：{uin}）" if uin and uin != "0" else name
 
 
 def _qzone_comment_ids(comment) -> set[str]:
@@ -164,7 +166,8 @@ def _qzone_auto_reply_thread_summary(post, parent_comment, comment) -> str:
     if len(comment_content) > 160:
         comment_content = f"{comment_content[:160].rstrip()}..."
     parts = [
-        f"我的说说：{post_content or '（没有文字，可能主要是图片或视频）'}",
+        f"动态作者：{getattr(post, 'name', '') or '未知昵称'}（QQ：{getattr(post, 'uin', '')}）",
+        f"这条说说：{post_content or '（没有文字，可能主要是图片或视频）'}",
         f"说说发布时间：{_format_qzone_local_datetime(getattr(post, 'create_time', 0))}",
         f"这一楼的一级评论人：{_qzone_comment_label(parent_comment)}",
         f"一级评论时间：{_format_qzone_local_datetime(getattr(parent_comment, 'create_time', 0))}",

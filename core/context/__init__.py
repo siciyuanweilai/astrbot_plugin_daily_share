@@ -85,6 +85,9 @@ class ContextService:
     async def get_life_context(self, target_umo: str = ""):
         return await self.life_plugin.get_life_context(target_umo)
 
+    async def get_qzone_interaction_context(self, target_umo: str) -> dict[str, str]:
+        return await self.life_plugin.get_qzone_interaction_context(target_umo)
+
     async def text_to_speech(self, *args, **kwargs):
         return await self.tts.text_to_speech(*args, **kwargs)
 

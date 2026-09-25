@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from astrbot.api import logger
 
+from ..platform import ONEBOT_PLATFORM_TYPES, get_platform_bindings, get_platform_client
 from .endpoints import QzoneServiceConstants
 from .feeds.detail import QzoneFeedDetailService
 from .feeds.extra import QzoneFeedExtraService
@@ -40,6 +41,27 @@ from .transport.native import QzoneH5NativeService
 
 class QzoneService:
     """聚合 QQ 空间网关、动态、评论、回复和上传组件。"""
+
+    def relationship_target(self, uin: str) -> str:
+        """返回实际空间客户端对应的原始框架私聊标识；不猜测其他账号。"""
+        user_id = str(uin or "").strip()
+        if not user_id.isascii() or not user_id.isdigit() or len(user_id) > 20:
+            return ""
+        if int(user_id) <= 0:
+            return ""
+        bot = self._get_bot()
+        if bot is None:
+            return ""
+        matches = [
+            binding
+            for binding in get_platform_bindings(self.ctx_service.context)
+            if binding.platform_type in ONEBOT_PLATFORM_TYPES
+            and get_platform_client(binding.instance) is bot
+        ]
+        if len(matches) != 1 or matches[0].conflicted:
+            return ""
+        # route_id 是插件内部发送标识，关系档案使用框架原始 platform_id。
+        return f"{matches[0].platform_id}:FriendMessage:{int(user_id)}"
 
     _REMOTE_IMAGE_CHUNK_SIZE = 64 * 1024
     _REMOTE_IMAGE_MAX_BYTES = 24 * 1024 * 1024

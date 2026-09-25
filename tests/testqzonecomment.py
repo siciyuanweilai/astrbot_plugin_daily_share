@@ -644,9 +644,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = 0
 
-            async def get_life_context(self, target_umo=""):
+            async def get_qzone_interaction_context(self, target_umo=""):
                 self.calls += 1
-                return "CURRENT_LIFE_CONTEXT weather=rain mood=quiet"
+                return {
+                    "life_context": "CURRENT_LIFE_CONTEXT weather=rain mood=quiet",
+                    "relationship_context": "",
+                }
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
