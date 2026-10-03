@@ -11,6 +11,7 @@ from .mood import (
     parse_home_feed_list,
     parse_recent_feed_list,
 )
+from .photo import parse_qzone_photo, parse_qzone_photo_comment
 from .remarks import parse_comments
 
 __all__ = [
@@ -24,4 +25,6 @@ __all__ = [
     "parse_qzone_response",
     "parse_recent_feed_list",
     "parse_upload_result",
+    "parse_qzone_photo",
+    "parse_qzone_photo_comment",
 ]

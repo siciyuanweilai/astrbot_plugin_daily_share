@@ -24,6 +24,7 @@ from .merge import QzoneFeedMergeService
 from .models import QzoneComment as QzoneComment
 from .models import QzoneContext, QzonePost
 from .parse import parse_upload_result
+from .photos import QzonePhotoService
 from .query.timeline import QzoneFeedQueryService
 from .remark.commenttools import QzoneCommentUtilService
 from .remark.delete import QzoneCommentDeleteService
@@ -116,6 +117,9 @@ class QzoneService:
     API_TIMEOUT_MAX_SECONDS: Any = QzoneServiceConstants.API_TIMEOUT_MAX_SECONDS
     BASE_URL: Any = QzoneServiceConstants.BASE_URL
     UPLOAD_IMAGE_URL: Any = QzoneServiceConstants.UPLOAD_IMAGE_URL
+    PHOTO_VIEW_URL: Any = QzoneServiceConstants.PHOTO_VIEW_URL
+    PHOTO_COMMENT_URL: Any = QzoneServiceConstants.PHOTO_COMMENT_URL
+    PHOTO_REPLY_URL: Any = QzoneServiceConstants.PHOTO_REPLY_URL
     PUBLISH_URL: Any = QzoneServiceConstants.PUBLISH_URL
     LIKE_URL: Any = QzoneServiceConstants.LIKE_URL
     LIST_URL: Any = QzoneServiceConstants.LIST_URL
@@ -410,6 +414,67 @@ class QzoneService:
 
     async def comment(self, post_id: str, content: str) -> None:
         await QzoneCommentPostService.comment(self, post_id, content)
+
+    async def query_photo_posts(self, post_id: str) -> list[QzonePost]:
+        return await QzonePhotoService.query_photo_posts(self, post_id)
+
+    async def query_photo(
+        self,
+        *,
+        owner_uin: int | str,
+        album_id: str,
+        pic_key: str,
+        photo_t: str = "",
+        comment_count: int = 10,
+    ):
+        return await QzonePhotoService.query_photo(
+            self,
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            photo_t=photo_t,
+            comment_count=comment_count,
+        )
+
+    async def comment_photo(
+        self,
+        *,
+        owner_uin: int | str,
+        album_id: str,
+        pic_key: str,
+        content: str,
+        feed_topic_id: str = "",
+    ):
+        return await QzonePhotoService.comment_photo(
+            self,
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            content=content,
+            feed_topic_id=feed_topic_id,
+        )
+
+    async def reply_photo_comment(
+        self,
+        *,
+        owner_uin: int | str,
+        album_id: str,
+        pic_key: str,
+        comment: QzoneComment,
+        content: str,
+        feed_topic_id: str = "",
+        parent_comment: QzoneComment | None = None,
+    ) -> dict[str, Any]:
+        return await QzonePhotoService.reply_photo_comment(
+            self,
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            comment=comment,
+            content=content,
+            feed_topic_id=feed_topic_id,
+            parent_comment=parent_comment,
+        )
 
     async def delete_comment(
         self,
@@ -940,6 +1005,8 @@ class QzoneService:
             return post
         if ":" in key:
             uin, tid = key.split(":", 1)
+            if tid.startswith("photo:"):
+                raise RuntimeError("相册照片引用已失效，请先刷新 QQ 空间动态")
             if uin.isdigit() and tid:
                 post = QzonePost(uin=int(uin), tid=tid)
                 self._post_cache[key] = post

@@ -1,0 +1,40 @@
+<html>
+    <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/></head>
+    <body>
+        <script type="text/javascript">
+            var cb;
+            try {
+                document.domain = "user.qzone.qq.com";
+                cb = frameElement.callback;
+            } catch (e) {
+                try {
+                    document.domain = "user.qzone.qq.com";
+                    cb = frameElement.callback;
+                } catch (e) {
+                    document.domain = "user.qzone.qq.com";
+                    cb = frameElement.callback;
+                }
+            }
+            frameElement.callback({
+                "code": 0,
+                "data": {"content": "有多无聊", "id": 3, "postTime": 1790354714},
+                "err": {"code": 0, "ret": 0},
+                "message": "",
+                "result": {
+                    "smoothpolicy": {
+                        "comsw.disable_soso_search": 0,
+                        "l1sw.read_first_cache_only": 0,
+                        "l2sw.dont_get_reply_cmt": 0,
+                        "l2sw.mixsvr_frdnum_per_time": 50,
+                        "l3sw.hide_reply_cmt": 0,
+                        "l4sw.read_tdb_only": 0,
+                        "l5sw.read_cache_only": 0
+                    }
+                },
+                "retTid": 3,
+                "subcode": 0,
+                "tid": 3
+            });
+        </script>
+    </body>
+</html>

@@ -77,6 +77,8 @@ def _qzone_submitted_reply_fields(
         fields["submitted_comment_uin"] = submitted_comment_uin
     if submitted_transport:
         fields["submitted_transport"] = submitted_transport
+    if submit_result.get("reply_id"):
+        fields["submitted_reply_id"] = str(submit_result["reply_id"])
     attempted_targets = _qzone_dict_list(submit_result.get("attempted_targets"))
     attempts = _qzone_dict_list(submit_result.get("attempts"))
     if attempted_targets:
@@ -125,7 +127,7 @@ def _qzone_reply_skipped_payload(
 def _qzone_reply_success_payload(
     reply: str, fields: dict, *, parent_comment_id: str = ""
 ) -> dict:
-    return {
+    payload = {
         "sent": True,
         "skipped": False,
         "reply": reply,
@@ -141,3 +143,6 @@ def _qzone_reply_success_payload(
         "attempts": fields.get("attempts", []),
         "parent_comment_id": parent_comment_id,
     }
+    if fields.get("submitted_reply_id"):
+        payload["submitted_reply_id"] = fields["submitted_reply_id"]
+    return payload

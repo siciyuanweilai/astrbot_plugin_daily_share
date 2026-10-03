@@ -322,22 +322,30 @@ class DailySharePlugin(Star):
         images: list[str] | None = None,
         pos: int = 0,
         num: int = 5,
+        album_id: str = "",
+        pic_key: str = "",
+        photo_t: str = "",
+        comment_count: int = 10,
     ):
         """
-        QQ 空间说说工具：查看、详情、发布、点赞、评论。
-        动作选择：list=获取最新列表；comment=直发用户给出的原话；auto_comment=让机器人按自动评论配置代写，支持正文配图和转发配图；publish=发布说说。
+        QQ 空间工具：查看、详情、发布和评论说说，也可读取或评论相册照片。
+        动作选择：list=获取最新列表（说说）；comment=直发用户给出的原话（说说评论）；auto_comment=让机器人按自动评论配置代写；publish=发布说说；photo=读取相册照片及评论；photo_comment=发表评论到相册照片。
         所有权：用户说“我的说说”指当前说话用户的 QQ 空间；只有明确说“你的/机器人自己的说说”才指机器人自己的空间。
         串台边界：好友动态续评用 qzone_auto_interact.comment；机器人自己说说的评论回评用 qzone_auto_interact.reply。
-        权限：普通用户只能查看、详情、点赞、评论自己 QQ 号的说说；发布和操作其他 QQ 号仅管理员可用。
+        权限：普通用户只能查看、详情、点赞、评论自己 QQ 号的说说或相册照片；操作其他 QQ 号仅管理员可用。
 
         Args:
-            action (string): 标准动作枚举。list 表示查看说说；detail 表示查看详情；publish 表示发布文字或图片说说；like 表示点赞指定说说；comment 表示按用户给出的正文直发一级评论；auto_comment 表示对指定说说自动生成并发送一级评论。只能填写 list、detail、publish、like、comment、auto_comment。
+            action (string): 标准动作枚举。list 表示查看说说；detail 表示查看详情；publish 表示发布文字或图片说说；like 表示点赞指定说说；comment 表示直发说说评论；auto_comment 表示自动生成说说评论；photo 表示读取相册照片及评论；photo_comment 表示按用户给出的正文发表评论到相册照片。只能填写 list、detail、publish、like、comment、auto_comment、photo、photo_comment。
             post_id (string): 说说 ID，来自 list/detail 返回中的 ID，格式为 uin:tid。点赞、评论、自动评论、详情必填。
             target_id (string): 可选，要查看的 QQ 号。留空表示查看自己的 QQ 空间说说；填 QQ 号表示查看该 QQ 空间说说。
             content (string): 发布说说或评论的正文。publish/comment 必填。comment 时必须是用户明确要求发送的原文；需要模型代写评论时不要填写本参数直发，改用 action=auto_comment。
-            images (array[string]): 发布说说附带的图片路径或图片 URL 列表，可留空。
+            images (array[string]): 发布说说附带的图片路径或图片 URL 列表，支持正文配图和转发配图，可留空。
             pos (number): 查看说说起始位置，默认 0。
             num (number): 查看说说数量，默认 5，最多 10。
+            album_id (string): 相册 ID。photo/photo_comment 必填，例如 V52vxxo61Aw7Ps4PZcle3aQm9j2QNPfl。
+            pic_key (string): 照片 picKey。photo/photo_comment 必填。
+            photo_t (string): 照片查看器返回的 t，可选；有抓包值时填入。
+            comment_count (number): photo 读取的评论数，默认 10，最多 50。
         """
         return await self.support_service.run_qzone_tool(
             event,
@@ -348,6 +356,10 @@ class DailySharePlugin(Star):
             images=images,
             pos=pos,
             num=num,
+            album_id=album_id,
+            pic_key=pic_key,
+            photo_t=photo_t,
+            comment_count=comment_count,
         )
 
     @filter.llm_tool(name="qzone_auto_interact")

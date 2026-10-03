@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.4-ef6f8f" alt="版本 1.1.4"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.5-ef6f8f" alt="版本 1.1.5"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.4 版本更新**：修复 QQ 空间自动评论、回评和楼中楼续评的关系识别，按实际互动对象联动 daily_life 人物档案，并明确公开互动的上下文边界。从 v1.1.3 升级无需迁移配置或数据库，更新后重载 daily_share 插件即可生效。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
+> **v1.1.5 版本更新**：新增 QQ 空间相册照片评论与楼层续评，修复数字批次号误识别、多人同楼回评遗漏和提交防重问题。同批多图共用现有识图上限，综合识别后只发起一条新评论。从 v1.1.4 升级无需迁移配置或数据库，更新后重载 daily_share 插件即可生效。完整升级说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -223,6 +223,7 @@ bot-main:FriendMessage:user-test-001
 - 发布文字或图片说说；
 - 查看自己的说说、指定用户动态和说说详情；
 - 点赞、评论与删除自己的说说；
+- 按相册 ID 和照片 `picKey` 查看相册照片及评论，并发表评论到指定照片；
 - 返回发布时间、说说 ID 和媒体数量，便于继续操作；
 - 在多机器人环境中单独选择 QQ 空间实例。
 
@@ -230,8 +231,13 @@ bot-main:FriendMessage:user-test-001
 
 - 自动点赞好友动态，并跳过自己和已处理动态；
 - 自动评论好友动态，带图时可先使用视觉模型识别；
-- 好友在机器人评论楼层下回评后自动续评；
+- 相册多照片动态按照片分别读取评论，同批图片共用“单条动态最多识别图片数”上限，综合识别结果生成一条评论；稳定选择一张照片作为提交落点，不逐张刷评论。其他照片仍可独立回评，同批任一照片已有机器人互动时不再发起新评论；
+- 相册上传动态中的数字批次号不作为照片 `picKey`；`albumId_picKey_batchId_4` 标识须经照片查看器核对批次和 `platformSubId`，一级评论使用 `ref=photo` 和无尾缀照片目标，回评仍定位原评论楼；
+- 好友在机器人说说或相册照片评论楼层下回评后自动续评；相册续评要求能从照片查看器确认原评论楼和明确 @ 机器人的回复。同楼多人分别 @ 机器人时按评论人处理，不因另一人的较新回复漏掉未答复评论；同一人连续回复同一对象时只处理最新有效回复；
 - 自动回复自己说说下的一级评论与多级楼层；
+- 自动回复近期动态中机器人自己相册照片的一级评论，并继续已参与的照片评论楼；使用独立相册回复接口，表单定位原一级评论，正文 @ 当前被回复者，续评提交后按返回的回复 ID 回查落点；
+- 相册评论按批次、照片和楼层身份防重，已在照片中答复的回评不重复处理；提交状态未知或续评落点无法确认时停止自动重试。列表只提供部分照片标识时，必须由查看器确认同一主人、相册、`batchId` 与照片数量才能补全，不从缩略图 URL 猜标识；
+- 同批照片读取不完整时暂停发起新评论，但已成功读取的照片仍可独立回评；私密评论、目标标识或回复对象无法确认的情况继续跳过，不扫描整个历史相册；
 - 启用生活上下文并安装 daily_life 后，评论按动态作者、回评和续评按当前被回复者的 QQ 号读取关系档案；使用实际 QQ 空间机器人实例定位，不按昵称或触发指令的用户猜测关系；
 - 关系摘要独立保留，支持档案名、别名、熟悉称呼与空间昵称对应；没有档案或无法确认实例时使用中性称呼，不额外导入私聊摘要、备忘录和约定；
 - 合并好友动态和“与我相关”入口，提高提及与回评命中率；
@@ -245,8 +251,8 @@ bot-main:FriendMessage:user-test-001
 | :--- | :--- |
 | <code>daily_share</code> | 生成并发送文字、新闻长图、配图、视频、语音或 QQ 空间分享 |
 | <code>news_link</code> | 查询最近新闻快照中的链接、摘要、来源或列表，不重新抓取新闻 |
-| <code>qzone</code> | 查看、发布、点赞、评论和操作指定 QQ 空间说说 |
-| <code>qzone_auto_interact</code> | 手动触发自动点赞、评论、续评和自己说说回评 |
+| <code>qzone</code> | 查看、发布、点赞、评论说说，以及读取或评论相册照片 |
+| <code>qzone_auto_interact</code> | 手动触发自动点赞、评论、续评和自己说说、近期相册照片回评 |
 
 示例：
 

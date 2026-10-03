@@ -13,6 +13,17 @@ class QzoneFeedMergeService(QzoneMethodSet):
         detail.curkey = detail.curkey or base.curkey
         detail.unikey = detail.unikey or base.unikey
         detail.busi_param = detail.busi_param or base.busi_param
+        # Generic detail parsers default to 311; keep explicit feed type/targets.
+        if int(base.appid or 311) != 311:
+            detail.appid = base.appid
+        photos = {}
+        for photo in base.photo_targets + detail.photo_targets:
+            key = (photo.owner_uin, photo.album_id, photo.pic_key)
+            previous = photos.get(key)
+            if previous and not photo.feed_topic_id:
+                photo.feed_topic_id = previous.feed_topic_id
+            photos[key] = photo
+        detail.photo_targets = list(photos.values())
         detail.comments = cls._merge_comments(base.comments, detail.comments)
         detail.images = detail.images or base.images
         detail.videos = detail.videos or base.videos

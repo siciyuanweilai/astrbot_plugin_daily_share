@@ -205,7 +205,9 @@ class QzoneAutoPolicyService:
             return "parent_is_self"
         if _comment_thread_has_self_reply_to(post, comment, self_uin, index=index):
             return "already_replied_to_target"
-        if _comment_thread_has_later_nonself_reply(
+        # Photo candidates coalesce validated replies by author and recipient.
+        is_photo = int(getattr(post, "appid", 311) or 311) == 4
+        if not is_photo and _comment_thread_has_later_nonself_reply(
             post, parent_comment, comment, self_uin, index=index
         ):
             return "has_later_nonself_reply"
@@ -316,7 +318,8 @@ class QzoneAutoPolicyService:
             return "self_comment"
         if _comment_thread_has_self_reply_to(post, comment, self_uin, index=index):
             return "already_replied_to_target"
-        if _comment_thread_has_later_nonself_reply(
+        is_photo = int(getattr(post, "appid", 311) or 311) == 4
+        if not is_photo and _comment_thread_has_later_nonself_reply(
             post, parent_comment, comment, self_uin, index=index
         ):
             return "has_later_nonself_reply"

@@ -14,10 +14,11 @@ def _qzone_auto_reply_comment_summary(post, comment) -> str:
     comment_content = str(getattr(comment, "content", "") or "").strip()
     if len(comment_content) > 160:
         comment_content = f"{comment_content[:160].rstrip()}..."
+    post_label = "相册照片" if int(getattr(post, "appid", 311) or 311) == 4 else "说说"
     return "\n".join(
         [
-            f"我的说说：{post_content or '（没有文字，可能主要是图片或视频）'}",
-            f"说说发布时间：{_format_qzone_local_datetime(getattr(post, 'create_time', 0))}",
+            f"我的{post_label}：{post_content or '（没有文字，可能主要是图片或视频）'}",
+            f"{post_label}发布时间：{_format_qzone_local_datetime(getattr(post, 'create_time', 0))}",
             f"评论人：{_qzone_comment_label(comment)}",
             f"评论时间：{_format_qzone_local_datetime(getattr(comment, 'create_time', 0))}",
             f"对方评论：{comment_content}",

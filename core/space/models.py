@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote
+
+
+def normalize_photo_comment_topic(album_id: str, pic_key: str, topic_id: str = "") -> str:
+    canonical = f"{album_id}_{pic_key}_0_0"
+    raw = str(topic_id or "").strip()
+    if unquote(raw) in {"", album_id, f"{album_id}_{pic_key}", canonical}:
+        return canonical
+    return raw
 
 
 @dataclass(slots=True)
@@ -57,6 +66,61 @@ class QzoneComment:
 
 
 @dataclass(slots=True)
+class QzonePhotoComment:
+    """Comment attached to one Qzone photo."""
+
+    comment_id: str = ""
+    uin: int = 0
+    nickname: str = ""
+    content: str = ""
+    create_time: int = 0
+    topic_id: str = ""
+    private: int = 0
+    source: int = 0
+    avatar_url: str = ""
+    replies: list[QzonePhotoComment] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class QzonePhoto:
+    """A photo and the comments returned by the Qzone photo viewer."""
+
+    album_id: str = ""
+    pic_key: str = ""
+    topic_id: str = ""
+    owner_uin: int = 0
+    owner_name: str = ""
+    album_name: str = ""
+    name: str = ""
+    image_url: str = ""
+    preview_url: str = ""
+    width: int = 0
+    height: int = 0
+    shoot_time: int = 0
+    upload_time: str = ""
+    comment_total: int = 0
+    like_total: int = 0
+    comments: list[QzonePhotoComment] = field(default_factory=list)
+    feed_topic_id: str = ""
+    batch_id: str = ""
+    platform_sub_id: int | None = None
+    batch_targets: list[QzonePhoto] = field(default_factory=list)
+    unresolved_count: int = 0
+
+    @property
+    def key(self) -> str:
+        return f"{self.album_id}:{self.pic_key}"
+
+    @property
+    def comment_topic_id(self) -> str:
+        return f"{self.album_id}_{self.pic_key}"
+
+    @property
+    def feed_comment_topic_id(self) -> str:
+        return normalize_photo_comment_topic(self.album_id, self.pic_key, self.feed_topic_id)
+
+
+@dataclass(slots=True)
 class QzonePost:
     tid: str = ""
     uin: int = 0
@@ -79,6 +143,28 @@ class QzonePost:
     unikey: str = ""
     liked: bool = False
     busi_param: dict[str, Any] = field(default_factory=dict)
+    photo_targets: list[QzonePhoto] = field(default_factory=list)
+    photo_batch_key: str = ""
+    photo_batch_complete: bool = True
+
+    @property
+    def comment_target_error(self) -> str:
+        if int(self.appid or 311) == 311:
+            return ""
+        if int(self.appid) != 4:
+            return f"暂不支持该类型动态的评论（appid={self.appid}）"
+        if not self.photo_targets:
+            return "相册动态缺少明确的 albumId/picKey，不能作为普通说说评论"
+        if len(self.photo_targets) != 1:
+            return "相册动态包含多个照片目标，需指定要评论的照片"
+        photo = self.photo_targets[0]
+        if not photo.album_id or not photo.pic_key:
+            return "相册动态缺少明确的 albumId/picKey"
+        if photo.owner_uin and photo.owner_uin != self.uin:
+            return "相册照片主人与动态作者不一致，不能自动选择评论目标"
+        if photo.feed_comment_topic_id != f"{photo.comment_topic_id}_0_0":
+            return "相册动态 topicId 与 albumId/picKey 不一致，不能自动评论"
+        return ""
 
     @property
     def key(self) -> str:

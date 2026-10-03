@@ -194,6 +194,25 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
                 parent_comment_id=parent_comment_id,
             )
 
+            if int(getattr(post, "appid", 311) or 311) == 4 and getattr(
+                exc, "submission_unknown", False
+            ):
+                _mark_qzone_processed(
+                    processed,
+                    item_key,
+                    QZONE_ACTION_SKIPPED,
+                    reason=exc_text,
+                    submission_unknown=True,
+                    **fields,
+                )
+                result["skipped"] += 1
+                logger.warning(
+                    f"[日常分享] QQ 空间相册回评提交状态未知，已停止自动重试，请查看照片确认: {exc_text}"
+                )
+                return _qzone_reply_skipped_payload(
+                    reply, fields=fields, error=exc_text
+                )
+
             verification_failed = bool(getattr(exc, "reply_verification_failed", False))
             if verification_failed:
                 _qzone_copy_reply_verification_fields(fields, exc)

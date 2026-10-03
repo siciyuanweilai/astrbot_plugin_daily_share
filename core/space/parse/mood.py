@@ -36,6 +36,7 @@ from .latest import (
     _recent_item_uin,
     _recent_payload_items,
 )
+from .phototarget import parse_feed_photo_targets
 from .remarks import _feed_comment_items, parse_comments
 
 
@@ -202,6 +203,9 @@ def parse_feed_item(item: dict[str, Any]) -> QzonePost | None:
         comments=parse_comments(_feed_comment_items(item)),
         expandable=has_qzone_expand_marker(item.get("content")),
         appid=_safe_int(item.get("appid")) or 311,
+        photo_targets=parse_feed_photo_targets(
+            item, appid=_safe_int(item.get("appid")) or 311, owner_uin=uin
+        ),
         curkey=str(item.get("curkey") or item.get("curlikekey") or ""),
         unikey=str(item.get("unikey") or item.get("unlikekey") or ""),
         liked=_qzone_liked(
@@ -310,6 +314,9 @@ def parse_recent_feed_list(payload: dict[str, Any]) -> list[QzonePost]:
                 expandable=has_qzone_expand_marker(text_source)
                 or has_qzone_expand_marker(raw_html),
                 appid=appid,
+                photo_targets=parse_feed_photo_targets(
+                    item, appid=appid, owner_uin=uin, raw_html=raw_html
+                ),
                 feed_key=str(item.get("key") or ""),
                 curkey=curkey,
                 unikey=unikey,
@@ -344,7 +351,7 @@ def parse_feedinfo_html(
         or _html_attr(raw_html, "uin"),
         "appid": _html_attr(raw_html, "data-appid")
         or _html_attr(raw_html, "appid")
-        or 311,
+        or 0,
         "abstime": context_time,
     }
     match = re.search(r'id=(["\'])fct_(\d+)_(\d+)_[^"\']*?([^_"\'\s<>]+)\1', raw_html)

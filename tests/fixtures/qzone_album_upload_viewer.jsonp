@@ -1,0 +1,41 @@
+viewer_Callback({
+  "code": 0,
+  "subcode": 0,
+  "message": "",
+  "default": 0,
+  "data": {
+    "first": 1,
+    "last": 1,
+    "photos": [
+      {
+        "albumId": "album-1", "topicId": "album-1",
+        "picKey": "pic-1!!", "lloc": "pic-1!!",
+        "batchId": "1790992589220000", "ownerUin": 20002,
+        "platformId": 52, "platformSubId": 4,
+        "name": "2026-10-03", "cmtTotal": 0,
+        "url": "https://photo.example/photo-1.jpg"
+      },
+      {
+        "albumId": "album-1", "topicId": "album-1",
+        "picKey": "pic-2!!", "lloc": "pic-2!!",
+        "batchId": "1790992589220000", "ownerUin": 20002,
+        "platformId": 52, "platformSubId": 4,
+        "name": "2026-10-03", "cmtTotal": 0,
+        "url": "https://photo.example/photo-2.jpg"
+      },
+      {
+        "albumId": "album-1", "topicId": "album-1",
+        "picKey": "pic-3!!", "lloc": "pic-3!!",
+        "batchId": "1790992589220000", "ownerUin": 20002,
+        "platformId": 52, "platformSubId": 4,
+        "name": "2026-10-03", "cmtTotal": 0,
+        "url": "https://photo.example/photo-3.jpg"
+      }
+    ],
+    "picPosInPage": 0,
+    "picPosInTotal": 0,
+    "picTotal": 3,
+    "single": {"likeTotal": 0},
+    "topic": {"topicId": "album-1", "ownerUin": 20002}
+  }
+});

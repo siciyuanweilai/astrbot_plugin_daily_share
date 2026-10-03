@@ -2,6 +2,11 @@ from astrbot.api import logger
 
 from ..candidate import _qzone_self_reply_candidates
 from ..errors import QzoneAutoInteractionRateLimited
+from ..scan import (
+    _expand_qzone_photo_posts,
+    _merge_qzone_posts_by_key,
+    _query_qzone_self_album_posts,
+)
 from ..task import (
     _qzone_abort_query_failure,
     _qzone_auto_config,
@@ -90,7 +95,7 @@ async def _execute_qzone_auto_reply_candidates(
 
 
 async def execute_qzone_auto_reply_task(owner, *, emit_summary: bool = True) -> dict:
-    """查询自己的说说评论并自动回评，返回本次执行统计。"""
+    """查询自己的说说和近期相册照片评论并自动回评。"""
     result = _qzone_auto_result(replied=0)
     cfg = _qzone_auto_config(owner)
     limit = cfg.reply_limit
@@ -107,12 +112,25 @@ async def execute_qzone_auto_reply_task(owner, *, emit_summary: bool = True) -> 
     try:
         ctx = await owner.plugin.qzone_service.context()
         fetch_count = _qzone_query_fetch_count(limit, 3)
-        posts = await owner.plugin.qzone_service.query_posts(
-            target_id=str(ctx.uin),
-            pos=0,
-            num=fetch_count,
-            with_detail=True,
-        )
+        try:
+            posts = await owner.plugin.qzone_service.query_posts(
+                target_id=str(ctx.uin),
+                pos=0,
+                num=fetch_count,
+                with_detail=True,
+            )
+        except Exception as exc:
+            album_posts = await _query_qzone_self_album_posts(owner, self_uin=ctx.uin)
+            if not album_posts:
+                raise
+            logger.debug(
+                f"[日常分享] QQ 空间自动回评说说查询失败，继续处理相册评论: {exc}"
+            )
+            posts = []
+        else:
+            album_posts = await _query_qzone_self_album_posts(owner, self_uin=ctx.uin)
+        posts = _merge_qzone_posts_by_key(posts, album_posts)
+        posts = await _expand_qzone_photo_posts(owner, posts)
     except Exception as exc:
         return await _qzone_abort_query_failure(
             owner,

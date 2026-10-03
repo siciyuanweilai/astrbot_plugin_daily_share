@@ -231,6 +231,7 @@ class PluginToolService(SupportComponent):
             "like": "已点赞。",
             "comment": "评论已发送。",
             "auto_comment": "自动评论已发送",
+            "photo_comment": "相册照片评论已发送",
         }
         prefix = success_prefixes.get(action)
         return bool(prefix and str(result or "").startswith(prefix))
@@ -441,7 +442,13 @@ class PluginToolService(SupportComponent):
         return images if isinstance(images, list) else []
 
     async def _qzone_tool_self_uin(self, action_key: str) -> int:
-        if action_key not in {"list", "detail", "publish"}:
+        if action_key not in {
+            "list",
+            "detail",
+            "publish",
+            "photo",
+            "photo_comment",
+        }:
             return 0
         try:
             return int(getattr(await self.qzone_service.context(), "uin", 0) or 0)
@@ -456,7 +463,15 @@ class PluginToolService(SupportComponent):
         target_id: str,
         post_id: str,
     ) -> tuple[bool, str, str]:
-        allowed_actions = {"list", "detail", "like", "comment", "auto_comment"}
+        allowed_actions = {
+            "list",
+            "detail",
+            "like",
+            "comment",
+            "auto_comment",
+            "photo",
+            "photo_comment",
+        }
         if action_key not in allowed_actions:
             return False, "QQ 空间发布和任意目标操作仅管理员可用。", target_id
         if not sender_id:
@@ -467,6 +482,18 @@ class PluginToolService(SupportComponent):
             if target_for_check and target_for_check != sender_id:
                 return False, "普通用户只能查看自己的 QQ 空间说说。", target_id
             return True, "", sender_id
+
+        if action_key in {"photo", "photo_comment"}:
+            owner_id = target_for_check or sender_id
+            if not owner_id:
+                return False, "请提供相册主人 QQ 号。", target_id
+            if owner_id != sender_id:
+                return (
+                    False,
+                    "普通用户只能查看或评论自己的 QQ 空间相册照片。",
+                    target_id,
+                )
+            return True, "", owner_id
 
         owner_id = str(post_id or "").split(":", 1)[0].strip()
         if not owner_id:
@@ -610,6 +637,85 @@ class PluginToolService(SupportComponent):
         self.emit_dashboard_event("qzone", {"action": "comment", "post_id": post_id})
         return "评论已发送。"
 
+    @staticmethod
+    def _format_qzone_photo_for_llm(photo) -> str:
+        owner = str(
+            getattr(photo, "owner_name", "") or getattr(photo, "owner_uin", "") or ""
+        )
+        title = str(getattr(photo, "name", "") or "未命名照片").strip()
+        album = str(getattr(photo, "album_name", "") or "未命名相册").strip()
+        lines = [
+            f"相册：{album}；照片：{title}；主人：{owner}",
+            f"照片 ID：{getattr(photo, 'album_id', '')}_{getattr(photo, 'pic_key', '')}",
+            f"评论数：{int(getattr(photo, 'comment_total', 0) or 0)}",
+        ]
+        comments = []
+        for comment in list(getattr(photo, "comments", []) or [])[:20]:
+            nickname = str(
+                getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
+            )
+            content = str(getattr(comment, "content", "") or "").strip()
+            if content:
+                comments.append(
+                    f"{nickname}（{getattr(comment, 'uin', 0)}，ID {getattr(comment, 'comment_id', '')}）：{content}"
+                )
+        if comments:
+            lines.append("评论：" + "；".join(comments))
+        return "\n".join(lines)
+
+    async def _qzone_tool_photo(
+        self,
+        *,
+        owner_uin: str,
+        album_id: str,
+        pic_key: str,
+        photo_t: str,
+        comment_count: int,
+    ) -> str:
+        if not owner_uin:
+            return "请提供相册主人 QQ 号。"
+        if not album_id or not pic_key:
+            return "请提供 album_id 和 pic_key。"
+        photo = await self.qzone_service.query_photo(
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            photo_t=photo_t,
+            comment_count=comment_count,
+        )
+        return self.tools._format_qzone_photo_for_llm(photo)
+
+    async def _qzone_tool_photo_comment(
+        self,
+        event: AstrMessageEvent,
+        *,
+        owner_uin: str,
+        album_id: str,
+        pic_key: str,
+        content: str,
+    ) -> str:
+        if not owner_uin:
+            return "请提供相册主人 QQ 号。"
+        if not album_id or not pic_key:
+            return "请提供 album_id 和 pic_key。"
+        text = str(content or "").strip()
+        if not text:
+            return "相册照片评论内容不能为空。"
+        if not self.tools._qzone_comment_content_is_user_supplied(event, text):
+            return "未检测到用户提供这段固定评论正文，已拒绝直发。"
+        result = await self.qzone_service.comment_photo(
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            content=text,
+        )
+        self.emit_dashboard_event(
+            "qzone", {"action": "photo_comment", "photo_id": f"{album_id}:{pic_key}"}
+        )
+        comment_id = str(getattr(result, "comment_id", "") or "").strip()
+        suffix = f"（ID：{comment_id}）" if comment_id else ""
+        return f"相册照片评论已发送{suffix}。"
+
     async def _qzone_tool_auto_comment_post(
         self, event: AstrMessageEvent, *, post_id: str
     ) -> str:
@@ -647,6 +753,10 @@ class PluginToolService(SupportComponent):
         images=None,
         pos: int = 0,
         num: int = 5,
+        album_id: str = "",
+        pic_key: str = "",
+        photo_t: str = "",
+        comment_count: int = 10,
     ):
         if self._is_terminated:
             return ""
@@ -665,6 +775,7 @@ class PluginToolService(SupportComponent):
             "like",
             "comment",
             "auto_comment",
+            "photo_comment",
         }
         processing_started = False
         operation_succeeded = False
@@ -694,6 +805,10 @@ class PluginToolService(SupportComponent):
                 images=images,
                 pos=pos,
                 num=num,
+                album_id=album_id,
+                pic_key=pic_key,
+                photo_t=photo_t,
+                comment_count=comment_count,
                 is_admin=is_admin,
                 sender_id=sender_id,
                 self_uin=self_uin,
@@ -723,6 +838,10 @@ class PluginToolService(SupportComponent):
         images: list,
         pos: int,
         num: int,
+        album_id: str,
+        pic_key: str,
+        photo_t: str,
+        comment_count: int,
         is_admin: bool,
         sender_id: str,
         self_uin: int,
@@ -755,7 +874,23 @@ class PluginToolService(SupportComponent):
             return await self.tools._qzone_tool_auto_comment_post(
                 event, post_id=post_id
             )
-        return "不支持的 QQ 空间操作。可用动作：list、detail、publish、like、comment、auto_comment。"
+        if action_key == "photo":
+            return await self.tools._qzone_tool_photo(
+                owner_uin=target_id,
+                album_id=album_id,
+                pic_key=pic_key,
+                photo_t=photo_t,
+                comment_count=comment_count,
+            )
+        if action_key == "photo_comment":
+            return await self.tools._qzone_tool_photo_comment(
+                event,
+                owner_uin=target_id,
+                album_id=album_id,
+                pic_key=pic_key,
+                content=content,
+            )
+        return "不支持的 QQ 空间操作。可用动作：list、detail、publish、like、comment、auto_comment、photo、photo_comment。"
 
     async def clean_news_link_llm_references(
         self, event: AstrMessageEvent, resp

@@ -5579,7 +5579,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(manager.plugin.qzone_service.top_comments, [])
         self.assertEqual(manager.plugin.qzone_service.replies, [])
 
-    async def test_execute_auto_reply_does_not_scan_friend_sources(self):
+    async def test_execute_auto_reply_ignores_friend_posts_in_album_discovery(self):
         module, models = _load_auto_comment_module()
 
         friend_post = models.QzonePost(
@@ -5631,7 +5631,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
             async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
                 self.recent_calls += 1
-                raise AssertionError("auto reply should not query friend recent posts")
+                return [friend_post, models.QzonePost(uin=2, tid="friend-album", appid=4)]
 
             async def query_home_posts(self, *, pos=0, num=5):
                 self.home_calls += 1
@@ -5693,7 +5693,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 service.home_calls,
                 service.about_calls,
             ),
-            (0, 0, 0, 0),
+            (0, 1, 0, 0),
         )
         self.assertEqual(service.detail_calls, [])
         self.assertEqual(service.replies, [])

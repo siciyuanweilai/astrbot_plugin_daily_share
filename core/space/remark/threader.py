@@ -19,6 +19,23 @@ class QzoneCommentReplyService(QzoneMethodSet):
         parent_comment: QzoneComment | None = None,
     ) -> dict[str, Any]:
         post = self._require_post(post_id)
+        if int(post.appid or 311) == 4:
+            if post.comment_target_error:
+                raise RuntimeError(post.comment_target_error)
+            photo = post.photo_targets[0]
+            result = await self.reply_photo_comment(
+                owner_uin=post.uin,
+                album_id=photo.album_id,
+                pic_key=photo.pic_key,
+                comment=comment,
+                content=content,
+                feed_topic_id=photo.feed_comment_topic_id,
+                parent_comment=parent_comment,
+            )
+            self._invalidate_qzone_cache(post_id=post.key, target_id=str(post.uin))
+            return result
+        if int(post.appid or 311) != 311:
+            raise RuntimeError("相册等非说说动态不能使用说说回评接口")
         content = str(content or "").strip()
         if not content:
             raise RuntimeError("评论回复内容不能为空")

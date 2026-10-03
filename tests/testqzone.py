@@ -3216,7 +3216,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("replyId", service.request_data)
         self.assertNotIn("replyTid", service.request_data)
 
-    async def test_comment_uses_h5_feed_payload(self):
+    async def test_comment_matches_captured_pc_mood_form(self):
         service_module = _load_qzone_service()
 
         class Service(service_module.QzoneService):
@@ -3247,24 +3247,176 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": 0}
 
         service = Service()
-        post = service_module.QzonePost(
-            uin=20002, tid="post-1", appid=311, busi_param={"from": "feeds"}
-        )
+        # Capture identities are replaced with distinct author/login test IDs.
+        # Cached like URLs must not change the comment topic into a bare tid.
+        for has_feed_keys in (False, True):
+            with self.subTest(has_feed_keys=has_feed_keys):
+                service.calls.clear()
+                post = service_module.QzonePost(
+                    uin=20002, tid="post-1", appid=311,
+                    busi_param={"from": "feeds"},
+                    curkey="https://user.qzone.qq.com/20002/mood/post-1"
+                    if has_feed_keys else "",
+                    unikey="https://user.qzone.qq.com/20002/mood/post-1"
+                    if has_feed_keys else "",
+                )
+                service._post_cache[post.key] = post
+
+                await service.comment(post.key, "  有多无聊  ")
+
+                self.assertEqual(len(service.calls), 1)
+                url, data, headers = service.calls[0]
+                self.assertEqual(url, service.COMMENT_URL)
+                referer = data.pop("qzreferrer")
+                self.assertIn("/qzone/app/mood_v6/html/index.html#mood&", referer)
+                self.assertIn("&uin=20002&", referer)
+                self.assertEqual(data, {
+                    "uin": 10001,
+                    "hostUin": 20002,
+                    "topicId": "20002_post-1",
+                    "commentUin": 10001,
+                    "content": "有多无聊",
+                    "richval": "",
+                    "richtype": "",
+                    "inCharset": "",
+                    "outCharset": "",
+                    "ref": "",
+                    "private": 0,
+                    "with_fwd": 0,
+                    "to_tweet": 0,
+                    "hostuin": 10001,
+                    "code_version": 1,
+                    "format": "fs",
+                })
+                self.assertEqual(headers["Origin"], service.BASE_URL)
+                self.assertEqual(headers["Referer"], referer)
+
+    async def test_comment_does_not_switch_protocol_on_parameter_error(
+        self,
+    ):
+        service_module = _load_qzone_service()
+
+        class Service(service_module.QzoneService):
+            def __init__(self):
+                super().__init__(_qzone_plugin())
+                self.calls = []
+
+            async def context(self):
+                return service_module.QzoneContext(
+                    uin=10001,
+                    skey="skey",
+                    p_skey="p_skey",
+                    nickname="Me",
+                )
+
+            async def _request(
+                self,
+                method,
+                url,
+                *,
+                params=None,
+                data=None,
+                headers=None,
+                retry=True,
+                retry_parse_error=True,
+            ):
+                self.calls.append((url, dict(data or {}), dict(headers or {})))
+                return {"code": -10004, "message": "参数错误", "_http_status": 200}
+
+        service = Service()
+        post = service_module.QzonePost(uin=20002, tid="post-1", appid=311)
+        post.curkey = "https://user.qzone.qq.com/20002/mood/post-1"
+        post.unikey = post.curkey
         service._post_cache[post.key] = post
 
-        await service.comment(post.key, "hello")
+        with self.assertRaisesRegex(
+            RuntimeError, r"参数错误.*transport=pc_mood.*code=-10004.*http=200"
+        ):
+            await service.comment(post.key, "hello")
 
         self.assertEqual(len(service.calls), 1)
-        url, data, headers = service.calls[0]
-        self.assertEqual(url, service.COMMENT_URL)
-        self.assertEqual(data["topicId"], "20002_post-1__1")
-        self.assertEqual(data["format"], "fs")
-        self.assertEqual(data["feedsType"], 100)
-        self.assertEqual(data["appid"], 311)
-        self.assertEqual(data["paramstr"], "1")
-        self.assertEqual(data["isSignIn"], "0")
-        self.assertEqual(data["busi_param"], '{"from": "feeds"}')
-        self.assertEqual(headers["Origin"], service.BASE_URL)
+        self.assertEqual(service.calls[0][0], service.COMMENT_URL)
+
+    async def test_comment_reads_captured_html_callback_via_gateway(self):
+        service_module = _load_qzone_service()
+        response_text = (ROOT / "tests/fixtures/qzone_mood_comment_success.html").read_text(
+            encoding="utf-8"
+        )
+
+        class FakeResponse:
+            status = 200
+
+            async def text(self):
+                return response_text
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return None
+
+        class FakeSession:
+            closed = False
+
+            def __init__(self):
+                self.calls = []
+
+            def request(self, method, url, **kwargs):
+                self.calls.append({"method": method, "url": url, **kwargs})
+                return FakeResponse()
+
+        service = _new_qzone_service(service_module)
+        service._session = FakeSession()
+        service._session_timeout_seconds = service._api_timeout_seconds()
+        service._ctx = service_module.QzoneContext(
+            uin=10001, skey="skey", p_skey="p_skey", nickname="Me"
+        )
+        service._ctx_at = 9999999999
+        post = service_module.QzonePost(uin=20002, tid="post-1")
+        service._post_cache[post.key] = post
+
+        # Exercise the real gateway/parser, including JS try/catch before JSON.
+        parsed = _parser().parse_qzone_response(response_text)
+        self.assertEqual(parsed["code"], 0)
+        self.assertEqual(parsed["data"]["id"], 3)
+        self.assertEqual(parsed["data"]["content"], "有多无聊")
+        with patch.object(service, "_invalidate_qzone_cache") as invalidate:
+            await service.comment(post.key, "有多无聊")
+        invalidate.assert_called_once_with(post_id=post.key, target_id="20002")
+        self.assertEqual(len(service._session.calls), 1)
+        self.assertEqual(service._session.calls[0]["method"], "POST")
+
+    async def test_comment_reports_structured_failure_details(self):
+        service_module = _load_qzone_service()
+
+        class Service(service_module.QzoneService):
+            async def context(self):
+                return service_module.QzoneContext(
+                    uin=10001,
+                    skey="skey",
+                    p_skey="p_skey",
+                    nickname="Me",
+                )
+
+            async def _request(
+                self,
+                method,
+                url,
+                *,
+                params=None,
+                data=None,
+                headers=None,
+                retry=True,
+                retry_parse_error=True,
+            ):
+                return {"code": -100, "message": "登录态失效", "_http_status": 401}
+
+        service = Service(_qzone_plugin())
+        post = service_module.QzonePost(uin=20002, tid="post-1", appid=311)
+        service._post_cache[post.key] = post
+
+        with self.assertRaisesRegex(RuntimeError, r"登录态失效.*code=-100.*http=401"):
+            await service.comment(post.key, "hello")
 
     def test_write_response_without_json_success_requires_blank_body(self):
         service_module = _load_qzone_service()
@@ -4571,6 +4723,145 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             getattr(ctx.exception, "verification_status"),
             "unsafe_synthetic_thread_target",
         )
+
+
+class QzonePhotoTests(unittest.IsolatedAsyncioTestCase):
+    async def test_query_photo_parses_photo_and_comments(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module)
+        calls = []
+
+        async def context():
+            return types.SimpleNamespace(uin=89761500, gtk="1542532905")
+
+        async def request(method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            return {
+                "code": 0,
+                "data": {
+                    "photos": [
+                        {
+                            "albumId": "album-1",
+                            "picKey": "pic-1",
+                            "ownerUin": 897537513,
+                            "ownerName": "相册主人",
+                            "topicName": "测试",
+                            "name": "头像",
+                            "url": "https://photo.example/image.jpg",
+                            "cmtTotal": 1,
+                            "likeTotal": 2,
+                        }
+                    ],
+                    "single": {
+                        "comments": [
+                            {
+                                "id": 335155870,
+                                "content": "好好看",
+                                "postTime": 1790334670,
+                                "poster": {
+                                    "id": 89761500,
+                                    "name": "四次元未来",
+                                    "extendData": {
+                                        "face": "https://qlogo.example/avatar"
+                                    },
+                                },
+                                "topicId": "album-1_pic-1_0_0",
+                            }
+                        ]
+                    },
+                    "topic": {"topicId": "album-1", "ownerUin": 897537513},
+                },
+            }
+
+        service.context = context
+        service._request = request
+        service._headers = lambda *_args, **_kwargs: {}
+
+        photo = await service.query_photo(
+            owner_uin=897537513,
+            album_id="album-1",
+            pic_key="pic-1",
+            photo_t="994445153",
+        )
+
+        self.assertEqual(photo.key, "album-1:pic-1")
+        self.assertEqual(photo.comment_topic_id, "album-1_pic-1")
+        self.assertEqual(photo.comments[0].content, "好好看")
+        self.assertEqual(calls[0][0], "GET")
+        self.assertEqual(calls[0][1], service.PHOTO_VIEW_URL)
+        self.assertEqual(calls[0][2]["params"]["topicId"], "album-1")
+        self.assertEqual(calls[0][2]["params"]["picKey"], "pic-1")
+        self.assertEqual(calls[0][2]["params"]["appid"], 4)
+
+    async def test_comment_photo_uses_album_feed_payload_and_parses_result(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module)
+        calls = []
+
+        async def context():
+            return types.SimpleNamespace(uin=89761500, gtk="1542532905")
+
+        async def request(method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            return {
+                "code": 0,
+                "data": {
+                    "content": "这是你吗？",
+                    "id": 343965921,
+                    "postTime": 1790342666,
+                },
+            }
+
+        service.context = context
+        service._request = request
+        service._headers = lambda *_args, **_kwargs: {}
+
+        result = await service.comment_photo(
+            owner_uin=897537513,
+            album_id="album-1",
+            pic_key="pic-1",
+            content="这是你吗？",
+        )
+
+        self.assertEqual(result.comment_id, "343965921")
+        self.assertEqual(result.content, "这是你吗？")
+        self.assertEqual(calls[0][0], "POST")
+        self.assertEqual(calls[0][1], service.PHOTO_COMMENT_URL)
+        data = calls[0][2]["data"]
+        self.assertEqual(data["topicId"], "album-1_pic-1")
+        self.assertEqual(data["ref"], "photo")
+        self.assertEqual(data["hostUin"], 897537513)
+        self.assertEqual(data["uin"], 89761500)
+        self.assertNotIn("feedsType", data)
+        self.assertNotIn("source", data)
+        self.assertNotIn("platformid", data)
+        self.assertNotIn("paramstr", data)
+        self.assertEqual(data["commentUin"], 89761500)
+        self.assertEqual(data["albumId"], "album-1")
+        self.assertEqual(calls[0][2]["params"], {"g_tk": "1542532905"})
+
+    async def test_photo_identifiers_and_content_are_validated(self):
+        service_module = _load_qzone_service()
+        service = _new_qzone_service(service_module)
+
+        with self.assertRaisesRegex(RuntimeError, "相册主人 QQ无效"):
+            await service.query_photo(
+                owner_uin="not-a-uin", album_id="album-1", pic_key="pic-1"
+            )
+        with self.assertRaisesRegex(RuntimeError, "照片 picKey无效"):
+            await service.comment_photo(
+                owner_uin=897537513,
+                album_id="album-1",
+                pic_key="",
+                content="测试",
+            )
+        with self.assertRaisesRegex(RuntimeError, "评论内容不能为空"):
+            await service.comment_photo(
+                owner_uin=897537513,
+                album_id="album-1",
+                pic_key="pic-1",
+                content=" ",
+            )
 
 
 class QzoneHostTests(unittest.IsolatedAsyncioTestCase):

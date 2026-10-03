@@ -73,6 +73,10 @@ class QzoneFeedRecentService(QzoneMethodSet):
     ) -> list[QzonePost]:
         detailed = []
         for post in posts:
+            # Non-mood keys alone cannot reconstruct appid/photo identifiers.
+            if int(post.appid or 311) != 311:
+                self._remember_posts([post])
+                self._post_detail_cache_at.pop(post.key, None)
             try:
                 detail = await self.detail(post.key)
                 detail.feed_key = detail.feed_key or post.feed_key

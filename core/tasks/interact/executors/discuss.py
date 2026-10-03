@@ -1,11 +1,12 @@
 import asyncio
+from dataclasses import replace
 
 from astrbot.api import logger
 
 from ..candidate import _qzone_friend_thread_comment_candidates
 from ..comments import QzoneCommentIndex
 from ..errors import QzoneAutoInteractionRateLimited
-from ..scan import _query_qzone_friend_posts
+from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
 from ..task import (
     _qzone_abort_query_failure,
     _qzone_auto_config,
@@ -25,10 +26,31 @@ from ..tracker import (
     QZONE_AUTO_COMMENT_STATE_KEY,
     _mark_qzone_post_processed,
     _mark_qzone_processed,
+    _photo_batch_key,
     _post_alias_keys,
     _qzone_pending_reply,
 )
 from .pacing import QZONE_ACTION_DELAY_SECONDS
+
+
+def _qzone_auto_comment_generation_post(post, posts: list):
+    batch_key = _photo_batch_key(post)
+    if not batch_key or post.comment_target_error:
+        return post
+    batch_posts = sorted(
+        (
+            item
+            for item in posts
+            if _photo_batch_key(item) == batch_key
+            and item.uin == post.uin
+            and not item.comment_target_error
+            and item.photo_batch_complete
+        ),
+        key=lambda item: item.photo_targets[0].key,
+    )
+    images = list(dict.fromkeys(image for item in batch_posts for image in item.images))
+    # Only generation sees the batch; keep cached write/reply scopes isolated.
+    return replace(post, images=images) if images != post.images else post
 
 
 async def _execute_qzone_auto_comment_thread_reply(
@@ -116,12 +138,35 @@ async def _execute_qzone_auto_comment_new_posts(
     skip_post_keys: set[str] | None = None,
 ) -> None:
     skip_post_keys = skip_post_keys or set()
+    engaged_batches = {
+        _photo_batch_key(post)
+        for post in posts
+        if _photo_batch_key(post)
+        and any(
+            int(getattr(comment, "uin", 0) or 0) == ctx.uin
+            for comment in getattr(post, "comments", []) or []
+        )
+    }
+    attempted_batches: set[str] = set()
     for post in posts:
         if result["commented"] >= limit:
             break
         if str(getattr(post, "key", "") or "").strip() in skip_post_keys:
             continue
         result["scanned"] += 1
+        batch_key = _photo_batch_key(post)
+        if batch_key and (
+            not getattr(post, "photo_batch_complete", True)
+            or batch_key in engaged_batches
+            or batch_key in attempted_batches
+        ):
+            result["skipped"] += 1
+            continue
+        target_error = getattr(post, "comment_target_error", "")
+        if target_error:
+            result["skipped"] += 1
+            logger.debug(f"[日常分享] QQ 空间自动评论跳过: {target_error}")
+            continue
         post_key = str(getattr(post, "key", "") or "").strip()
         comment_index = QzoneCommentIndex.build(post, ctx.uin)
         if not owner._qzone_auto_comment_candidate(
@@ -144,12 +189,30 @@ async def _execute_qzone_auto_comment_new_posts(
             ),
             "",
         )
+        pending_target = next(
+            (
+                item.get("photo_target_key", "")
+                for key in _post_alias_keys(post)
+                if isinstance(item := processed.get(key), dict)
+                and item.get("action") == QZONE_ACTION_RETRY_LATER
+                and item.get("photo_target_key")
+            ),
+            "",
+        )
+        photo_key = post.photo_targets[0].key if int(post.appid or 311) == 4 else ""
+        if pending_target and pending_target != photo_key:
+            result["skipped"] += 1
+            continue
+        if batch_key:
+            attempted_batches.add(batch_key)
         if pending_comment:
             comment = pending_comment
         else:
             try:
                 comment = await owner.generate_qzone_auto_comment(
-                    post, state=state, target_umo=target_umo
+                    _qzone_auto_comment_generation_post(post, posts),
+                    state=state,
+                    target_umo=target_umo,
                 )
             except Exception as exc:
                 result["failed"] += 1
@@ -171,6 +234,7 @@ async def _execute_qzone_auto_comment_new_posts(
                 post_uin=int(getattr(post, "uin", 0) or 0),
                 post_tid=str(getattr(post, "tid", "") or ""),
                 author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
+                photo_target_key=photo_key,
             )
             result["commented"] += 1
             owner.plugin.emit_dashboard_event(
@@ -183,6 +247,23 @@ async def _execute_qzone_auto_comment_new_posts(
             )
             await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
         except Exception as exc:
+            if int(post.appid or 311) == 4 and getattr(
+                exc, "submission_unknown", False
+            ):
+                _mark_qzone_post_processed(
+                    processed,
+                    post,
+                    QZONE_ACTION_SKIPPED,
+                    content=comment,
+                    reason=str(exc),
+                    submission_unknown=True,
+                    photo_target_key=photo_key,
+                )
+                result["skipped"] += 1
+                logger.warning(
+                    f"[日常分享] QQ 空间相册评论提交状态未知，已停止整批自动重试: {exc}"
+                )
+                continue
             if _qzone_is_retry_later_error(exc):
                 _mark_qzone_post_processed(
                     processed,
@@ -196,6 +277,7 @@ async def _execute_qzone_auto_comment_new_posts(
                         getattr(post, "name", "") or getattr(post, "uin", "") or ""
                     ),
                     reason=str(exc),
+                    photo_target_key=photo_key,
                 )
                 result["skipped"] += 1
                 _qzone_mark_result_rate_limited(result, exc)
@@ -240,6 +322,7 @@ async def execute_qzone_auto_comment_task(
             )
         else:
             posts = await _query_qzone_friend_posts(owner, fetch_count=fetch_count)
+        posts = await _expand_qzone_photo_posts(owner, posts)
     except Exception as exc:
         return await _qzone_abort_query_failure(
             owner,

@@ -29,6 +29,10 @@ QZONE_ACTION_RETRY_LATER = "retry_later"
 
 def _comment_key(post, comment) -> str:
     post_key = str(getattr(post, "key", "") or "").strip()
+    if int(getattr(post, "appid", 311) or 311) == 4:
+        photos = getattr(post, "photo_targets", []) or []
+        if len(photos) == 1 and photos[0].album_id and photos[0].pic_key:
+            post_key = f"{post.uin}:photo:{photos[0].album_id}:{photos[0].pic_key}"
     comment_tid = _comment_tid(comment)
     if comment_tid:
         return f"{post_key}:{comment_tid}"
@@ -40,6 +44,18 @@ def _comment_key(post, comment) -> str:
 
 def _post_key(post) -> str:
     return str(getattr(post, "key", "") or "").strip()
+
+
+def _photo_batch_key(post) -> str:
+    if int(getattr(post, "appid", 311) or 311) != 4:
+        return ""
+    key = str(getattr(post, "photo_batch_key", "") or "").strip()
+    if key:
+        return key
+    photos = getattr(post, "photo_targets", []) or []
+    if len(photos) == 1 and photos[0].batch_id:
+        return f"{post.uin}:photo-batch:{photos[0].album_id}:{photos[0].batch_id}"
+    return ""
 
 
 def _post_stable_body_key(post) -> str:
@@ -73,6 +89,13 @@ def _post_alias_keys(post) -> list[str]:
     keys = [_post_key(post)]
     uin = str(getattr(post, "uin", "") or "").strip()
     appid = str(getattr(post, "appid", "") or "").strip()
+    if appid == "4":
+        photos = getattr(post, "photo_targets", []) or []
+        if len(photos) == 1 and photos[0].album_id and photos[0].pic_key:
+            keys.append(f"{uin}:photo:{photos[0].album_id}:{photos[0].pic_key}")
+        keys.append(_photo_batch_key(post))
+        if getattr(post, "photo_batch_key", "") and getattr(post, "feed_key", ""):
+            keys.append(f"{uin}:{post.feed_key}")
     for name in ("unikey", "curkey", "feed_key", "tid"):
         value = str(getattr(post, name, "") or "").strip()
         if not value:
@@ -172,13 +195,20 @@ def _qzone_processed_thread_has_self_reply(
     parent_tid = str(getattr(parent_comment, "tid", "") or "").strip()
     if not parent_tid:
         return False
-    for item in processed.values():
+    photo_prefix = ""
+    if int(getattr(post, "appid", 311) or 311) == 4:
+        photos = getattr(post, "photo_targets", []) or []
+        if len(photos) != 1:
+            return False
+        photo_prefix = f"{post.uin}:photo:{photos[0].album_id}:{photos[0].pic_key}:"
+    for key, item in processed.items():
         if not isinstance(item, dict):
             continue
         action = str(item.get("action") or "")
         if (
             action == QZONE_ACTION_THREAD_REPLIED
             and str(item.get("parent_comment_id") or "") == parent_tid
+            and (not photo_prefix or str(key).startswith(photo_prefix))
         ):
             return True
     return False

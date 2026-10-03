@@ -36,10 +36,10 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertRegex(metadata, r"(?m)^version: 1\.1\.4$")
-        self.assertIn("version-1.1.4", readme)
-        self.assertIn('alt="版本 1.1.4"', readme)
-        self.assertIn("v1.1.4 版本更新", readme)
+        self.assertRegex(metadata, r"(?m)^version: 1\.1\.5$")
+        self.assertIn("version-1.1.5", readme)
+        self.assertIn('alt="版本 1.1.5"', readme)
+        self.assertIn("v1.1.5 版本更新", readme)
         self.assertIn("分享 [类型] 小红书", readme)
         self.assertIn("小红书", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
@@ -47,22 +47,39 @@ class TaskArchitectureTests(unittest.TestCase):
         release_headers = re.findall(
             r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
         )
-        self.assertEqual(release_headers[0], ("1.1.4", "2026-09-25"))
+        self.assertEqual(release_headers[0], ("1.1.5", "2026-10-03"))
         self.assertNotIn("## 未发布", changelog)
+        self.assertLess(changelog.index("v1.1.5"), changelog.index("## 🌐 v1.1.4"))
         self.assertLess(changelog.index("v1.1.4"), changelog.index("v1.1.3"))
         self.assertLess(changelog.index("v1.1.3"), changelog.index("v1.1.2"))
         self.assertLess(changelog.index("v1.1.2"), changelog.index("v1.1.1"))
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        current_release = changelog.split("## 🌐 v1.1.4", 1)[1].split("## 🛡️ v1.1.3", 1)[
-            0
-        ]
+        current_release = changelog.split("## v1.1.5", 1)[1].split("## 🌐 v1.1.4", 1)[0]
         self.assertIn("QQ 空间", current_release)
         self.assertIn("daily_life", current_release)
-        self.assertIn("context_conf.enable_life_context", current_release)
+        self.assertIn("photo_comment", current_release)
+        self.assertIn("cgi_add_piccomment_v2", current_release)
+        self.assertIn("cgi_add_reply_v2", current_release)
+        self.assertIn("ref=photo", current_release)
+        self.assertIn("batchId", current_release)
+        self.assertIn("platformSubId", current_release)
+        self.assertIn("单条动态最多识别图片数", current_release)
+        self.assertIn("生成一条评论", current_release)
+        self.assertIn("多人", current_release)
         self.assertIn("数据库结构保持 v2", current_release)
+        self.assertIn("不新增配置项或依赖", current_release)
         self.assertIn("重载", current_release)
+
+        relationship_release = changelog.split("## 🌐 v1.1.4", 1)[1].split(
+            "## 🛡️ v1.1.3", 1
+        )[0]
+        self.assertIn("QQ 空间关系识别", relationship_release)
+        self.assertIn("context_conf.enable_life_context", relationship_release)
+        self.assertIn("公开互动上下文", relationship_release)
+        self.assertNotIn("photo_comment", relationship_release)
+        self.assertNotIn("相册评论与回评", relationship_release)
 
         hardening_release = changelog.split("## 🛡️ v1.1.3", 1)[1].split(
             "## 🚀 v1.1.2", 1

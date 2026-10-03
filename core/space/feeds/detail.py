@@ -5,6 +5,7 @@ from typing import Any
 from ..methodset import QzoneMethodSet
 from ..models import QzonePost
 from ..parse import parse_feed_item
+from ..parse.photo import photo_thread_comments
 
 
 class QzoneFeedDetailService(QzoneMethodSet):
@@ -15,6 +16,30 @@ class QzoneFeedDetailService(QzoneMethodSet):
         cached = self._cached_detail_post(post.key)
         if cached is not None:
             return cached
+        if int(post.appid or 311) != 311:
+            if int(post.appid) == 4 and not post.comment_target_error:
+                target = post.photo_targets[0]
+                photo = await self.query_photo(
+                    owner_uin=post.uin, album_id=target.album_id,
+                    pic_key=target.pic_key, comment_count=50,
+                )
+                photo.feed_topic_id = target.feed_topic_id
+                photo.batch_id = photo.batch_id or target.batch_id
+                post.photo_targets = [photo]
+                comments = photo_thread_comments(photo)
+                canonical = {
+                    (item.raw_tid, item.uin, item.raw_fields.get("photo_root_id", "")): item
+                    for item in comments
+                }
+                post.comments = [
+                    canonical.get(
+                        (item.raw_tid, item.uin, item.raw_fields.get("photo_root_id", "")),
+                        item,
+                    )
+                    for item in self._merge_comments(post.comments, comments)
+                ]
+            self._remember_posts([post], detailed=True)
+            return post
 
         ctx = await self.context()
         referer = f"{self.BASE_URL}/{post.uin}/mood/{post.tid}"

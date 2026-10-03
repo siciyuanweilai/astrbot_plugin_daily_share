@@ -192,6 +192,17 @@ def _qzone_image_context_cache_keys(
         str(index),
         str(total),
     )
+    if int(getattr(post, "appid", 0) or 0) == 4:
+        # Album uploads can share text/time; bind fallback cache to actual photos.
+        prefix += (
+            "photo",
+            str(getattr(post, "photo_batch_key", "") or ""),
+            "|".join(photo.key for photo in getattr(post, "photo_targets", []) or []),
+            "|".join(
+                _qzone_image_url_cache_key(url)
+                for url in getattr(post, "images", []) or []
+            ),
+        )
     keys = [
         _qzone_image_context_hash(*prefix, "post", identity)
         for identity in _qzone_post_stable_identities(post)
@@ -218,7 +229,11 @@ def _qzone_image_context_cache_key(
 def _qzone_image_vision_cache_keys(
     post, image_url: str, *, index: int, total: int, scope: str = ""
 ) -> list[str]:
-    keys = [_qzone_image_url_cache_key(image_url)]
+    url_key = _qzone_image_url_cache_key(image_url)
+    if int(getattr(post, "appid", 0) or 0) == 4:
+        # Do not reuse legacy album cache entries that may contain cross-photo aliases.
+        url_key = _qzone_image_context_hash("photo_image", url_key)
+    keys = [url_key]
     keys.extend(
         _qzone_image_context_cache_keys(post, index=index, total=total, scope=scope)
     )
