@@ -2,6 +2,7 @@ from astrbot.api import logger
 
 from ...config import ShareType
 from ...database.keys import MEDIA_IMAGE, MEDIA_TEXT, QZONE_TARGET_ID
+from ...space.errors import QzoneImageUploadError
 from ...toolkit import log_exception
 from .pipeline import TaskQzoneFlowService
 
@@ -21,8 +22,8 @@ class TaskQzonePublishService(TaskQzoneFlowService):
             try:
                 await self.plugin.publish_qzone(text=text, images=image_payloads)
                 return MEDIA_IMAGE, False
-            except Exception as exc:
-                logger.warning("[日常分享] QQ 空间配图发布失败，继续发送说说")
+            except QzoneImageUploadError as exc:
+                logger.warning("[日常分享] QQ 空间配图上传失败，改发纯文字说说")
                 log_exception(
                     "[日常分享] QQ 空间配图发布失败详情",
                     exc,

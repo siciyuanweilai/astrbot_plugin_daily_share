@@ -209,7 +209,7 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("【分享文案输出格式】", calls[0]["prompt"])
         self.assertIn("使用两行短句，每行不超过 25 字。", calls[0]["prompt"])
 
-    async def test_content_service_prefers_qzone_output_format_for_qzone(self):
+    async def test_content_service_ignores_removed_and_general_format_for_qzone(self):
         content_module, _ = _load_daily_share_modules()
         calls = []
 
@@ -241,9 +241,180 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
             "",
         )
 
-        self.assertIn("【QQ 空间说说输出格式】", calls[0]["prompt"])
-        self.assertIn("像 QQ 空间说说一样自然分行。", calls[0]["prompt"])
+        self.assertNotIn("【QQ 空间说说输出格式】", calls[0]["prompt"])
+        self.assertNotIn("像 QQ 空间说说一样自然分行。", calls[0]["prompt"])
         self.assertNotIn("普通分享两行短句。", calls[0]["prompt"])
+
+    def test_output_format_keeps_other_targets_independent(self):
+        content_module, _ = _load_daily_share_modules()
+        service = content_module.ContentService(
+            {
+                "basic_conf": {"share_output_format": "普通分享格式"},
+                "qzone_conf": {"qzone_share_output_format": "已移除格式"},
+            },
+            None,
+            context=None,
+            db_manager=types.SimpleNamespace(),
+        )
+        for target in ("qzone_broadcast", True):
+            self.assertEqual(service.support._build_output_format_prompt(target), "")
+        for target in (False, "private-target", "group-target"):
+            prompt = service.support._build_output_format_prompt(target)
+            self.assertIn("普通分享格式", prompt)
+            self.assertNotIn("已移除格式", prompt)
+
+    async def test_qzone_chat_style_is_automatic_and_ignores_removed_switch(
+        self,
+    ):
+        content_module, _ = _load_daily_share_modules()
+        calls = []
+        style_calls = []
+
+        class LifePlugin:
+            async def get_share_chat_style(self, *, scene=""):
+                style_calls.append(scene)
+                return {"enabled": True, "prompt": "自然简洁，不刻意追问。"}
+
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager(""),
+            get_all_stars=lambda: [
+                types.SimpleNamespace(
+                    name="astrbot_plugin_daily_life",
+                    root_dir_name="astrbot_plugin_daily_life",
+                    activated=True,
+                    star_cls=LifePlugin(),
+                )
+            ],
+        )
+
+        async def call_llm(prompt, system_prompt="", **kwargs):
+            calls.append(prompt)
+            return "保持原格式的内容"
+
+        original = {
+            "qzone_share_output_format": "像 QQ 空间说说一样自然分行。",
+            "qzone_auto_comment_prompt": "原评论语气。",
+            "qzone_auto_reply_prompt": "原回评语气。",
+        }
+        config = {
+            "qzone_conf": dict(original),
+            "basic_conf": {"share_output_format": "普通分享两行。"},
+            "context_conf": {"enable_life_context": False},
+        }
+        service = content_module.ContentService(
+            config, call_llm, context=context, db_manager=types.SimpleNamespace()
+        )
+        for enabled, target in (
+            (None, "qzone_broadcast"),
+            (False, "qzone_broadcast"),
+            (True, "qzone_broadcast"),
+            (True, "bot-test:FriendMessage:user-test"),
+            (False, "qzone_broadcast"),
+        ):
+            with self.subTest(enabled=enabled, target=target):
+                if enabled is not None:
+                    config["qzone_conf"]["qzone_follow_life_chat_style"] = enabled
+                before = len(style_calls)
+                await service.generate(
+                    sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+                    sys.modules[CONFIG_MODULE_NAME].TimePeriod.AFTERNOON,
+                    target,
+                    False,
+                    "生活状态原文",
+                )
+                active = target == "qzone_broadcast"
+                self.assertEqual(len(style_calls) - before, int(active))
+                self.assertEqual("【daily_life 聊天表达参考】" in calls[-1], active)
+                self.assertIn("生活状态原文", calls[-1])
+                if target == "qzone_broadcast":
+                    self.assertNotIn(original["qzone_share_output_format"], calls[-1])
+                    self.assertNotIn("普通分享两行。", calls[-1])
+                else:
+                    self.assertIn("普通分享两行。", calls[-1])
+                if active:
+                    self.assertEqual(style_calls[-1], "qzone_post")
+                    self.assertIn("【本次 QQ 空间状态】", calls[-1])
+                    self.assertNotIn("普通分享两行。", calls[-1])
+                    self.assertNotIn("100-120字", calls[-1])
+                else:
+                    self.assertIn("100-120字", calls[-1])
+                self.assertNotIn(original["qzone_auto_comment_prompt"], calls[-1])
+                self.assertNotIn(original["qzone_auto_reply_prompt"], calls[-1])
+                self.assertEqual(
+                    {key: config["qzone_conf"][key] for key in original}, original
+                )
+
+    async def test_qzone_life_expression_unavailable_uses_natural_fallback_not_old_layout(
+        self,
+    ):
+        content_module, _ = _load_daily_share_modules()
+        calls = []
+
+        class LifePlugin:
+            result = {"enabled": False, "prompt": "不得注入"}
+            failing = False
+
+            async def get_share_chat_style(self, *, scene=""):
+                if self.failing:
+                    raise RuntimeError("正在重载")
+                return self.result
+
+        plugin = LifePlugin()
+        metadata = types.SimpleNamespace(
+            name="astrbot_plugin_daily_life",
+            root_dir_name="astrbot_plugin_daily_life",
+            activated=True,
+            star_cls=plugin,
+        )
+        context = types.SimpleNamespace(
+            persona_manager=_PersonaManager("当前角色人设"),
+            get_all_stars=lambda: [metadata],
+        )
+
+        async def call_llm(prompt, system_prompt="", **kwargs):
+            calls.append((prompt, system_prompt))
+            return "自然动态"
+
+        service = content_module.ContentService(
+            {
+                "qzone_conf": {
+                    "qzone_follow_life_chat_style": False,
+                    "qzone_share_output_format": "旧说说排版",
+                },
+                "basic_conf": {"share_output_format": "旧普通排版"},
+            },
+            call_llm,
+            context=context,
+            db_manager=types.SimpleNamespace(),
+        )
+        for mode in ("disabled", "error", "missing", "malformed"):
+            with self.subTest(mode=mode):
+                plugin.failing = mode == "error"
+                metadata.activated = mode != "missing"
+                plugin.result = (
+                    None
+                    if mode == "malformed"
+                    else {"enabled": False, "prompt": "不得注入"}
+                )
+                result = await service.generate(
+                    sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+                    sys.modules[CONFIG_MODULE_NAME].TimePeriod.AFTERNOON,
+                    "qzone_broadcast",
+                    False,
+                    "当前真实状态",
+                )
+                self.assertEqual(result, "自然动态")
+                prompt, system = calls[-1]
+                self.assertIn("【QQ 空间说说表达】", prompt)
+                fixed, dynamic = prompt.split("【本次输入】", 1)
+                self.assertIn("【QQ 空间说说表达】", fixed)
+                self.assertNotIn("当前真实状态", fixed)
+                self.assertIn("当前真实状态", dynamic)
+                self.assertIn("当前真实状态", prompt)
+                self.assertIn("当前角色人设", system)
+                self.assertIn("隐私边界", prompt)
+                for value in ("旧说说排版", "旧普通排版", "100-120字", "不得注入"):
+                    self.assertNotIn(value, prompt)
 
     def test_private_user_prompt_checks_relationship_sections(self):
         content_module, _ = _load_daily_share_modules()
@@ -366,6 +537,49 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(field, calls[0]["system_prompt"])
         self.assertIn("不把生活状态里未入镜的内容写进画面词", calls[0]["system_prompt"])
         self.assertNotIn("脚部状态必须写进 outfit", calls[0]["system_prompt"])
+
+    async def test_group_structured_context_keeps_daily_life_appearance_over_model_guess(
+        self,
+    ):
+        _, image_module = _load_daily_share_modules()
+
+        async def call_llm(prompt, system_prompt="", **kwargs):
+            return json.dumps({"outfit": "睡衣", "hair_style": "固定造型"})
+
+        service = image_module.ImageService(
+            types.SimpleNamespace(
+                persona_manager=_PersonaManager("你的名字叫小舟。"),
+                get_all_stars=lambda: [],
+            ),
+            {"image_conf": {"enable_ai_image": True}},
+            call_llm,
+        )
+        context = json.dumps(
+            {
+                "当前状态": {"天气": "晴", "心情": "平静"},
+                "主角本人配图外观": {
+                    "穿搭": "浅蓝外套和白裙子",
+                    "发型名称": "松散低马尾",
+                    "发型细节": "黑色中长直发",
+                    "妆容": "清透自然妆",
+                    "美甲": "奶白色短圆甲",
+                },
+            },
+            ensure_ascii=False,
+        )
+        visuals = await service._agent_extract_visuals(
+            "今天心情还不错。",
+            context,
+            share_type=sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+            involves_self=True,
+        )
+        self.assertEqual(visuals["outfit"], "浅蓝外套和白裙子")
+        self.assertEqual(visuals["hair_style"], "松散低马尾")
+        self.assertEqual(visuals["hair"], "黑色中长直发")
+        self.assertEqual(visuals["makeup"], "清透自然妆")
+        self.assertEqual(visuals["nails"], "奶白色短圆甲")
+        self.assertEqual(visuals["outfit_source"], "daily_life")
+        self.assertEqual(visuals["appearance_source"], "daily_life")
 
     async def test_image_visual_extraction_keeps_explicit_outfit_over_sleepwear(self):
         _, image_module = _load_daily_share_modules()

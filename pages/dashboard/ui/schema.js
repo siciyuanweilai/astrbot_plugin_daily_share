@@ -199,16 +199,6 @@ function makeExtraInput(meta = {}) {
   return input;
 }
 
-const extraScheduleFields = {
-  xiaohongshu_conf: {
-    trigger_mode: "mode",
-    fixed_times: "fixed",
-    random_periods: "random",
-    cron: "cron",
-    cron_random_delay: "delay",
-  },
-};
-
 function makeExtraField({ scope, section, key, meta }) {
   const input = makeExtraInput(meta);
   const label = document.createElement("label");
@@ -218,8 +208,6 @@ function makeExtraField({ scope, section, key, meta }) {
   label.dataset.schemaScope = scope;
   if (section) label.dataset.schemaSection = section;
   label.dataset.schemaField = key;
-  const scheduleKind = extraScheduleFields[section]?.[key];
-  if (scheduleKind) label.dataset.schedule = `xiaohongshu-${scheduleKind}`;
 
   const caption = document.createElement("span");
   caption.textContent = extraFieldLabel(meta, key);

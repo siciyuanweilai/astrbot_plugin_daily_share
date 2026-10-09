@@ -11,6 +11,7 @@ from ...database.keys import (
     SOURCE_SCHEDULED,
 )
 from ...toolkit import format_exception, log_exception
+from ..continuation import preserve_share
 from ..taskbase import TaskServiceBase
 
 
@@ -33,7 +34,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             *,
             stype: ShareType,
             period: TimePeriod,
-            life_ctx: Any,
+            post_ctx: str,
             news_data: Any,
             progress_id: str,
             event: AstrMessageEvent | None,
@@ -152,6 +153,14 @@ class TaskQzoneFlowService(TaskServiceBase):
         history_source = str(
             source_type or (SOURCE_COMMAND if event else SOURCE_SCHEDULED)
         ).strip()
+        continuations = getattr(self.plugin, "share_continuations", None)
+        if (
+            history_source in {"scheduled", "smart"}
+            and continuations is not None
+            and await continuations.has_pending_share(QZONE_TARGET_ID)
+        ):
+            logger.info("[日常分享] QQ 空间已有待续接分享，本轮不再生成新任务")
+            return False
         progress_id = ""
         stype = ShareType.GREETING
 
@@ -161,7 +170,9 @@ class TaskQzoneFlowService(TaskServiceBase):
                 history_source=history_source,
             )
 
-            life_ctx = await self.ctx_service.get_life_context(QZONE_TARGET_ID)
+            share_context = await self.ctx_service.get_qzone_share_context()
+            life_ctx = share_context["life_context"]
+            post_ctx = share_context["post_context"]
             news_data = None
             if stype == ShareType.NEWS:
                 loaded_news, news_data = await self._load_qzone_news_data(
@@ -176,7 +187,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             clean_qzone_content = await self._generate_qzone_content(
                 stype=stype,
                 period=period,
-                life_ctx=life_ctx,
+                post_ctx=post_ctx,
                 news_data=news_data,
                 progress_id=progress_id,
                 event=event,
@@ -184,56 +195,15 @@ class TaskQzoneFlowService(TaskServiceBase):
             if not clean_qzone_content:
                 return False
 
-            target_local_img = await self._generate_qzone_image(
+            return await self.send_prepared_qzone_share(
                 stype=stype,
                 content=clean_qzone_content,
                 life_ctx=life_ctx,
                 news_data=news_data,
                 progress_id=progress_id,
                 event=event,
-            )
-            qzone_images = await self._prepare_qzone_publish_media(
-                target_local_img=target_local_img,
-            )
-            await self._publish_and_record_qzone_share(
-                progress_id=progress_id,
-                stype=stype,
-                content=clean_qzone_content,
-                qzone_images=qzone_images,
-                target_local_img=target_local_img,
                 history_source=history_source,
-                news_snapshot_data=(
-                    self.services.snapshots.news_snapshot_payload(
-                        news_data[0], news_data[1]
-                    )
-                    if (
-                        stype == ShareType.NEWS
-                        and news_data
-                        and str(target_local_img or "").startswith(
-                            ("http://", "https://")
-                        )
-                    )
-                    else None
-                ),
             )
-
-            if event:
-                try:
-                    await self.services.executor_helpers.sync_qzone_result_to_event(
-                        event,
-                        clean_qzone_content,
-                        target_local_img,
-                        None,
-                    )
-                except Exception as e:
-                    log_exception(
-                        "[日常分享] 同步发送内容到会话失败", e, with_traceback=False
-                    )
-
-            self.services.progress.finish_share_progress(
-                progress_id, success=True, message="QQ 空间分享完成"
-            )
-            return True
 
         except Exception as e:
             await self._record_qzone_share_exception(
@@ -244,3 +214,67 @@ class TaskQzoneFlowService(TaskServiceBase):
                 event=event,
             )
             return False
+
+    @preserve_share("qzone")
+    async def send_prepared_qzone_share(
+        self,
+        *,
+        stype: ShareType,
+        content: str,
+        life_ctx,
+        news_data,
+        progress_id: str,
+        history_source: str,
+        event: AstrMessageEvent | None = None,
+    ) -> bool:
+        target_local_img = await self._generate_qzone_image(
+            stype=stype,
+            content=content,
+            life_ctx=life_ctx,
+            news_data=news_data,
+            progress_id=progress_id,
+            event=event,
+        )
+        qzone_images = await self._prepare_qzone_publish_media(
+            target_local_img=target_local_img,
+        )
+        continuations = getattr(self.plugin, "share_continuations", None)
+        if continuations is not None:
+            await continuations.mark_submitting()
+        await self._publish_and_record_qzone_share(
+            progress_id=progress_id,
+            stype=stype,
+            content=content,
+            qzone_images=qzone_images,
+            target_local_img=target_local_img,
+            history_source=history_source,
+            news_snapshot_data=(
+                self.services.snapshots.news_snapshot_payload(
+                    news_data[0], news_data[1]
+                )
+                if (
+                    stype == ShareType.NEWS
+                    and news_data
+                    and str(target_local_img or "").startswith(("http://", "https://"))
+                )
+                else None
+            ),
+        )
+
+        if event:
+            try:
+                await self.services.executor_helpers.sync_qzone_result_to_event(
+                    event,
+                    content,
+                    target_local_img,
+                    None,
+                )
+            except Exception as e:
+                log_exception(
+                    "[日常分享] 同步发送内容到会话失败", e, with_traceback=False
+                )
+
+        self.services.progress.finish_share_progress(
+            progress_id, success=True, message="QQ 空间分享完成"
+        )
+        return True

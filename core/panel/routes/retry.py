@@ -9,16 +9,20 @@ from ...database.keys import (
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
-    XIAOHONGSHU_TARGET_ID,
 )
 from ..panelcomponent import PanelComponent
+
+
+def _validate_retry_target(target_id: str) -> None:
+    if ":" not in target_id and target_id.endswith("_broadcast") and target_id not in {
+        QZONE_TARGET_ID, *BRIEFING_TARGET_ALIASES,
+    }:
+        raise RuntimeError("该发布目标已移除，无法重试")
 
 
 def _retry_failure_message(target_id: str) -> str:
     if target_id == QZONE_TARGET_ID:
         return "QQ 空间重试失败，请查看日志"
-    if target_id == XIAOHONGSHU_TARGET_ID:
-        return "小红书重试失败，请查看日志"
     if target_id in BRIEFING_TARGET_ALIASES:
         return "早报重试失败，请查看日志"
     return "重试失败，请查看日志"
@@ -35,19 +39,13 @@ class DashboardRouteRetryService(PanelComponent):
             return
         try:
             target_id = str(history_item.get("target_id") or "").strip()
+            _validate_retry_target(target_id)
             raw_type = str(history_item.get("type") or "auto").strip()
             force_type = self.validation._page_share_type(raw_type)
             if target_id == QZONE_TARGET_ID:
                 ok = await self.task_manager.qzone_share.execute_qzone_share(
                     force_type=force_type,
                     source_type=SOURCE_MANUAL,
-                )
-            elif target_id == XIAOHONGSHU_TARGET_ID:
-                ok = (
-                    await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
-                        force_type=force_type,
-                        source_type=SOURCE_MANUAL,
-                    )
                 )
             elif target_id in BRIEFING_TARGET_ALIASES:
                 ok = await self.task_manager.briefing.execute_briefing_share(
@@ -90,6 +88,7 @@ class DashboardRouteRetryService(PanelComponent):
             if item.get("success"):
                 raise RuntimeError("该记录不是失败记录，无需重试")
             target_id = str(item.get("target_id") or "").strip()
+            _validate_retry_target(target_id)
             target_label = await self.labels._resolve_page_target_label(
                 target_id,
                 item.get("kind", ""),

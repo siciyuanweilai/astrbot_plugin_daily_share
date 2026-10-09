@@ -31,24 +31,61 @@ def _load_panel_revision_module():
 
 
 class TaskArchitectureTests(unittest.TestCase):
+    def test_removed_publisher_has_no_runtime_or_dashboard_entries(self):
+        pattern = re.compile(r"xiaohongshu|redbook|\bxhs\b|小红书", re.I)
+        for base in (ROOT / "core", ROOT / "pages"):
+            for path in base.rglob("*"):
+                if path.suffix in {".py", ".js", ".html", ".css"}:
+                    with self.subTest(path=str(path.relative_to(ROOT))):
+                        self.assertIsNone(
+                            pattern.search(path.read_text(encoding="utf-8"))
+                        )
+        for name in (
+            "core/xhs.py",
+            "core/tasks/redbook.py",
+            "bridge/server.py",
+            "bridge/xhssetup.py",
+        ):
+            self.assertFalse((ROOT / name).exists())
+
+    def test_old_publisher_config_does_not_create_services(self):
+        mod = _load_main_module()
+        legacy = {
+            "enable_xiaohongshu": True,
+            "server_url": "http://127.0.0.1:18061/api",
+        }
+        plugin = mod.DailySharePlugin(mod.Context(), {"xiaohongshu_conf": legacy})
+        self.assertFalse(hasattr(plugin, "xiaohongshu_client"))
+        self.assertFalse(hasattr(plugin, "xiaohongshu_conf"))
+        self.assertFalse(hasattr(plugin.services, "xiaohongshu_conf"))
+        self.assertFalse(hasattr(plugin.task_manager, "xiaohongshu_share"))
+        self.assertFalse(
+            hasattr(plugin.task_manager.schedule.setup, "setup_xiaohongshu_cron")
+        )
+        self.assertIs(plugin.config["xiaohongshu_conf"], legacy)
+
     def test_release_version_is_consistent(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertRegex(metadata, r"(?m)^version: 1\.1\.5$")
-        self.assertIn("version-1.1.5", readme)
-        self.assertIn('alt="版本 1.1.5"', readme)
-        self.assertIn("v1.1.5 版本更新", readme)
-        self.assertIn("分享 [类型] 小红书", readme)
-        self.assertIn("小红书", changelog)
+        self.assertRegex(metadata, r"(?m)^version: 1\.1\.6$")
+        self.assertIn("version-1.1.6", readme)
+        self.assertIn('alt="版本 1.1.6"', readme)
+        self.assertIn("v1.1.6 版本更新", readme)
+        self.assertIn("移除小红书功能", readme)
+        self.assertIn("移除小红书功能", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
         release_headers = re.findall(
             r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
         )
-        self.assertEqual(release_headers[0], ("1.1.5", "2026-10-03"))
-        self.assertNotIn("## 未发布", changelog)
+        self.assertEqual(release_headers[0], ("1.1.6", "2026-10-08"))
+        pending_headers = re.findall(r"(?m)^## 未发布$", changelog)
+        self.assertLessEqual(len(pending_headers), 1)
+        if pending_headers:
+            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.6"))
+        self.assertLess(changelog.index("## v1.1.6"), changelog.index("## v1.1.5"))
         self.assertLess(changelog.index("v1.1.5"), changelog.index("## 🌐 v1.1.4"))
         self.assertLess(changelog.index("v1.1.4"), changelog.index("v1.1.3"))
         self.assertLess(changelog.index("v1.1.3"), changelog.index("v1.1.2"))
@@ -56,21 +93,36 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        current_release = changelog.split("## v1.1.5", 1)[1].split("## 🌐 v1.1.4", 1)[0]
-        self.assertIn("QQ 空间", current_release)
+        current_release = changelog.split("## v1.1.6", 1)[1].split("## v1.1.5", 1)[0]
+        self.assertIn("QQ 空间自然表达", current_release)
         self.assertIn("daily_life", current_release)
-        self.assertIn("photo_comment", current_release)
-        self.assertIn("cgi_add_piccomment_v2", current_release)
-        self.assertIn("cgi_add_reply_v2", current_release)
-        self.assertIn("ref=photo", current_release)
-        self.assertIn("batchId", current_release)
-        self.assertIn("platformSubId", current_release)
-        self.assertIn("单条动态最多识别图片数", current_release)
-        self.assertIn("生成一条评论", current_release)
-        self.assertIn("多人", current_release)
+        self.assertIn("综合已识别图片生成一条评论", current_release)
+        self.assertIn("第三张时提交到第三张", current_release)
+        self.assertIn("媒体任务恢复", current_release)
+        self.assertIn("模型缓存", current_release)
+        self.assertIn("缓存 token", current_release)
+        self.assertIn("未知提交", current_release)
+        self.assertIn("移除小红书功能", current_release)
         self.assertIn("数据库结构保持 v2", current_release)
-        self.assertIn("不新增配置项或依赖", current_release)
         self.assertIn("重载", current_release)
+        release_notes = (ROOT / "docs" / "release-v1.1.6.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("v1.1.6 · 2026-10-08", release_notes)
+        self.assertIn("不包含 daily_life 端改动", release_notes)
+
+        album_release = changelog.split("## v1.1.5", 1)[1].split("## 🌐 v1.1.4", 1)[0]
+        self.assertIn("QQ 空间", album_release)
+        self.assertIn("photo_comment", album_release)
+        self.assertIn("cgi_add_piccomment_v2", album_release)
+        self.assertIn("cgi_add_reply_v2", album_release)
+        self.assertIn("ref=photo", album_release)
+        self.assertIn("batchId", album_release)
+        self.assertIn("platformSubId", album_release)
+        self.assertIn("单条动态最多识别图片数", album_release)
+        self.assertIn("生成一条评论", album_release)
+        self.assertIn("多人", album_release)
+        self.assertNotIn("qzone_follow_life_chat_style", album_release)
 
         relationship_release = changelog.split("## 🌐 v1.1.4", 1)[1].split(
             "## 🛡️ v1.1.3", 1
@@ -406,7 +458,7 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIn("void commitConfigSave({ changeSeq })", scripts)
         self.assertIn("已自动加载最新设置", scripts)
 
-    def test_dashboard_media_uses_separate_models_without_manual_appearance(self):
+    def test_dashboard_media_uses_life_default_without_model_overrides(self):
         html = (ROOT / "pages" / "dashboard" / "index.html").read_text(encoding="utf-8")
         elements = (ROOT / "pages" / "dashboard" / "ui" / "elements.js").read_text(
             encoding="utf-8"
@@ -419,9 +471,8 @@ class TaskArchitectureTests(unittest.TestCase):
             ("cfgDailyLifeTextImageModel", "daily_life_text_image_model"),
             ("cfgDailyLifeEditImageModel", "daily_life_edit_image_model"),
         ):
-            self.assertIn(f'id="{element_id}"', html)
-            self.assertIn(f'document.getElementById("{element_id}")', elements)
-            self.assertIn(f'field: "{field}"', schema_map)
+            self.assertNotIn(element_id, html + elements + schema_map)
+            self.assertNotIn(field, schema_map)
         self.assertNotIn("cfgAppearancePrompt", html + elements + schema_map)
         self.assertNotIn('field: "appearance_prompt"', schema_map)
 
@@ -436,20 +487,33 @@ class TaskArchitectureTests(unittest.TestCase):
                         "daily_life_text_image_model": "gpt-image-text",
                         "daily_life_edit_image_model": "gpt-image-edit",
                         "appearance_prompt": "不应保存",
+                        "enable_ai_image": True,
                     }
                 }
             }
         )
 
-        self.assertEqual(
-            plugin.config["image_conf"]["daily_life_text_image_model"],
-            "gpt-image-text",
-        )
-        self.assertEqual(
-            plugin.config["image_conf"]["daily_life_edit_image_model"],
-            "gpt-image-edit",
-        )
+        self.assertNotIn("daily_life_text_image_model", plugin.config["image_conf"])
+        self.assertNotIn("daily_life_edit_image_model", plugin.config["image_conf"])
+        self.assertTrue(plugin.config["image_conf"]["enable_ai_image"])
         self.assertNotIn("appearance_prompt", plugin.config["image_conf"])
+
+        plugin.config["image_conf"].update(
+            {
+                "daily_life_text_image_model": "legacy-text",
+                "daily_life_edit_image_model": "legacy-edit",
+            }
+        )
+        plugin.dashboard_service.operations._page_config_schema_raw_cache = (
+            plugin.dashboard_service.operations.meta._read_page_config_schema_sync()
+        )
+        payload = plugin.dashboard_service.operations.payload._page_config_payload()
+        for key in ("daily_life_text_image_model", "daily_life_edit_image_model"):
+            self.assertNotIn(key, payload["sections"]["media"])
+            self.assertNotIn(key, payload["schema_values"]["sections"]["image_conf"])
+            self.assertNotIn(
+                key, payload["schema_meta"]["sections"]["image_conf"]["fields"]
+            )
 
     def test_dashboard_labels_all_video_sources_as_video(self):
         items = (ROOT / "pages" / "dashboard" / "ui" / "items.js").read_text(

@@ -27,8 +27,6 @@ class QzoneAutoInteractionConfig:
     comment_limit: int = QZONE_AUTO_COMMENT_DEFAULT_LIMIT
     reply_limit: int = QZONE_AUTO_REPLY_DEFAULT_LIMIT
     active_window_hours: int = 24
-    comment_prompt: str = ""
-    reply_prompt: str = ""
     comment_image_vision_enabled: bool = False
     comment_image_vision_limit: int = 1
     comment_image_vision_provider: str = ""
@@ -68,10 +66,6 @@ class QzoneAutoInteractionConfig:
                 min_value=0,
                 max_value=168,
             ),
-            comment_prompt=str(
-                source.get("qzone_auto_comment_prompt", "") or ""
-            ).strip(),
-            reply_prompt=str(source.get("qzone_auto_reply_prompt", "") or "").strip(),
             comment_image_vision_enabled=bool(
                 source.get("qzone_enable_auto_comment_image_vision", False)
             ),

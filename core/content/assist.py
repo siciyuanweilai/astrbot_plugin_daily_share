@@ -3,8 +3,8 @@ from typing import Any
 from astrbot.api import logger
 
 from ..config import TimePeriod
-from ..database.keys import QZONE_TARGET_ID, XIAOHONGSHU_TARGET_ID
-from ..prompt import build_private_target_prompt
+from ..database.keys import QZONE_TARGET_ID
+from ..prompt import build_private_target_prompt, build_qzone_post_prompt
 from .contentbase import ContentComponent
 
 
@@ -15,6 +15,33 @@ class ContentSupportService(ContentComponent):
         if target_umo:
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)
+
+    async def _generate_qzone_post(
+        self, ctx: dict, task: str, material: str = ""
+    ) -> str | None:
+        result = await self._call_llm(
+            prompt=build_qzone_post_prompt(ctx, task, material),
+            system_prompt=ctx["system_prompt"],
+            target_umo=ctx.get("target_id"),
+        )
+        if not result:
+            return None
+        bridge = getattr(self.service, "daily_life_bridge", None)
+        prepare = getattr(bridge, "prepare_expression", None)
+        if callable(prepare):
+            expression = await prepare(result, scene="qzone_post")
+            result = str(expression.get("text") or result).strip()
+        if len(result) > 80:
+            logger.info("[内容服务] QQ 空间正文仍过长，跳过本次发布，不机械截断")
+            return None
+        normalized = "".join(result.split())
+        if any(
+            normalized == "".join(text.split())
+            for text in ctx.get("recent_post_contents", [])
+        ):
+            logger.info("[内容服务] QQ 空间正文与近期已发布内容重复，跳过本次发布")
+            return None
+        return result
 
     def parse_category_config(self, data: Any) -> dict[str, list[str]]:
         result = {}
@@ -100,33 +127,16 @@ class ContentSupportService(ContentComponent):
             target = QZONE_TARGET_ID if target_id else ""
         else:
             target = str(target_id or "").strip()
-        is_qzone = target == QZONE_TARGET_ID
-        is_xiaohongshu = target == XIAOHONGSHU_TARGET_ID
+        if target == QZONE_TARGET_ID:
+            return ""
         general_format = str(
             self.basic_conf.get("share_output_format", "") or ""
         ).strip()
-        target_format = ""
-        if is_qzone:
-            target_format = str(
-                self.qzone_conf.get("qzone_share_output_format", "") or ""
-            ).strip()
-        elif is_xiaohongshu:
-            target_format = str(
-                self.config.get("xiaohongshu_conf", {})
-                .get("share_output_format", "")
-                or ""
-            ).strip()
-
-        output_format = target_format or general_format
+        output_format = general_format
         if not output_format:
             return ""
 
-        if target_format and is_qzone:
-            label = "QQ 空间说说输出格式"
-        elif target_format and is_xiaohongshu:
-            label = "小红书输出格式"
-        else:
-            label = "分享文案输出格式"
+        label = "分享文案输出格式"
         output_format = output_format[:1200]
         return (
             f"\n【{label}】\n"

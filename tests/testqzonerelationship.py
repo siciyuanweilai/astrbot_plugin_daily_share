@@ -311,12 +311,15 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
             "未确认关系", self.owner.plugin.call_llm.await_args.kwargs["prompt"]
         )
 
-    async def test_disabled_or_unavailable_life_context_does_not_block_reply(self):
+    async def test_legacy_life_switch_preserves_relationship_and_unavailable_does_not_block(
+        self,
+    ):
         self.owner.ctx_service.life_conf["enable_life_context"] = False
         self.assertEqual(
             await self.owner.generate_qzone_auto_comment(self.post), "测试回复"
         )
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["qq-test:FriendMessage:20002"])
+        self.assertIn("档案甲", self.owner.plugin.call_llm.await_args.kwargs["prompt"])
         self.owner.ctx_service.life_conf["enable_life_context"] = True
         self.owner.ctx_service.daily_life_bridge.get_share_context = AsyncMock(
             side_effect=RuntimeError("unavailable")

@@ -99,9 +99,6 @@ class DashboardRouteStatusService(PanelComponent):
                         self.image_conf.get("enable_ai_video", False)
                     ),
                     "tts_enabled": bool(self.tts_conf.get("enable_tts", False)),
-                    "web_search_enabled": bool(
-                        self.news_conf.get("enable_web_search", True)
-                    ),
                     "web_search_available": bool(
                         self.content_service.daily_life_bridge.search_available()
                     ),

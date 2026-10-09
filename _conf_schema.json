@@ -373,7 +373,7 @@
         "description": "分享文案输出格式",
         "type": "text",
         "default": "",
-        "hint": "可选。留空保持默认。填写自然语言格式要求，例如：使用 2-3 行短句；不要标题和编号；第一句写状态，第二句写感受，最后一句自然收束。"
+        "hint": "可选。适用于普通分享，不影响 QQ 空间说说。留空保持默认。填写自然语言格式要求，例如：使用 2-3 行短句；不要标题和编号；第一句写状态，第二句写感受，最后一句自然收束。"
       },
       "dawn_sequence": {
         "description": "【序列】凌晨时段 (00:00-06:00)",
@@ -474,7 +474,7 @@
   "context_conf": {
     "description": "🧠 上下文与记忆设置",
     "type": "object",
-    "hint": "配置生活日程集成、聊天历史读取和记忆记录。",
+    "hint": "生活状态固定联动 daily_life；配置群聊日程披露、聊天历史读取和记忆记录。",
     "items": {
       "reference_history_count": {
         "description": "生成时参考历史动态数",
@@ -487,23 +487,11 @@
         },
         "hint": "生成新动态时，参考最近N次发过的动态，保持人设连贯性并避免内容重复。设为0则不参考。"
       },
-      "enable_life_context": {
-        "description": "启用生活上下文",
-        "type": "bool",
-        "default": true,
-        "hint": "需要安装 astrbot_plugin_daily_life 插件，开启后，分享内容会结合日常生活状态（如当前活动、地点、天气、体力心情、关系和事件记忆等），使分享更自然真实"
-      },
-      "life_context_in_group": {
-        "description": "启用群聊拟人化人设",
-        "type": "bool",
-        "default": true,
-        "hint": "开启后，不再一味的机械播报，而是会带入生活状态与情绪，更具“人味”。"
-      },
       "group_share_schedule": {
         "description": "启用群聊展示日程细节",
         "type": "bool",
         "default": false,
-        "hint": "开启后，群聊中也会提到具体日程安排，关闭则仅显示抽象状态。"
+        "hint": "开启后允许群聊提及具体日程计划，保留执行状态，不将计划当作已完成；关闭时仅提供天气、心情、时段和忙碌度。两种模式均不传入关系档案、私聊记忆或地点档案。"
       },
       "enable_chat_history": {
         "description": "启用聊天历史消息",
@@ -618,7 +606,6 @@
             "zhihu",
             "weibo",
             "bili",
-            "xiaohongshu",
             "douyin",
             "kuaishou",
             "toutiao",
@@ -652,7 +639,6 @@
           "zhihu",
           "weibo",
           "bili",
-          "xiaohongshu",
           "douyin",
           "kuaishou",
           "toutiao",
@@ -698,12 +684,6 @@
           "step": 1
         },
         "hint": "获取新闻热搜的超时时间"
-      },
-      "enable_web_search": {
-        "description": "启用联网检索分享内容",
-        "type": "bool",
-        "default": true,
-        "hint": "开启后，新闻分享优先使用新闻源 API 返回的摘要或正文，缺少背景时由日常生活插件补充联网证据；知识和推荐分享也由日常生活插件提供联网证据。日常生活插件不可用或未启用搜索时会自动跳过，不影响分享。"
       }
     }
   },
@@ -716,19 +696,7 @@
         "description": "启用生成配图",
         "type": "bool",
         "default": false,
-        "hint": "开启后通过 astrbot_plugin_daily_life 生成图片。"
-      },
-      "daily_life_text_image_model": {
-        "description": "生活插件文生图模型",
-        "type": "string",
-        "default": "",
-        "hint": "填写 astrbot_plugin_daily_life 文生图通道中的模型名称。留空时保持文生图通道原有顺序；填写后只使用模型名称完全一致的文生图通道，同一模型的多条线路仍会依次容错。"
-      },
-      "daily_life_edit_image_model": {
-        "description": "生活插件图生图模型",
-        "type": "string",
-        "default": "",
-        "hint": "填写 astrbot_plugin_daily_life 图生图通道中的模型名称。留空时保持图生图通道原有顺序；填写后只使用模型名称完全一致的图生图通道，同一模型的多条线路仍会依次容错。"
+        "hint": "开启后通过 astrbot_plugin_daily_life 生成图片，默认使用当前生成方式的第一个可用生图通道；是否使用参考图及后续通道容错由生活插件处理，不在本插件指定模型。"
       },
       "attach_hot_news_image": {
         "description": "新闻热搜附带长图",
@@ -895,279 +863,6 @@
         "type": "bool",
         "default": false,
         "hint": "开启后，如果语音生成成功，将不再发送文字（仅发送语音+配图）。关闭则文字和语音都会发送。"
-      }
-    }
-  },
-  "xiaohongshu_conf": {
-    "description": "📕 小红书发布设置",
-    "type": "object",
-    "hint": "通过插件自带的小红书桥接服务，独立生成并发布日常分享。",
-    "items": {
-      "enable_xiaohongshu": {
-        "description": "启用小红书自动发布",
-        "type": "bool",
-        "default": false,
-        "hint": "自动发布还需要开启全局自动分享总开关；关闭本项时仍可使用管理员指令 /分享 [类型] 小红书 手动发布。"
-      },
-      "server_url": {
-        "description": "桥接服务地址",
-        "type": "string",
-        "default": "",
-        "hint": "填写插件自带桥接服务的 REST 地址，例如 http://127.0.0.1:18061/api。Docker 部署请填写 AstrBot 能访问到的服务地址。"
-      },
-      "bridge_token": {
-        "description": "桥接访问令牌",
-        "type": "string",
-        "default": "",
-        "_special": "secret",
-        "hint": "当桥接服务配置 XHS_BRIDGE_TOKEN 时填写相同令牌；本机 Docker 自动安装使用精确 IP 白名单时可留空。"
-      },
-      "timeout_seconds": {
-        "description": "请求超时秒数",
-        "type": "int",
-        "default": 120,
-        "slider": {
-          "min": 10,
-          "max": 600,
-          "step": 10
-        }
-      },
-      "media_path_source": {
-        "description": "媒体源路径前缀",
-        "type": "string",
-        "default": "",
-        "hint": "仅当发布服务看不到 AstrBot 容器内的媒体路径时填写；同机或共享目录部署请留空。"
-      },
-      "media_path_target": {
-        "description": "媒体服务路径前缀",
-        "type": "string",
-        "default": "",
-        "hint": "填写发布服务实际可访问的对应目录，并与媒体源路径前缀成对使用；通常无需填写。"
-      },
-      "trigger_mode": {
-        "description": "自动发布定时模式",
-        "type": "string",
-        "default": "固定时间",
-        "options": [
-          "固定时间",
-          "随机时段",
-          "高级定时"
-        ]
-      },
-      "fixed_times": {
-        "description": "自动发布固定时间",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "20:30"
-        ],
-        "hint": "格式 HH:MM，可一行一个。"
-      },
-      "random_periods": {
-        "description": "自动发布随机时段",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "19:00-21:00"
-        ],
-        "hint": "格式 HH:MM-HH:MM，结束时间必须晚于开始时间。"
-      },
-      "cron": {
-        "description": "自动发布高级 cron",
-        "type": "string",
-        "default": "30 20 * * *",
-        "hint": "标准 5 位 cron 表达式。"
-      },
-      "cron_random_delay": {
-        "description": "自动发布随机延迟(分钟)",
-        "type": "int",
-        "default": 0,
-        "slider": {
-          "min": 0,
-          "max": 60,
-          "step": 1
-        }
-      },
-      "share_type": {
-        "description": "默认分享类型",
-        "type": "string",
-        "default": "自动",
-        "options": [
-          "自动",
-          "问候",
-          "新闻",
-          "心情",
-          "知识",
-          "推荐"
-        ],
-        "hint": "常规定时使用的默认类型。选择“自动”时，会按下方的小红书时段序列轮换。"
-      },
-      "share_output_format": {
-        "description": "小红书输出格式",
-        "type": "text",
-        "default": "",
-        "hint": "可选。留空时沿用全局分享文案格式；可填写：像小红书日常笔记，分成 2-4 段，不要标题和编号。"
-      },
-      "xiaohongshu_dawn_sequence": {
-        "description": "【序列】凌晨时段 (00:00-06:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_morning_sequence": {
-        "description": "【序列】早晨时段 (06:00-09:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "问候",
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_forenoon_sequence": {
-        "description": "【序列】上午时段 (09:00-12:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_noon_sequence": {
-        "description": "【序列】中午时段 (12:00-14:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_afternoon_sequence": {
-        "description": "【序列】下午时段 (14:00-16:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_evening_sequence": {
-        "description": "【序列】傍晚时段 (16:00-19:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_night_sequence": {
-        "description": "【序列】夜晚时段 (19:00-22:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "xiaohongshu_late_night_sequence": {
-        "description": "【序列】深夜时段 (22:00-24:00)",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "心情",
-          "问候"
-        ],
-        "hint": "自动类型时按顺序循环。填写中文：问候、新闻、心情、知识、推荐。"
-      },
-      "enable_image": {
-        "description": "启用小红书配图",
-        "type": "bool",
-        "default": true,
-        "hint": "还需要开启媒体设置中的生成配图总开关。"
-      },
-      "require_image": {
-        "description": "发布前必须有配图",
-        "type": "bool",
-        "default": true,
-        "hint": "关闭后允许只发布文字；建议保持开启。"
-      },
-      "image_enabled_types": {
-        "description": "允许配图的类型",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [
-          "问候",
-          "心情",
-          "知识",
-          "推荐"
-        ]
-      },
-      "enable_video": {
-        "description": "启用小红书视频",
-        "type": "bool",
-        "default": false,
-        "hint": "需要媒体设置开启视频，并确保发布服务可以访问视频路径。"
-      },
-      "default_tags": {
-        "description": "默认话题标签",
-        "type": "list",
-        "items": {
-          "type": "string"
-        },
-        "default": [],
-        "hint": "每行一个标签，可带或不带 #。"
-      },
-      "enable_smart_tags": {
-        "description": "启用智能话题标签",
-        "type": "bool",
-        "default": true,
-        "hint": "根据分享类型和正文调用 LLM 自动生成标签；智能标签生成失败时回退到默认话题标签，智能标题生成失败时留空标题并继续发布。关闭后只使用上面的默认话题标签。"
-      },
-      "smart_tag_count": {
-        "description": "智能标签数量",
-        "type": "int",
-        "default": 3,
-        "slider": {
-          "min": 1,
-          "max": 8,
-          "step": 1
-        },
-        "hint": "最多自动补充的标签数量，不包含默认话题标签。"
-      },
-      "visibility": {
-        "description": "可见范围",
-        "type": "string",
-        "default": "公开可见",
-        "options": [
-          "公开可见",
-          "仅自己可见",
-          "仅互关好友可见"
-        ]
       }
     }
   },
@@ -1360,12 +1055,6 @@
         },
         "hint": "一次查询最多实际发送几条评论。建议 1-3 条，越小越自然。"
       },
-      "qzone_auto_comment_prompt": {
-        "description": "自动评论风格补充",
-        "type": "text",
-        "default": "",
-        "hint": "可选。用于补充评论风格，比如“轻松一点”“像熟人随口一句”“少用感叹号”。不要填写固定评论模板，否则容易显得重复。"
-      },
       "qzone_enable_auto_comment_image_vision": {
         "description": "启用好友动态配图识别",
         "type": "bool",
@@ -1407,12 +1096,6 @@
         },
         "hint": "一次查询最多实际发送几条回评。建议 1-3 条，越小越自然。"
       },
-      "qzone_auto_reply_prompt": {
-        "description": "自动回评风格补充",
-        "type": "text",
-        "default": "",
-        "hint": "可选。用于补充回评风格，比如“亲近一点”“像本人随手回一句”“少用感叹号”。不要填写固定回复模板。"
-      },
       "qzone_share_type": {
         "description": "说说分享模式",
         "type": "string",
@@ -1426,12 +1109,6 @@
           "推荐"
         ],
         "hint": "默认类型。常规定时直接使用；智能定时若单次计划指定具体类型，则优先使用计划类型，计划为自动时才按此项处理。自动会按下方【时段序列】轮换。"
-      },
-      "qzone_share_output_format": {
-        "description": "QQ 空间说说输出格式",
-        "type": "text",
-        "default": "",
-        "hint": "可选。留空时复用普通分享文案输出格式；普通分享也为空时保持默认。适合填写：像朋友圈随手记录；不要标题和编号；使用 2-4 行短句。"
       },
       "qzone_dawn_sequence": {
         "description": "【序列】凌晨时段 (00:00-06:00)",

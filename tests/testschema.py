@@ -1,5 +1,8 @@
 import importlib.util
 import json
+import shutil
+import subprocess
+import textwrap
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -195,6 +198,14 @@ def _load_dashboard_config_modules(config_module):
         (f"{dashboard_package_name}.payload", ROOT / "core" / "panel" / "payload.py"),
         (f"{apply_package_name}.field", ROOT / "core" / "panel" / "apply" / "field.py"),
         (
+            f"{apply_package_name}.section",
+            ROOT / "core" / "panel" / "apply" / "section.py",
+        ),
+        (
+            f"{apply_package_name}.zonectl",
+            ROOT / "core" / "panel" / "apply" / "zonectl.py",
+        ),
+        (
             f"{apply_package_name}.submission",
             ROOT / "core" / "panel" / "apply" / "submission.py",
         ),
@@ -250,17 +261,252 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertIn("dashboard_dynamic_days", basic_items)
         self.assertEqual(basic_items["dashboard_dynamic_days"]["default"], 60)
 
-    def test_share_output_format_config_exists(self):
+    def test_non_qzone_output_format_configs_remain(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         basic_items = schema["basic_conf"]["items"]
         qzone_items = schema["qzone_conf"]["items"]
 
         self.assertIn("share_output_format", basic_items)
-        self.assertIn("qzone_share_output_format", qzone_items)
+        self.assertNotIn("qzone_share_output_format", qzone_items)
         self.assertEqual(basic_items["share_output_format"]["type"], "text")
-        self.assertEqual(qzone_items["qzone_share_output_format"]["type"], "text")
         self.assertEqual(basic_items["share_output_format"]["default"], "")
-        self.assertEqual(qzone_items["qzone_share_output_format"]["default"], "")
+        self.assertIn("不影响 QQ 空间说说", basic_items["share_output_format"]["hint"])
+        self.assertNotIn("xiaohongshu_conf", schema)
+
+    def test_qzone_life_chat_style_switch_and_legacy_prompts_are_removed(self):
+        schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+        items = schema["qzone_conf"]["items"]
+        for key in (
+            "qzone_follow_life_chat_style",
+            "qzone_share_output_format",
+            "qzone_auto_comment_prompt",
+            "qzone_auto_reply_prompt",
+        ):
+            self.assertNotIn(key, items)
+        html = (ROOT / "pages/dashboard/index.html").read_text(encoding="utf-8")
+        mapping = (ROOT / "pages/dashboard/ui/schemamap.js").read_text(encoding="utf-8")
+        elements = (ROOT / "pages/dashboard/ui/elements.js").read_text(encoding="utf-8")
+        prefs = (ROOT / "pages/dashboard/ui/prefs.js").read_text(encoding="utf-8")
+        for element_id in (
+            "cfgQzoneLifeChatStyle",
+            "cfgQzoneShareOutputFormat",
+            "cfgQzoneAutoCommentPrompt",
+            "cfgQzoneAutoReplyPrompt",
+        ):
+            for source in (html, mapping, elements, prefs):
+                self.assertNotIn(element_id, source)
+
+    def test_dashboard_qzone_settings_do_not_submit_removed_style_controls(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("未安装 Node.js，跳过设置页交互验证")
+        script = textwrap.dedent(
+            """
+            import assert from 'node:assert/strict';
+            import { createSettingsConfig } from './pages/dashboard/ui/prefs.js';
+            import {
+                settingsSchemaBindings, settingsPayloadGroups, writeBoundSchemaFields,
+            } from './pages/dashboard/ui/schema.js';
+
+            globalThis.document = { getElementById: () => null };
+            globalThis.window = { clearTimeout: () => {}, setTimeout: () => 1 };
+            globalThis.HTMLSelectElement = class {};
+            globalThis.HTMLInputElement = class {};
+            const noop = () => {};
+            const state = { configChangeSeq: 0 };
+            const elements = {
+                cfgQzoneImage: { type: 'checkbox', checked: false },
+                configForm: { querySelector: () => null, querySelectorAll: () => [] },
+            };
+            const data = {
+                sections: {},
+                schema_values: { sections: { qzone_conf: {
+                    qzone_share_output_format: '保存的旧格式',
+                    qzone_follow_life_chat_style: true,
+                    qzone_enable_image: true,
+                } } },
+            };
+            const settings = createSettingsConfig({
+                state, elements, bridge: true, apiGet: async () => data,
+                setNotice: noop, syncSettingSlider: noop, syncSweetSelect: noop,
+                syncSweetSelects: noop, applySettingsSchemaEnhancements: noop,
+            });
+            assert.equal(await settings.loadConfig({ quiet: true }), true);
+            const toggle = elements.cfgQzoneImage;
+            assert.equal(toggle.checked, true);
+            for (const id of ['cfgQzoneShareOutputFormat', 'cfgQzoneLifeChatStyle']) {
+                assert.equal(id in settingsSchemaBindings(), false);
+                assert.equal(settingsPayloadGroups.qzone.includes(id), false);
+            }
+
+            for (const enabled of [false, true, false]) {
+                toggle.checked = enabled;
+                settings.handleConfigChanged({ type: 'change', target: toggle });
+                const payload = { sections: {}, schema_extra: { root: {}, sections: {} } };
+                writeBoundSchemaFields(payload, 'qzone', settingsPayloadGroups.qzone,
+                    { configData: data, elements });
+                assert.equal('qzone_share_output_format' in payload.sections.qzone, false);
+                assert.equal('qzone_follow_life_chat_style' in payload.sections.qzone, false);
+                assert.equal(payload.sections.qzone.qzone_enable_image, enabled);
+            }
+            assert.equal(state.configChangeSeq, 3);
+            """
+        )
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_redundant_life_switches_removed_without_removing_privacy_or_media_controls(
+        self,
+    ):
+        schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+        for section, key in (
+            ("context_conf", "enable_life_context"),
+            ("context_conf", "life_context_in_group"),
+            ("news_conf", "enable_web_search"),
+        ):
+            self.assertNotIn(key, schema[section]["items"])
+        for key in (
+            "group_share_schedule",
+            "enable_chat_history",
+            "record_share_to_memory",
+        ):
+            self.assertIn(key, schema["context_conf"]["items"])
+        self.assertIn("enable_ai_image", schema["image_conf"]["items"])
+        self.assertIn("qzone_enable_auto_interaction", schema["qzone_conf"]["items"])
+        for path in (
+            "pages/dashboard/index.html",
+            "pages/dashboard/ui/elements.js",
+            "pages/dashboard/ui/schemamap.js",
+            "pages/dashboard/ui/prefs.js",
+        ):
+            source = (ROOT / path).read_text(encoding="utf-8")
+            for element_id in (
+                "cfgLifeContext",
+                "cfgLifeContextGroup",
+                "cfgNewsWebSearch",
+            ):
+                self.assertNotIn(element_id, source)
+
+    def test_dashboard_life_sections_ignore_legacy_switch_submissions(self):
+        modules = _load_dashboard_config_modules(_load_config_module())
+
+        class Plugin(
+            modules["section"].DashboardApplySectionService,
+            modules["field"].DashboardApplyFieldService,
+            modules["validation"].DashboardConfigValidationService,
+        ):
+            pass
+
+        runtime = SimpleNamespace(config={})
+        plugin = Plugin(runtime)
+        runtime.fields = plugin
+        runtime.validation = plugin
+        for enabled in (False, True):
+            plugin._page_apply_context_section(
+                {
+                    "context": {
+                        "enable_life_context": enabled,
+                        "life_context_in_group": enabled,
+                        "group_share_schedule": enabled,
+                    }
+                }
+            )
+            plugin._page_apply_news_section(
+                {
+                    "news": {
+                        "enable_web_search": enabled,
+                        "enable_news_api": enabled,
+                    }
+                }
+            )
+            self.assertEqual(
+                plugin.config["context_conf"], {"group_share_schedule": enabled}
+            )
+            self.assertEqual(plugin.config["news_conf"], {"enable_news_api": enabled})
+
+    def test_dashboard_life_settings_do_not_submit_legacy_fields(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("未安装 Node.js，跳过设置页交互验证")
+        script = textwrap.dedent(
+            """
+            import assert from 'node:assert/strict';
+            import { settingsSchemaBindings, settingsPayloadGroups, writeBoundSchemaFields }
+                from './pages/dashboard/ui/schema.js';
+            globalThis.document = { getElementById: () => null };
+            const data = { schema_values: { sections: {
+                context_conf: { enable_life_context: false, life_context_in_group: false },
+                news_conf: { enable_web_search: false },
+            } } };
+            const elements = {
+                cfgGroupSchedule: { type: 'checkbox', checked: true },
+                cfgNewsApiEnabled: { type: 'checkbox', checked: true },
+            };
+            for (const [group, ids] of [
+                ['context', ['cfgLifeContext', 'cfgLifeContextGroup']],
+                ['news', ['cfgNewsWebSearch']],
+            ]) {
+                for (const id of ids) {
+                    assert.equal(id in settingsSchemaBindings(), false);
+                    assert.equal(settingsPayloadGroups[group].includes(id), false);
+                }
+                const payload = { sections: {}, schema_extra: { root: {}, sections: {} } };
+                writeBoundSchemaFields(payload, group, settingsPayloadGroups[group],
+                    { configData: data, elements });
+                for (const key of ['enable_life_context', 'life_context_in_group', 'enable_web_search']) {
+                    assert.equal(key in payload.sections[group], false);
+                }
+                assert.equal(payload.sections[group][group === 'context' ? 'group_share_schedule' : 'enable_news_api'], true);
+            }
+            """
+        )
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_dashboard_qzone_apply_ignores_removed_switch_and_prompt_payloads(self):
+        modules = _load_dashboard_config_modules(_load_config_module())
+
+        class Plugin(
+            modules["zonectl"].DashboardApplyQzoneService,
+            modules["field"].DashboardApplyFieldService,
+            modules["validation"].DashboardConfigValidationService,
+        ):
+            pass
+
+        runtime = SimpleNamespace(config={"qzone_conf": {}})
+        plugin = Plugin(runtime)
+        runtime.fields = plugin
+        runtime.qzone_apply = plugin
+        runtime.validation = plugin
+        runtime.schedule_apply = SimpleNamespace(
+            _page_apply_schedule_fields=lambda *args: None
+        )
+        for enabled in (True, False):
+            plugin._page_apply_qzone_section(
+                {
+                    "qzone": {
+                        "qzone_follow_life_chat_style": enabled,
+                        "qzone_share_output_format": "旧页面提交的说说格式",
+                        "qzone_auto_comment_prompt": "旧页面提交的评论风格",
+                        "qzone_auto_reply_prompt": "旧页面提交的回评风格",
+                    }
+                }
+            )
+            self.assertEqual(plugin.config["qzone_conf"], {})
 
     def test_schedule_modes_use_current_qzone_auto_interaction_fields(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
@@ -370,7 +616,15 @@ class ConfigSchemaTests(unittest.TestCase):
                 "qzone_enable_auto_comment_image_vision": True,
                 "qzone_auto_interaction_active_hours": 12,
                 "qzone_share_output_format": "像说说一样分行。",
+                "qzone_follow_life_chat_style": True,
+                "qzone_auto_comment_prompt": "残留评论风格",
+                "qzone_auto_reply_prompt": "残留回评风格",
             },
+            "context_conf": {
+                "enable_life_context": False,
+                "life_context_in_group": False,
+            },
+            "news_conf": {"enable_web_search": False},
         }
         plugin.context = type("_Context", (), {"get_config": lambda self: {}})()
         plugin._page_config_schema_raw_cache = modules[
@@ -384,6 +638,21 @@ class ConfigSchemaTests(unittest.TestCase):
         ].DashboardConfigValidationService._page_category_lines
 
         payload = plugin._page_config_payload()
+        for section, group, keys in (
+            (
+                "context_conf",
+                "context",
+                ("enable_life_context", "life_context_in_group"),
+            ),
+            ("news_conf", "news", ("enable_web_search",)),
+        ):
+            for values in (
+                payload["schema_values"]["sections"][section],
+                payload["schema_meta"]["sections"][section]["fields"],
+                payload["sections"][group],
+            ):
+                for key in keys:
+                    self.assertNotIn(key, values)
         basic_values = payload["schema_values"]["sections"]["basic_conf"]
         qzone_values = payload["schema_values"]["sections"]["qzone_conf"]
         qzone_meta = payload["schema_meta"]["sections"]["qzone_conf"]["fields"]
@@ -391,7 +660,14 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertEqual(basic_values["share_output_format"], "使用两行短句。")
         self.assertTrue(qzone_values["qzone_enable_auto_comment_image_vision"])
         self.assertEqual(qzone_values["qzone_auto_interaction_active_hours"], 12)
-        self.assertEqual(qzone_values["qzone_share_output_format"], "像说说一样分行。")
+        for key in (
+            "qzone_follow_life_chat_style",
+            "qzone_share_output_format",
+            "qzone_auto_comment_prompt",
+            "qzone_auto_reply_prompt",
+        ):
+            for values in (qzone_values, qzone_meta, payload["sections"]["qzone"]):
+                self.assertNotIn(key, values)
         self.assertNotIn("qzone_auto_interaction_rate_limit_policy", qzone_values)
         self.assertNotIn(
             "qzone_auto_interaction_rate_limit_cooldown_seconds", qzone_values
@@ -660,6 +936,9 @@ class ConfigSchemaTests(unittest.TestCase):
                             "qzone_auto_comment_image_vision_limit": 9,
                             "qzone_auto_interaction_active_hours": 999,
                             "qzone_share_output_format": "像 QQ 空间说说一样自然分行。",
+                            "qzone_follow_life_chat_style": True,
+                            "qzone_auto_comment_prompt": "旧页面提交的评论风格",
+                            "qzone_auto_reply_prompt": "旧页面提交的回评风格",
                         },
                     }
                 }
@@ -671,11 +950,12 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertEqual(basic["share_output_format"], "第一句写状态，第二句写感受。")
         self.assertEqual(qzone["qzone_cron_random_delay"], 60)
         self.assertTrue(qzone["qzone_enable_auto_comment_image_vision"])
+        self.assertNotIn("qzone_follow_life_chat_style", qzone)
+        self.assertNotIn("qzone_auto_comment_prompt", qzone)
+        self.assertNotIn("qzone_auto_reply_prompt", qzone)
         self.assertEqual(qzone["qzone_auto_comment_image_vision_limit"], 9)
         self.assertEqual(qzone["qzone_auto_interaction_active_hours"], 168)
-        self.assertEqual(
-            qzone["qzone_share_output_format"], "像 QQ 空间说说一样自然分行。"
-        )
+        self.assertNotIn("qzone_share_output_format", qzone)
         self.assertNotIn("qzone_auto_interaction_rate_limit_policy", qzone)
         self.assertNotIn("qzone_auto_interaction_rate_limit_cooldown_seconds", qzone)
 
@@ -758,14 +1038,12 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertNotIn("use_gitee_selfie_ref", image_items)
         self.assertNotIn("daily_life_image_model", image_items)
         self.assertNotIn("appearance_prompt", image_items)
-        for key, mode in (
-            ("daily_life_text_image_model", "文生图"),
-            ("daily_life_edit_image_model", "图生图"),
+        for key in (
+            "daily_life_text_image_model",
+            "daily_life_edit_image_model",
         ):
-            self.assertIn(key, image_items)
-            self.assertEqual(image_items[key]["default"], "")
-            self.assertIn(mode, image_items[key]["description"])
-            self.assertIn("模型名称完全一致", image_items[key]["hint"])
+            self.assertNotIn(key, image_items)
+        self.assertIn("第一个可用生图通道", image_items["enable_ai_image"]["hint"])
         self.assertIn(
             "astrbot_plugin_daily_life", image_items["enable_ai_image"]["hint"]
         )

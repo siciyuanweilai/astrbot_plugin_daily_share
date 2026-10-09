@@ -1,4 +1,4 @@
-"""Multi-photo uploads: shared vision limits, one comment, isolated reply routing."""
+"""多图上传共用识图上限，仅发一条评论，各照片回评目标独立。"""
 
 import copy
 import json
@@ -81,6 +81,13 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
                     ("comment", post.photo_targets[0].pic_key, post.images)
                 )
                 return "Nice photo!"
+
+            async def generate_qzone_auto_photo_comment(
+                self, post, photo_posts, **kwargs
+            ):
+                return post.photo_targets[
+                    0
+                ].key, await self.generate_qzone_auto_comment(post, **kwargs)
 
             async def _generate_qzone_auto_reply(self, post, comment, **kwargs):
                 self.generated.append(
@@ -171,9 +178,15 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
                 meta=lambda: types.SimpleNamespace(id="vision-provider")
             ),
         )
-        self.manager.plugin.call_llm = AsyncMock(return_value="Nice photo!")
+        self.manager.plugin.call_llm = AsyncMock(
+            return_value=json.dumps({"photo_index": 1, "comment": "Nice photo!"})
+        )
         self.manager.generate_qzone_auto_comment = types.MethodType(
             self.task_module.TaskQzoneAutoCommentService.generate_qzone_auto_comment,
+            self.manager,
+        )
+        self.manager.generate_qzone_auto_photo_comment = types.MethodType(
+            self.task_module.TaskQzoneAutoCommentService.generate_qzone_auto_photo_comment,
             self.manager,
         )
 
@@ -624,6 +637,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_disabled_batch_vision_still_sends_only_one_text_comment(self):
         self.use_image_vision(limit=3, enabled=False)
+        self.manager.plugin.call_llm.return_value = "Nice photo!"
         self.assertEqual((await self.run_comment())["commented"], 1)
         self.vision.assert_not_awaited()
         self.manager.plugin.call_llm.assert_awaited_once()
@@ -634,6 +648,9 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_batch_vision_keeps_other_summaries_when_one_image_fails(self):
         self.use_image_vision(limit=3)
+        self.manager.plugin.call_llm.return_value = json.dumps(
+            {"photo_index": 3, "comment": "Third photo details are lovely!"}
+        )
         self.vision.side_effect = [
             types.SimpleNamespace(completion_text="First photo details"),
             RuntimeError("vision unavailable"),
@@ -645,10 +662,229 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         prompt = self.manager.plugin.call_llm.call_args.kwargs["prompt"]
         self.assertIn("First photo details", prompt)
         self.assertIn("Third photo details", prompt)
+        self.assertIn("图3（候选评论照片）: Third photo details", prompt)
+        self.assertNotIn("图2（候选评论照片）", prompt)
         self.assertEqual(len(self.writes()), 1)
+        self.assertEqual(self.writes()[0].kwargs["data"]["topicId"], "album-1_pic-3!!")
+
+    async def test_third_photo_comment_is_bound_to_third_photo_and_keeps_life_style(
+        self,
+    ):
+        self.use_image_vision(limit=3)
+        self.vision.side_effect = [
+            types.SimpleNamespace(completion_text="室内伸懒腰"),
+            types.SimpleNamespace(completion_text="展厅里欣赏画作"),
+            types.SimpleNamespace(completion_text="夕阳下坐在江边捧着饮料"),
+        ]
+        content = "江边这张好惬意，夕阳也刚刚好。"
+        self.manager.plugin.call_llm.return_value = json.dumps(
+            {"photo_index": 3, "comment": content}, ensure_ascii=False
+        )
+        self.manager.plugin.content_service = types.SimpleNamespace(
+            get_qzone_chat_style_prompt=AsyncMock(
+                return_value="生活聊天表达：自然、轻松。"
+            ),
+            get_persona_info=AsyncMock(return_value={"prompt": "原有人设"}),
+        )
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(self.vision.await_count, 3)
+        self.manager.plugin.call_llm.assert_awaited_once()
+        call = self.manager.plugin.call_llm.call_args
+        self.assertIn("媒体：正文图片 3 张", call.kwargs["prompt"])
+        self.assertIn("生活聊天表达：自然、轻松。", call.kwargs["system_prompt"])
+        self.assertIn("原有人设", call.kwargs["system_prompt"])
+        self.assertIn("只输出 JSON 对象", call.kwargs["system_prompt"])
+        self.assertNotIn("只输出评论/回复正文", call.kwargs["system_prompt"])
+        self.assertEqual(len(self.writes()), 1)
+        data = self.writes()[0].kwargs["data"]
+        self.assertEqual(
+            (data["topicId"], data["content"]), ("album-1_pic-3!!", content)
+        )
+        entry = self.manager.db.state[self.task_module.QZONE_AUTO_COMMENT_STATE_KEY][
+            "processed"
+        ]["20002:photo-batch:album-1:batch-1"]
+        self.assertEqual(entry["photo_target_key"], "album-1:pic-3!!")
+        self.assertEqual(entry["post_key"], "20002:photo:album-1:pic-3!!")
+        self.assertEqual(entry["content"], content)
+        self.assertEqual((await self.run_comment())["commented"], 0)
+        self.assertEqual(len(self.writes()), 1)
+
+    async def test_first_photo_vision_failure_does_not_renumber_second_photo(self):
+        self.use_image_vision(limit=3)
+        self.vision.side_effect = [
+            RuntimeError("vision unavailable"),
+            types.SimpleNamespace(completion_text="Second photo details"),
+            types.SimpleNamespace(completion_text="Third photo details"),
+        ]
+        self.manager.plugin.call_llm.return_value = json.dumps(
+            {"photo_index": 2, "comment": "Second photo looks great!"}
+        )
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        prompt = self.manager.plugin.call_llm.call_args.kwargs["prompt"]
+        self.assertIn("图2（候选评论照片）: Second photo details", prompt)
+        self.assertNotIn("图1（候选评论照片）", prompt)
+        self.assertEqual(self.writes()[0].kwargs["data"]["topicId"], "album-1_pic-2!!")
+
+    async def test_comprehensive_comment_keeps_all_three_images_and_explicit_batch_wording(
+        self,
+    ):
+        self.use_image_vision(limit=3)
+        self.vision.side_effect = [
+            types.SimpleNamespace(completion_text="室内伸懒腰"),
+            types.SimpleNamespace(completion_text="展厅里欣赏画作"),
+            types.SimpleNamespace(completion_text="夕阳下坐在江边捧着饮料"),
+        ]
+        content = "这组从屋里的慵懒到看展、江边的夕阳，松弛得刚刚好。"
+        self.manager.plugin.call_llm.return_value = json.dumps(
+            {"photo_index": 1, "comment": content}, ensure_ascii=False
+        )
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(self.vision.await_count, 3)
+        self.manager.plugin.call_llm.assert_awaited_once()
+        call = self.manager.plugin.call_llm.call_args
+        for detail in ("室内伸懒腰", "展厅里欣赏画作", "夕阳下坐在江边捧着饮料"):
+            self.assertIn(detail, call.kwargs["prompt"])
+        self.assertIn("本批照片只发一条综合评论", call.kwargs["prompt"])
+        self.assertIn("不是只评价提交落点这一张", call.kwargs["prompt"])
+        self.assertIn("综合同批全部已识别图片", call.kwargs["system_prompt"])
+        self.assertEqual(len(self.writes()), 1)
+        data = self.writes()[0].kwargs["data"]
+        self.assertEqual(
+            (data["topicId"], data["content"]), ("album-1_pic-1!!", content)
+        )
+
+    async def test_bad_photo_selection_never_falls_back_to_first_photo(self):
+        cases = [
+            "caption without a photo index",
+            "[]",
+            "null",
+            "{bad json}",
+            json.dumps({"comment": "Nice!"}),
+            json.dumps({"photo_index": True, "comment": "Nice!"}),
+            json.dumps({"photo_index": "1", "comment": "Nice!"}),
+            json.dumps({"photo_index": 1.0, "comment": "Nice!"}),
+            json.dumps({"photo_index": 0, "comment": "Nice!"}),
+            json.dumps({"photo_index": -1, "comment": "Nice!"}),
+            json.dumps({"photo_index": 4, "comment": "Nice!"}),
+            json.dumps({"photo_index": 1}),
+            json.dumps({"photo_index": 1, "comment": []}),
+            json.dumps({"photo_index": 1, "comment": " "}),
+            json.dumps({"photo_index": 1, "comment": "skip"}),
+        ]
+        for response in cases:
+            with self.subTest(response=response):
+                self.manager.db = FakeDb()
+                self.service._request.reset_mock()
+                self.use_image_vision(limit=3)
+                self.manager.plugin.call_llm.return_value = response
+                result = await self.run_comment()
+                self.assertEqual(
+                    (result["commented"], result["generation_failed"]), (0, 1)
+                )
+                self.manager.plugin.call_llm.assert_awaited_once()
+                self.assertEqual(self.writes(), [])
+
+    async def test_photo_selection_cannot_exceed_vision_limit_or_select_failed_image(
+        self,
+    ):
+        for limit, failure, selected in ((2, None, 3), (3, 2, 2)):
+            with self.subTest(limit=limit, failure=failure):
+                self.manager.db = FakeDb()
+                self.service._request.reset_mock()
+                self.use_image_vision(limit=limit)
+                if failure:
+                    self.vision.side_effect = [
+                        types.SimpleNamespace(completion_text="First photo details"),
+                        RuntimeError("vision unavailable"),
+                        types.SimpleNamespace(completion_text="Third photo details"),
+                    ]
+                self.manager.plugin.call_llm.return_value = json.dumps(
+                    {"photo_index": selected, "comment": "Nice!"}
+                )
+                result = await self.run_comment()
+                self.assertEqual(
+                    (result["commented"], result["generation_failed"]), (0, 1)
+                )
+                self.assertEqual(self.vision.await_count, limit)
+                self.assertEqual(self.writes(), [])
+
+    async def test_reordered_feed_keeps_selected_photo_identity(self):
+        self.use_image_vision(limit=3)
+        self.post.photo_targets.reverse()
+        self.payload["data"]["photos"].reverse()
+        self.manager.plugin.call_llm.return_value = (
+            '```json\n{"photo_index": 3, "comment": "Third photo!"}\n```'
+        )
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(
+            [call.kwargs["image_urls"] for call in self.vision.call_args_list],
+            [[f"https://photo.example/photo-{index}.jpg"] for index in (1, 2, 3)],
+        )
+        data = self.writes()[0].kwargs["data"]
+        self.assertEqual(
+            (data["topicId"], data["content"]), ("album-1_pic-3!!", "Third photo!")
+        )
+
+    async def test_duplicate_or_missing_image_url_keeps_selection_mapping(self):
+        for image_url, selected in (("https://photo.example/photo-1.jpg", 2), ("", 2)):
+            with self.subTest(image_url=image_url):
+                self.manager.db = FakeDb()
+                self.service._request.reset_mock()
+                self.payload["data"]["photos"][1]["url"] = image_url
+                self.payload["data"]["photos"][1]["pre"] = image_url
+                self.use_image_vision(limit=3)
+                self.manager.plugin.call_llm.return_value = json.dumps(
+                    {"photo_index": selected, "comment": "Third photo!"}
+                )
+                result = await self.run_comment()
+                self.assertEqual((result["commented"], result["failed"]), (1, 0))
+                self.assertEqual(self.vision.await_count, 2)
+                self.assertEqual(
+                    self.writes()[0].kwargs["data"]["topicId"], "album-1_pic-3!!"
+                )
+
+    async def test_selected_third_photo_is_pinned_across_rate_limited_retry(self):
+        self.use_image_vision(limit=3)
+        self.manager.plugin.call_llm.return_value = json.dumps(
+            {"photo_index": 3, "comment": "Third photo!"}
+        )
+        normal_request = self.request
+
+        async def request(method, url, **kwargs):
+            if method == "POST":
+                return {"code": -10000, "message": "操作频繁，请稍后再试"}
+            return await normal_request(method, url, **kwargs)
+
+        self.service._request.side_effect = request
+        first = await self.run_comment()
+        self.assertEqual((first["commented"], first["failed"]), (0, 0))
+        self.assertTrue(first["rate_limited"])
+        entry = self.manager.db.state[self.task_module.QZONE_AUTO_COMMENT_STATE_KEY][
+            "processed"
+        ]["20002:photo-batch:album-1:batch-1"]
+        self.assertEqual(entry["action"], "retry_later")
+        self.assertEqual(entry["photo_target_key"], "album-1:pic-3!!")
+        self.post.photo_targets.reverse()
+        self.service._request.side_effect = normal_request
+        second = await self.run_comment()
+        self.assertEqual((second["commented"], second["failed"]), (1, 0))
+        self.manager.plugin.call_llm.assert_awaited_once()
+        self.assertEqual(self.vision.await_count, 3)
+        self.assertEqual(
+            [
+                (call.kwargs["data"]["topicId"], call.kwargs["data"]["content"])
+                for call in self.writes()
+            ],
+            [("album-1_pic-3!!", "Third photo!"), ("album-1_pic-3!!", "Third photo!")],
+        )
 
     async def test_all_batch_vision_failures_fall_back_to_one_text_comment(self):
         self.use_image_vision(limit=3)
+        self.manager.plugin.call_llm.return_value = "Nice photo!"
         self.vision.side_effect = RuntimeError("vision unavailable")
         self.assertEqual((await self.run_comment())["commented"], 1)
         self.assertEqual(self.vision.await_count, 3)
@@ -664,7 +900,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.use_image_vision(limit=3)
         self.manager.plugin.call_llm.side_effect = [
             RuntimeError("generation unavailable"),
-            "Nice photo!",
+            json.dumps({"photo_index": 1, "comment": "Nice photo!"}),
         ]
         first = await self.run_comment()
         self.assertEqual((first["commented"], first["generation_failed"]), (0, 1))
@@ -686,7 +922,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.use_image_vision(limit=3)
         self.manager.plugin.call_llm.side_effect = [
             RuntimeError("generation unavailable"),
-            "Nice photo!",
+            json.dumps({"photo_index": 1, "comment": "Nice photo!"}),
         ]
         self.assertEqual((await self.run_comment())["generation_failed"], 1)
         self.payload["data"]["photos"][0]["url"] = (
@@ -909,7 +1145,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.writes()), 1)
 
     async def test_viewer_comments_cannot_be_associated_with_neighbor_photo(self):
-        # The requested key exists in the response but the current viewer photo differs.
+        # 响应中包含请求的照片标识，但查看器当前照片并非该目标。
         self.service._request = AsyncMock(return_value=self.payload)
         with self.assertRaisesRegex(RuntimeError, "未包含请求"):
             await self.service.query_photo(

@@ -50,7 +50,14 @@ class DatabaseStateService(DatabaseRepository):
                 ),
             )
 
-    def _sync_update_domain_state(self, domain: str, key: str, updates: dict) -> dict:
+    def _sync_update_domain_state(
+        self,
+        domain: str,
+        key: str,
+        updates: dict,
+        cache_field: str | None = None,
+        max_items: int | None = None,
+    ) -> dict:
         domain = self._state_domain(domain)
         with self._connection(write=True) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -66,7 +73,21 @@ class DatabaseStateService(DatabaseRepository):
                     current = {}
             if not isinstance(current, dict):
                 current = {}
-            current.update(updates)
+            if max_items is None:
+                current.update(updates)
+            else:
+                cache = current if cache_field is None else current.get(cache_field)
+                if not isinstance(cache, dict):
+                    cache = {}
+                for item_key, value in updates.items():
+                    cache.pop(item_key, None)
+                    cache[item_key] = value
+                for item_key in list(cache)[: max(0, len(cache) - max_items)]:
+                    cache.pop(item_key, None)
+                if cache_field is not None:
+                    current[cache_field] = cache
+                else:
+                    current = cache
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             conn.execute(
                 """
@@ -90,6 +111,27 @@ class DatabaseStateService(DatabaseRepository):
 
     async def _update_domain_state(self, domain: str, key: str, updates: dict) -> dict:
         return await self._execute(self._sync_update_domain_state, domain, key, updates)
+
+    async def merge_cache_entries(
+        self,
+        domain: str,
+        key: str,
+        entries: dict,
+        *,
+        max_items: int,
+        cache_field: str | None = None,
+    ) -> dict:
+        """事务内合并缓存增量并淘汰旧条目，保留其他运行状态。"""
+        if max_items < 1:
+            raise ValueError("缓存容量必须大于零")
+        return await self._execute(
+            self._sync_update_domain_state,
+            domain,
+            key,
+            dict(entries),
+            cache_field,
+            max_items,
+        )
 
     async def get_share_state(self, key: str, default: Any | None = None) -> Any:
         return await self._get_domain_state("share", key, default)

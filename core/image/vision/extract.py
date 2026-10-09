@@ -31,20 +31,26 @@ def _visual_time_hint(period: TimePeriod, hour: int) -> str:
     return "深夜的幽暗氛围，漆黑的环境，城市夜景，昏暗的室内人造光，宁静的氛围"
 
 
-def _visual_outfit_hint(is_night: bool) -> str:
-    if is_night:
-        return (
-            "当前是休息时间；如果【生活日程】提供了【今日穿搭】，它就是已经穿上的当前事实，"
-            "必须按原文提取，不得因为深夜、居家、卧床或晚安文案自行替换成睡衣。"
-            "只有【今日穿搭】为空时，才能根据明确的睡前状态推断睡衣或家居服。"
-        )
-    return (
-        "如果【生活日程】提供了【今日穿搭】，必须按原文提取；"
-        "只有【今日穿搭】为空时，才能结合地点、天气和温度推断合理穿搭。"
-    )
+def _life_structured_appearance(life_context: str | None) -> dict[str, str]:
+    """读取群聊安全快照中的主角外观，不扫描其他资料。"""
+    try:
+        data = json.loads(life_context or "")
+    except (TypeError, ValueError):
+        return {}
+    appearance = data.get("主角本人配图外观") if isinstance(data, dict) else None
+    if not isinstance(appearance, dict):
+        return {}
+    return {
+        key: appearance[key].strip()
+        for key in ("穿搭", "发型名称", "发型细节", "妆容", "美甲")
+        if isinstance(appearance.get(key), str) and appearance[key].strip()
+    }
 
 
 def _life_current_outfit(life_context: str | None) -> str:
+    appearance = _life_structured_appearance(life_context)
+    if appearance:
+        return appearance.get("穿搭", "")
     prefix = "【今日穿搭】"
     for line in str(life_context or "").splitlines():
         text = line.strip()
@@ -61,6 +67,13 @@ def _life_current_appearance(life_context: str | None) -> dict[str, str]:
         "妆容": "makeup",
         "美甲": "nails",
     }
+    structured = _life_structured_appearance(life_context)
+    if structured:
+        return {
+            key: structured[label]
+            for label, key in fields.items()
+            if label in structured
+        }
     for line in str(life_context or "").splitlines():
         text = line.strip()
         if not text.startswith(prefix):
@@ -111,38 +124,33 @@ class ImageVisualExtractService(ImageVisualFrameService):
         if not involves_self:
             return (
                 "请根据文案主体、地点、情绪和画面重点自然选择构图，不要按分享类型固定镜头；"
-                "可以选择静物特写、环境中景、远景或全景。若出现人物，也只作为环境尺度参考，不补充完整衣着细节。"
+                "可以选择静物特写、环境中景、远景或全景，不加入人物。"
+                "visual_mode 根据主体填写 object 或 landscape。"
             )
         return (
             "请根据文案主体、情绪、动作、地点和画面重点自然选择构图，不要按分享类型固定镜头；"
             "可以选择脸部近景、半身、中景、远景、全景、手部或物品特写。"
             "composition 写最终构图，frame_logic 说明为什么这样取景以及哪些内容在画面范围内可见。"
+            "visual_mode 填写 person。"
             "outfit、hair_style、hair、makeup、nails 和 action 只写入该构图中能直接看见的内容，"
             "不把生活状态里未入镜的内容写进画面词。"
         )
 
-    def _visual_extraction_system_prompt(
-        self,
-        *,
-        hour: int,
-        time_hint: str,
-        outfit_hint: str,
-        logic_prompt: str,
-        frame_prompt: str,
-    ) -> str:
+    def _visual_extraction_system_prompt(self) -> str:
         return f"""你是一个专业的 AI 绘画视觉导演。
 任务：根据用户的【分享文案】和【生活日程】，提取画面要素。
 
-【预设构图】
-{frame_prompt}
+【构图边界】
+根据用户提供的【预设构图】确定是否包含人物；仅描述最终取景中可见的内容，
+不把生活状态里未入镜的内容写进画面词。
 
 【提取逻辑】
 1. **分析主体 (Subject)**：首先判断文案是否在描述或推荐一个**具体物品**（如美食、书籍、电子产品、电影海报）。
    - 如果是：该物品就是【subject】。
    - 如果否（文案是纯风景描绘）：【subject】填“无”。
 2. **分析背景 (Environment)**：
-{logic_prompt}
-3. **时间边界**：不要提取 {hour}:00 之后尚未发生的未来日程作为背景；若当前时段没有明确地点，使用当前状态、室内外线索或“未知”。
+   - 按用户提供的【当前画面条件】确定地点来源和优先级。
+3. **时间边界**：不要提取当前小时之后尚未发生的未来日程作为背景；若当前时段没有明确地点，使用当前状态、室内外线索或“未知”。
 4. **场景与外观判断**：先判断当前画面属于“家里 / 室内公共场所 / 室外 / 未知”，再根据地点、天气、温度、动作和构图可见范围决定穿搭与当前外观。
 
 {_visual_outfit_policy()}
@@ -150,13 +158,13 @@ class ImageVisualExtractService(ImageVisualFrameService):
 【提取要求】
 1. **主体 (subject)**：【最重要】画面的核心物体描述（例如：精致的荷花酥，一杯牛奶或者一本封皮复古的书）。如果是纯风景或画人，此项填“无”。
 2. **环境 (environment)**：根据逻辑确定的具体地点。
-3. **光影 (lighting)**：参考时间段[{time_hint}]。如果是室内，强调人造光；如果是室外，强调自然天气氛围。
+3. **光影 (lighting)**：参考【当前画面条件】的光线。如果是室内，强调人造光；如果是室外，强调自然天气氛围。
 4. **场景 (scene_type)**：填“家里 / 室内公共场所 / 室外 / 未知”之一。
 5. **温感 (temperature_feel)**：根据天气温度和文案判断，填“寒冷 / 微凉 / 舒适 / 温暖 / 炎热 / 未知”之一。
 6. **天气 (weather_condition)**：提取晴、雨、雪、阴、闷热、潮湿等真实天气；不明确则填“未知”。
 7. **构图 (composition)**：根据文案主体、动作、情绪、地点、光影和物品关系自然选择景别；可用近景、半身、中景、远景、全景、手部特写、物品特写、静物构图等，不要按分享类型固定镜头。
 8. **构图逻辑 (frame_logic)**：用一句话说明为什么这样取景，并说明哪些身体范围、物品或环境会进入画面。
-9. **穿搭 (outfit)**：只描述主角/你本人在 composition 里能看见的穿搭。{outfit_hint} 可说明内搭/外穿层次、外套状态和可见鞋袜；不要描写其他人的衣着。
+9. **穿搭 (outfit)**：只描述主角/你本人在 composition 里能看见的穿搭，遵循主角外观决策策略；可说明内搭/外穿层次、外套状态和可见鞋袜，不要描写其他人的衣着。
 10. **发型名称 (hair_style)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天发型名称；没有则留空。
 11. **发型细节 (hair)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天发型细节；没有则留空。
 12. **妆容 (makeup)**：只提取【当前外观】明确提供且在 composition 里可见的主角当天妆容；没有则留空。
@@ -166,6 +174,7 @@ class ImageVisualExtractService(ImageVisualFrameService):
 
 请严格输出 JSON 格式：
 {{
+    "visual_mode": "person / object / landscape",
     "subject": "...",
     "environment": "...",
     "lighting": "...",
@@ -200,21 +209,13 @@ class ImageVisualExtractService(ImageVisualFrameService):
         now = datetime.now()
         period = self._get_current_period()
         hour = now.hour
-        system_prompt = self._visual_extraction_system_prompt(
-            hour=hour,
-            time_hint=_visual_time_hint(period, hour),
-            outfit_hint=_visual_outfit_hint(
-                period in [TimePeriod.LATE_NIGHT, TimePeriod.DAWN]
-            ),
-            logic_prompt=_visual_location_logic(
-                self.img_conf.get("priority_text_over_schedule", True), hour
-            ),
-            frame_prompt=self._format_visual_extraction_frame(
-                share_type, involves_self
-            ),
-        )
+        system_prompt = self._visual_extraction_system_prompt()
         user_prompt = (
-            f"【分享文案】：{content}\n【生活日程】：{life_context}\n\n请提取视觉元素："
+            f"【当前画面条件】\n当前小时：{hour}:00\n"
+            f"当前光线：{_visual_time_hint(period, hour)}\n"
+            f"地点来源：{_visual_location_logic(self.img_conf.get('priority_text_over_schedule', True), hour)}\n"
+            f"【预设构图】\n{self._format_visual_extraction_frame(share_type, involves_self)}\n"
+            f"【分享文案】：{content}\n【生活日程】：{life_context or ''}\n\n请提取视觉元素："
         )
 
         try:

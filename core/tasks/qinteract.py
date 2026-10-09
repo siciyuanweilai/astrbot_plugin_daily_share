@@ -32,6 +32,7 @@ from .interact.formatting import (
     _qzone_summary_generation_failed_suffix as _qzone_summary_generation_failed_suffix,
 )
 from .interact.options import QzoneAutoInteractionConfig
+from .interact.receipt import record_qzone_interaction
 from .interact.response import (
     _qzone_copy_reply_verification_fields,
     _qzone_reply_exception_fields,
@@ -139,7 +140,10 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
                 "last_result": result,
             }
         )
-        await self.db.set_qzone_state(state_key, state)
+        await self.db.update_qzone_state(
+            state_key,
+            {key: value for key, value in state.items() if key != "image_vision_cache"},
+        )
 
     def _qzone_find_parent_comment(
         self, post, comment, *, index: QzoneCommentIndex | None = None
@@ -275,6 +279,14 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
         )
 
         _mark_qzone_processed(processed, item_key, processed_action, **fields)
+        await record_qzone_interaction(
+            self,
+            post,
+            reply,
+            scene="qzone_reply",
+            comment_id=str(getattr(comment, "tid", "") or ""),
+            actor_id=str(getattr(comment, "uin", "") or ""),
+        )
         count_key = str(result_count_key or "replied")
         result[count_key] = int(result.get(count_key, 0) or 0) + 1
         self.plugin.emit_dashboard_event(

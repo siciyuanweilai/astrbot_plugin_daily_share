@@ -59,7 +59,6 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("qzone_smart_schedule_quiet_hours", "list", ["23:30-07:30"]),
     _field("qzone_smart_schedule_prompt", "str", ""),
     _field("qzone_share_type", "raw", "\u81ea\u52a8"),
-    _field("qzone_share_output_format", "str", ""),
     _field("qzone_enable_image", "bool", False),
     _field("qzone_attach_hot_news_image", "bool", True),
     _field("qzone_image_enabled_types", "list", ["\u95ee\u5019", "\u5fc3\u60c5"]),
@@ -70,19 +69,15 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("qzone_auto_like_limit", "int", 3, zero_as_default=True),
     _field("qzone_enable_auto_comment", "bool", False),
     _field("qzone_auto_comment_limit", "int", 3, zero_as_default=True),
-    _field("qzone_auto_comment_prompt", "str", ""),
     _field("qzone_enable_auto_comment_image_vision", "bool", False),
     _field("qzone_auto_comment_image_vision_limit", "int", 1, zero_as_default=True),
     _field("qzone_auto_comment_image_vision_provider", "str", ""),
     _field("qzone_enable_auto_reply", "bool", False),
     _field("qzone_auto_reply_limit", "int", 3, zero_as_default=True),
-    _field("qzone_auto_reply_prompt", "str", ""),
 )
 
 _PAGE_MEDIA_FIELDS: tuple[_FieldSpec, ...] = (
     _field("enable_ai_image", "bool", False),
-    _field("daily_life_text_image_model", "str", ""),
-    _field("daily_life_edit_image_model", "str", ""),
     _field("attach_hot_news_image", "bool", True),
     _field("news_image_cleanup_max_count", "int", 200),
     _field("priority_text_over_schedule", "bool", True),
@@ -116,8 +111,6 @@ _PAGE_TTS_FIELDS: tuple[_FieldSpec, ...] = (
 
 _PAGE_CONTEXT_FIELDS: tuple[_FieldSpec, ...] = (
     _field("reference_history_count", "int", 3),
-    _field("enable_life_context", "bool", True),
-    _field("life_context_in_group", "bool", True),
     _field("group_share_schedule", "bool", False),
     _field("enable_chat_history", "bool", True),
     _field("enable_deep_history", "bool", True),
@@ -138,7 +131,6 @@ _PAGE_NEWS_FIELDS: tuple[_FieldSpec, ...] = (
     _field("news_items_count", "int", 5, zero_as_default=True),
     _field("news_share_count", "str", "1-2"),
     _field("news_api_timeout", "int", 30, zero_as_default=True),
-    _field("enable_web_search", "bool", True),
 )
 
 

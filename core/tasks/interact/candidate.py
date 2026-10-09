@@ -8,6 +8,27 @@ from .comments import QzoneCommentIndex, _comment_created_at, _comment_replies_t
 from .placement import _has_thread_reply_submit_plan, _unsafe_thread_target_reason
 from .tracker import _comment_key
 
+_QZONE_SKIP_REASON_LABELS = {
+    "already_processed": "已处理该评论",
+    "outside_active_window": "不在有效互动时间范围内",
+    "not_self_post": "不是机器人自己的动态",
+    "not_friend_post": "不是好友动态",
+    "self_comment": "评论来自机器人自己",
+    "official_qzone": "QQ 空间官方动态",
+    "already_replied": "已回复该评论",
+    "empty_comment": "评论内容为空",
+    "parent_is_self": "原一级评论来自机器人自己",
+    "parent_not_self": "原一级评论不是机器人发布的",
+    "missing_parent": "缺少原一级评论",
+    "already_replied_to_target": "已回复当前对象",
+    "has_later_nonself_reply": "已有更新的非机器人回复",
+    "self_reply_after_comment": "机器人回复晚于当前评论，缺少此前参与记录",
+    "missing_self_thread_reply": "缺少机器人在原楼层中的回复记录",
+    "photo_reply_not_to_bot": "相册回复未明确指向机器人",
+    "already_replied_to_photo_author": "已回复该相册评论人",
+    "synthetic_thread_tid_without_real_submit_id": "楼层仅有合成 tid，缺少真实提交 ID",
+}
+
 
 @dataclass(frozen=True)
 class QzoneReplyCandidate:
@@ -22,8 +43,10 @@ class QzoneReplyCandidate:
 def _log_qzone_candidate_skip(label: str, reason: str, post, comment) -> None:
     author = getattr(post, "name", "") or getattr(post, "uin", "") or ""
     target = getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
+    reason_label = _QZONE_SKIP_REASON_LABELS.get(reason, reason)
+    reason_text = f"{reason_label}（{reason}）" if reason_label != reason else reason
     logger.debug(
-        f"[日常分享] QQ 空间{label}候选跳过: 原因={reason}，动态={author}，评论={target}"
+        f"[日常分享] QQ 空间{label}候选跳过: 原因={reason_text}，动态={author}，评论={target}"
     )
 
 
@@ -40,8 +63,8 @@ def _photo_candidate_skip_reason(post, comment, parent, *, self_uin, index) -> s
         return reason
     if comment.reply_to_uin != self_uin:
         return "photo_reply_not_to_bot"
-    # QQ identifies the addressed account, not a specific preceding reply ID.
-    # A later bot reply to that account is enough to suppress old candidates.
+    # QQ 只标识被回复的账号，不提供对应的前序回复 ID。
+    # 机器人随后已回复该账号时，就不再处理较早的候选。
     if any(
         item.uin == self_uin
         and item.reply_to_uin in (0, comment.uin)
@@ -49,7 +72,7 @@ def _photo_candidate_skip_reason(post, comment, parent, *, self_uin, index) -> s
         for item in index.by_parent_tid.get(parent.tid, [])
     ):
         return "already_replied_to_photo_author"
-    # Replies from different people, or addressed elsewhere, are separate turns.
+    # 不同评论人或指向其他对象的回复属于独立轮次。
     if any(
         item.uin == comment.uin
         and item.reply_to_uin == self_uin

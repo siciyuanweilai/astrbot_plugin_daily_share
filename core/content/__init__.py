@@ -4,6 +4,7 @@ from astrbot.api import logger
 
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS, ShareType, TimePeriod
 from ..database.keys import (
+    QZONE_TARGET_ID,
     is_public_share_target,
     public_share_target_label,
 )
@@ -62,7 +63,6 @@ class ContentService:
         self.news_conf = self.config.get("news_conf", {})
         self.context_conf = self.config.get("context_conf", {})
         self.qzone_conf = self.config.get("qzone_conf", {})
-        self.xiaohongshu_conf = self.config.get("xiaohongshu_conf", {})
 
         self.topic = ContentTopicService(self)
         self.recommendation = ContentRecommendationService(self)
@@ -76,6 +76,9 @@ class ContentService:
     async def get_persona_info(self):
         return await self.support.get_persona_info()
 
+    async def get_qzone_chat_style_prompt(self, *, scene: str = "") -> str:
+        return await self.daily_life_bridge.get_share_chat_style_prompt(scene=scene)
+
     async def generate(
         self,
         stype: ShareType,
@@ -87,6 +90,7 @@ class ContentService:
         nickname: str = "",
         recent_dynamics: str = "",
         structured_history: str = "",
+        recent_post_contents: list[str] | None = None,
     ) -> str | None:
         """统一生成入口"""
         # 获取人设信息
@@ -111,19 +115,31 @@ class ContentService:
         date_str = now.strftime("%Y年%m月%d日")
         time_str = now.strftime("%H:%M")
 
+        life_hint = life_ctx or ""
+        chat_style = ""
+        is_qzone_post = target_id == QZONE_TARGET_ID
+        if is_qzone_post:
+            chat_style = await self.get_qzone_chat_style_prompt(scene="qzone_post")
+            if not chat_style:
+                chat_style = (
+                    "【QQ 空间说说表达】\n"
+                    "像平时说话一样随手发一条状态，意思说完就自然停住，"
+                    "按语意自然换行，不固定字数、行数或标题模板。"
+                )
+
         ctx_data = {
+            "qzone_chat_style_hint": chat_style,
             "target_id": target_id,
             "is_group": is_group,
-            "life_hint": life_ctx or "",
+            "is_qzone_post": is_qzone_post,
+            "life_hint": life_hint,
             "structured_history_hint": self.support._build_structured_history_prompt(
                 structured_history
             ),
             "system_prompt": build_content_system_prompt(
                 persona_info.get("prompt", "")
             ),
-            "output_format_hint": self.support._build_output_format_prompt(
-                target_id
-            ),
+            "output_format_hint": self.support._build_output_format_prompt(target_id),
             "public_target": is_public_share_target(target_id),
             "public_target_label": public_share_target_label(target_id),
             "period_label": self.support._get_period_label(period),
@@ -132,6 +148,7 @@ class ContentService:
             "nickname": call_name,
             "detect_name": detect_name,
             "recent_dynamics": recent_dynamics,
+            "recent_post_contents": recent_post_contents or [],
         }
 
         try:

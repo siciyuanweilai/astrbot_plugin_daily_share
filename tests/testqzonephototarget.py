@@ -1,4 +1,4 @@
-"""Photo targets must not confuse upload metadata with per-photo identities."""
+"""照片目标解析不能混淆上传元数据与单张照片标识。"""
 
 import unittest
 from dataclasses import replace
@@ -15,7 +15,7 @@ def batch_feed_html():
 
 
 def upload_feed_html():
-    # Feed markup reproduces the logged topic shape; identifiers are synthetic.
+    # 动态 HTML 复现日志中的 topicId 格式，标识均为测试构造值。
     return (Path(__file__).parent / "fixtures/qzone_album_upload_feed.html").read_text()
 
 

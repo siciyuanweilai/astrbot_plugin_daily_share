@@ -12,6 +12,15 @@ _PAGE_SHARE_TARGET_SCOPES = {
     "broadcast_users": "users",
 }
 
+_PAGE_SHARE_TARGETS = frozenset({
+    "broadcast", "broadcast_groups", "broadcast_users", "qzone", "briefing",
+})
+
+
+def _validate_page_share_target(target: str) -> None:
+    if target not in _PAGE_SHARE_TARGETS:
+        raise RuntimeError(f"不支持的分享目标: {target}")
+
 
 def _page_broadcast_target_scope(target: str) -> str:
     return _PAGE_SHARE_TARGET_SCOPES.get(target, "all")
@@ -29,10 +38,7 @@ class DashboardRouteActionService(PanelComponent):
     def _ensure_page_share_targets(
         self, target: str, specific_target: str = ""
     ) -> None:
-        if target == "xiaohongshu":
-            if str(self.xiaohongshu_conf.get("server_url", "") or "").strip():
-                return
-            raise RuntimeError("请先在小红书设置中填写发布服务地址。")
+        _validate_page_share_target(target)
         if target in {"qzone", "briefing"} or specific_target:
             return
         target_scope = _page_broadcast_target_scope(target)
@@ -59,6 +65,7 @@ class DashboardRouteActionService(PanelComponent):
                 share_lock.release()
             return
         try:
+            _validate_page_share_target(target)
             force_type = self.validation._page_share_type(share_type)
             source_key = self.validation._page_news_source(news_source)
             success_message = "分享成功"
@@ -71,17 +78,6 @@ class DashboardRouteActionService(PanelComponent):
                 if not ok:
                     raise RuntimeError("QQ 空间分享失败，请查看日志")
                 success_message = "QQ 空间分享成功"
-            elif target == "xiaohongshu":
-                ok = (
-                    await self.task_manager.xiaohongshu_share.execute_xiaohongshu_share(
-                        force_type=force_type,
-                        news_source=source_key,
-                        source_type=SOURCE_MANUAL,
-                    )
-                )
-                if not ok:
-                    raise RuntimeError("小红书发布失败，请查看日志")
-                success_message = "小红书发布成功"
             elif target == "briefing":
                 ok = await self.task_manager.briefing.execute_briefing_share(
                     source_type=SOURCE_MANUAL
@@ -120,15 +116,7 @@ class DashboardRouteActionService(PanelComponent):
         async def handler():
             body = await self.server._page_json_body()
             target = str(body.get("target") or "broadcast").strip()
-            if target not in {
-                "broadcast",
-                "broadcast_groups",
-                "broadcast_users",
-                "qzone",
-                "xiaohongshu",
-                "briefing",
-            }:
-                raise RuntimeError(f"不支持的分享目标: {target}")
+            _validate_page_share_target(target)
             if self.is_share_busy(global_scope=True):
                 raise BlockingIOError("已有任务正在分享，请稍后再试")
 

@@ -23,7 +23,7 @@ from .core.panel.common import (
 from .core.space import QzoneService
 from .core.support import SupportService
 from .core.tasks import TaskManager
-from .core.xhs import XiaohongshuClient
+from .core.tasks.continuation import ShareContinuationService
 
 
 class DailySharePlugin(Star):
@@ -46,7 +46,6 @@ class DailySharePlugin(Star):
         self.receiver_conf = self.config.get("receiver", {})
         self.extra_shares_conf = self.config.get("extra_shares", {})
         self.context_conf = self.config.get("context_conf", {})
-        self.xiaohongshu_conf = self.config.get("xiaohongshu_conf", {})
         self.news_conf = self.config.get("news_conf", {})
         self.contact_aliases = self.config.get("contact_aliases", [])
 
@@ -77,8 +76,7 @@ class DailySharePlugin(Star):
         self.db = DatabaseManager(self.data_dir, initialize=False)
 
         # 初始化服务层
-        self.daily_life_bridge = DailyLifeBridge(context)
-        self.xiaohongshu_client = XiaohongshuClient(self.xiaohongshu_conf)
+        self.daily_life_bridge = DailyLifeBridge(context, db=self.db)
         self.ctx_service = ContextService(context, config, self.daily_life_bridge)
         self.qzone_service = QzoneService(self)
         self.news_service = NewsService(config)
@@ -119,12 +117,12 @@ class DailySharePlugin(Star):
             context_conf=self.context_conf,
             receiver_conf=self.receiver_conf,
             daily_life_bridge=self.daily_life_bridge,
-            xiaohongshu_conf=self.xiaohongshu_conf,
         )
 
         # 核心逻辑解耦器
         self.task_manager = TaskManager(self)
         self.runtime_service = RuntimeService(self)
+        self.share_continuations = ShareContinuationService(self)
         self.support_service = SupportService(self)
         self.command_handler = CommandHandler(self.support_service)
         self.dashboard_service = DashboardService(self)
@@ -220,7 +218,7 @@ class DailySharePlugin(Star):
         self,
         prompt: str,
         system_prompt: str | None = None,
-        timeout: int = 60,
+        timeout: int | None = None,
         max_retries: int = 2,
         tools: list | None = None,
         umo: str | None = None,

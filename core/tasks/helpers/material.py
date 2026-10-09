@@ -6,16 +6,21 @@ from .imagery import TaskHelperMediaService
 class TaskHelperContextService(TaskHelperMediaService):
     """文案上下文和新闻快照辅助。"""
 
-    async def format_recent_dynamics(self, target_id: str) -> str:
+    async def _recent_share_history(self, target_id: str) -> list[dict]:
         try:
             ref_count = int(self.context_conf.get("reference_history_count", 3))
         except Exception:
             ref_count = 3
         if ref_count <= 0:
-            return ""
-        recent_hist = await self.db.get_recent_history_by_target(
-            target_id, limit=ref_count
-        )
+            return []
+        return await self.db.get_recent_history_by_target(target_id, limit=ref_count)
+
+    async def get_recent_post_contents(self, target_id: str) -> list[str]:
+        history = await self._recent_share_history(target_id)
+        return [str(item.get("content") or "").strip() for item in history]
+
+    async def format_recent_dynamics(self, target_id: str) -> str:
+        recent_hist = await self._recent_share_history(target_id)
         if not recent_hist:
             return ""
         return "\n".join(

@@ -58,7 +58,6 @@
 
 .settings-section[data-settings-section="sequence"],
 .settings-section[data-settings-section="qzoneSequence"],
-.settings-section[data-settings-section="xiaohongshu"],
 .settings-section[data-settings-section="llm"],
 .settings-section[data-settings-section="tts"] {
   --section-accent: var(--blue);
@@ -114,8 +113,6 @@
 
 .settings-section[data-settings-section="sequence"],
 .settings-section[data-settings-section="qzoneSequence"],
-.settings-section[data-settings-section="xiaohongshu"],
-.settings-section[data-settings-section="xiaohongshuSequence"],
 .settings-section[data-settings-section="basic"] {
   grid-column: span 6;
   min-height: 320px;
@@ -184,14 +181,6 @@
 
 .settings-section[data-settings-section="qzoneSequence"] {
   order: 120;
-}
-
-.settings-section[data-settings-section="xiaohongshu"] {
-  order: 125;
-}
-
-.settings-section[data-settings-section="xiaohongshuSequence"] {
-  order: 126;
 }
 
 .settings-section[data-settings-section="llm"] {
@@ -421,10 +410,7 @@
 }
 
 .settings-section[data-settings-section="sequence"] .setting-field,
-.settings-section[data-settings-section="qzoneSequence"] .setting-field,
-.settings-section[data-settings-section="xiaohongshu"] .setting-field,
-.settings-section[data-settings-section="xiaohongshuSequence"] .setting-field,
-.settings-section[data-settings-section="xiaohongshu"] .setting-switch {
+.settings-section[data-settings-section="qzoneSequence"] .setting-field {
   grid-column: span 6;
 }
 

@@ -66,6 +66,9 @@ class ContentComponent:
     async def _call_llm(self, *args, **kwargs):
         return await self.service.support._call_llm(*args, **kwargs)
 
+    async def _generate_qzone_post(self, ctx: dict, task: str, material: str = ""):
+        return await self.service.support._generate_qzone_post(ctx, task, material)
+
     def _build_user_prompt(self, *args, **kwargs):
         return self.service.support._build_user_prompt(*args, **kwargs)
 

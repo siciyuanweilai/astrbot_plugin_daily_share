@@ -258,10 +258,10 @@ export function createStatusView({
     if (strong && strong.textContent !== value) strong.textContent = value;
   }
 
-  function settingsSummaryItem(label, enabled) {
+  function settingsSummaryItem(label, enabled, statusLabel = "") {
     const node = document.createElement("span");
     node.className = `settings-summary-item ${enabled ? "is-on" : "is-off"}`;
-    node.textContent = `${label} ${enabledShortLabel(enabled)}`;
+    node.textContent = `${label} ${statusLabel || enabledShortLabel(enabled)}`;
     return node;
   }
 
@@ -421,7 +421,8 @@ export function createStatusView({
       settingsSummaryItem("语音", Boolean(cfg.tts_enabled)),
       settingsSummaryItem(
         "检索",
-        Boolean(cfg.web_search_enabled && cfg.web_search_available),
+        Boolean(cfg.web_search_available),
+        cfg.web_search_available ? "daily_life" : "未连接",
       ),
     ]);
     renderNextShareLine(nextJob);

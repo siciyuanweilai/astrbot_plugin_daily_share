@@ -5,6 +5,7 @@ from ...config import ShareType
 from ...constants import normalize_share_type_sequence, share_type_label
 from ...database.keys import QZONE_TARGET_ID
 from ...image import GeneratedImage
+from ...integrations.mediajob import ShareMediaPending
 from ...toolkit import format_exception, log_exception
 from .release import TaskQzonePublishService
 
@@ -60,6 +61,8 @@ class TaskQzoneMediaService(TaskQzonePublishService):
                         self.services.progress.fail_share_progress_step(
                             progress_id, "image", "配图生成失败，继续发送"
                         )
+                except ShareMediaPending:
+                    raise
                 except Exception as e:
                     log_exception(
                         "[日常分享] QQ 空间配图生成失败", e, with_traceback=False

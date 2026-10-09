@@ -63,14 +63,6 @@ class DashboardApplySectionService(PanelComponent):
             image["separate_send_delay"] = self.validation._page_delay_range_value(
                 media_body.get("separate_send_delay"), "1.0-2.0"
             )
-        for model_key in (
-            "daily_life_text_image_model",
-            "daily_life_edit_image_model",
-        ):
-            if model_key in media_body:
-                image[model_key] = self.validation._page_clean_text(
-                    media_body.get(model_key), max_len=500
-                )
         self.fields._page_apply_bool_fields(
             tts, media_body, ("enable_tts", "prefer_audio_only")
         )
@@ -101,8 +93,6 @@ class DashboardApplySectionService(PanelComponent):
             context_conf,
             context_body,
             (
-                "enable_life_context",
-                "life_context_in_group",
                 "group_share_schedule",
                 "enable_chat_history",
                 "enable_deep_history",
@@ -131,9 +121,7 @@ class DashboardApplySectionService(PanelComponent):
     def _page_apply_news_section(self, sections: dict) -> None:
         news_body = self.runtime.fields._page_payload_section(sections, "news")
         news = self.config.setdefault("news_conf", {})
-        self.fields._page_apply_bool_fields(
-            news, news_body, ("enable_news_api", "enable_web_search")
-        )
+        self.fields._page_apply_bool_fields(news, news_body, ("enable_news_api",))
         if "nycnm_api_key" in news_body:
             news["nycnm_api_key"] = self.validation._page_clean_text(
                 news_body.get("nycnm_api_key"), max_len=200

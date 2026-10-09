@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
+from ..integrations.mediajob import ShareMediaPending, current_share_job
 from ..toolkit import call_default_daily_life_media_tool, log_exception
 from .composer import _extract_json_object
 
@@ -123,6 +124,9 @@ class ImageVideoService:
         """图片转视频"""
         if not self.img_conf.get("enable_ai_video", False):
             return None
+        job = current_share_job.get()
+        if job is not None and job.get("video_started"):
+            return str(job.get("video_url") or "") or None
 
         started_at = monotonic()
         try:
@@ -157,6 +161,8 @@ class ImageVideoService:
                 )
             return video_ref
 
+        except ShareMediaPending:
+            raise
         except Exception as e:
             elapsed = monotonic() - started_at
             log_exception(

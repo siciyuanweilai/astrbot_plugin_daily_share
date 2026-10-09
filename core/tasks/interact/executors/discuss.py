@@ -6,6 +6,7 @@ from astrbot.api import logger
 from ..candidate import _qzone_friend_thread_comment_candidates
 from ..comments import QzoneCommentIndex
 from ..errors import QzoneAutoInteractionRateLimited
+from ..receipt import record_qzone_interaction
 from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
 from ..task import (
     _qzone_abort_query_failure,
@@ -33,11 +34,11 @@ from ..tracker import (
 from .pacing import QZONE_ACTION_DELAY_SECONDS
 
 
-def _qzone_auto_comment_generation_post(post, posts: list):
+def _qzone_auto_comment_batch_posts(post, posts: list) -> list:
     batch_key = _photo_batch_key(post)
     if not batch_key or post.comment_target_error:
-        return post
-    batch_posts = sorted(
+        return [post]
+    return sorted(
         (
             item
             for item in posts
@@ -48,8 +49,12 @@ def _qzone_auto_comment_generation_post(post, posts: list):
         ),
         key=lambda item: item.photo_targets[0].key,
     )
+
+
+def _qzone_auto_comment_generation_post(post, posts: list):
+    batch_posts = _qzone_auto_comment_batch_posts(post, posts)
     images = list(dict.fromkeys(image for item in batch_posts for image in item.images))
-    # Only generation sees the batch; keep cached write/reply scopes isolated.
+    # 仅生成文案时使用整批图片，缓存中的评论提交与回评目标仍按照片隔离。
     return replace(post, images=images) if images != post.images else post
 
 
@@ -209,11 +214,44 @@ async def _execute_qzone_auto_comment_new_posts(
             comment = pending_comment
         else:
             try:
-                comment = await owner.generate_qzone_auto_comment(
-                    _qzone_auto_comment_generation_post(post, posts),
-                    state=state,
-                    target_umo=target_umo,
-                )
+                batch_posts = _qzone_auto_comment_batch_posts(post, posts)
+                if len(batch_posts) > 1:
+                    (
+                        selected_key,
+                        comment,
+                    ) = await owner.generate_qzone_auto_photo_comment(
+                        _qzone_auto_comment_generation_post(post, batch_posts),
+                        batch_posts,
+                        state=state,
+                        target_umo=target_umo,
+                    )
+                    selected_post = next(
+                        (
+                            item
+                            for item in batch_posts
+                            if item.photo_targets[0].key == selected_key
+                        ),
+                        None,
+                    )
+                    if selected_post is None:
+                        raise RuntimeError("相册评论选择了本批以外的照片，停止提交")
+                    if (
+                        selected_post.key in skip_post_keys
+                        or not owner._qzone_auto_comment_candidate(
+                            selected_post, self_uin=ctx.uin, processed=processed
+                        )
+                    ):
+                        result["skipped"] += 1
+                        continue
+                    post = selected_post
+                    post_key = post.key
+                    photo_key = selected_key
+                else:
+                    comment = await owner.generate_qzone_auto_comment(
+                        post,
+                        state=state,
+                        target_umo=target_umo,
+                    )
             except Exception as exc:
                 result["failed"] += 1
                 result["generation_failed"] += 1
@@ -236,6 +274,13 @@ async def _execute_qzone_auto_comment_new_posts(
                 author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
                 photo_target_key=photo_key,
             )
+            await record_qzone_interaction(
+                owner,
+                post,
+                comment,
+                scene="qzone_comment",
+                actor_id=str(getattr(post, "uin", "") or ""),
+            )
             result["commented"] += 1
             owner.plugin.emit_dashboard_event(
                 "qzone",
@@ -244,6 +289,7 @@ async def _execute_qzone_auto_comment_new_posts(
             logger.info(
                 f"[日常分享] 已自动评论 QQ 空间动态: "
                 f"{getattr(post, 'name', '') or getattr(post, 'uin', '')}"
+                + (f"，照片={photo_key}" if photo_key else "")
             )
             await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
         except Exception as exc:

@@ -100,6 +100,76 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.logger_patcher.stop()
 
+    async def test_chat_style_uses_public_contract_and_filters_extra_data(self):
+        class Plugin:
+            async def get_share_chat_style(self):
+                return {
+                    "enabled": True,
+                    "prompt": "自然接话。\n不要刻意追问。",
+                    "chat_summaries": ["私聊内容不得透传"],
+                    "private_casual_max_chars": 15,
+                    "segment_delay_range": "1.5,3.5",
+                }
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+        prompt = await bridge.get_share_chat_style_prompt()
+        self.assertIn("【daily_life 聊天表达参考】", prompt)
+        self.assertIn("自然接话。 不要刻意追问。", prompt)
+        self.assertIn("当前公开场景的语气与表达节奏参考", prompt)
+        self.assertNotIn("说说输出格式独立控制排版", prompt)
+        self.assertNotIn("自动评论风格补充", prompt)
+        self.assertNotIn("自动回评风格补充", prompt)
+        self.assertNotIn("私聊内容不得透传", prompt)
+        self.assertNotIn("private_casual_max_chars", prompt)
+        self.assertNotIn("1.5,3.5", prompt)
+
+    async def test_chat_style_disabled_missing_and_invalid_results_fall_back(self):
+        async def get_style():
+            return result
+
+        plugin = types.SimpleNamespace(get_share_chat_style=get_style)
+        metadata = _metadata(plugin)
+        stars = [metadata]
+        bridge = DailyLifeBridge(types.SimpleNamespace(get_all_stars=lambda: stars))
+        for result in (
+            None,
+            [],
+            {"enabled": False, "prompt": "不应注入"},
+            {"enabled": "true", "prompt": "不应注入"},
+            {"enabled": True, "prompt": {}},
+            {"enabled": True, "prompt": "  "},
+        ):
+            with self.subTest(result=result):
+                self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+        result = {"enabled": True, "prompt": "语气"}
+        metadata.activated = False
+        self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+        metadata.activated = True
+        metadata.star_cls = object()
+        self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+        stars.clear()
+        self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+
+    async def test_chat_style_failure_falls_back_and_long_text_is_bounded(self):
+        async def get_style():
+            raise RuntimeError("正在重载")
+
+        plugin = types.SimpleNamespace(get_share_chat_style=get_style)
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(plugin)])
+        )
+        self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+
+        async def long_style():
+            return {"enabled": True, "prompt": "语" * 2000}
+
+        plugin.get_share_chat_style = long_style
+        prompt = await bridge.get_share_chat_style_prompt()
+        self.assertIn("语" * 500, prompt)
+        self.assertNotIn("语" * 501, prompt)
+
     def test_bridge_calls_real_daily_life_plugin_entry_in_isolated_runtime(self):
         script = textwrap.dedent(
             f"""
@@ -107,12 +177,16 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             import importlib.util
             import sys
             import types
+            from pathlib import Path
 
             sys.path.insert(0, {str(WORKSPACE / "astrbot_plugin_daily_life" / "tests")!r})
             import support
             sys.path.insert(0, {str(WORKSPACE)!r})
 
             from astrbot_plugin_daily_life.main import DailyLifePlugin
+            from astrbot_plugin_daily_life.core.config.options import ImageGenerationSettings
+            from astrbot_plugin_daily_life.core.media import GeminiImageService
+            from astrbot_plugin_daily_life.core.runtime.mirror.export import SnapshotExportMixin
 
             package = types.ModuleType('daily_share_contract')
             package.__path__ = [{str(WORKSPACE / "astrbot_plugin_daily_share")!r}]
@@ -132,8 +206,12 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             spec.loader.exec_module(module)
             DailyLifeBridge = module.DailyLifeBridge
 
-            class Runtime:
+            class Runtime(SnapshotExportMixin):
                 image_models = []
+                config = types.SimpleNamespace(chat_style=types.SimpleNamespace(
+                    enabled=True,
+                    casual_short_prompt='自然接话，不刻意扩写。',
+                ))
 
                 async def get_share_context(self, target_umo=''):
                     return {{
@@ -189,6 +267,15 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 context = await bridge.get_share_context(target)
                 assert context['target'] == target
                 assert context['share_guidance']['version'] == 1
+                style = await bridge.get_share_chat_style_prompt()
+                assert '自然接话，不刻意扩写。' in style
+                post_style = await bridge.get_share_chat_style_prompt(scene='qzone_post')
+                assert '公开说说沿用上述语气与表达节奏' in post_style
+                assert '不固定字数、行数或标题模板' in post_style
+                assert '私聊记忆' not in post_style
+                assert plugin._external_users == 0
+                plugin.runtime.config.chat_style.enabled = False
+                assert await bridge.get_share_chat_style_prompt() == ''
                 assert await bridge.record_external_activity(
                     target,
                     '测试分享内容',
@@ -204,17 +291,32 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 assert await bridge.generate_image(
                     None,
                     '配图提示词',
-                    text_model='gpt-image-text',
-                    edit_model='gpt-image-edit',
                 ) == 'image://配图提示词'
                 assert await bridge.generate_image(
                     None,
                     '兼容配图提示词',
                 ) == 'image://兼容配图提示词'
                 assert plugin.runtime.image_models == [
-                    ('gpt-image-text', 'gpt-image-edit'),
+                    ('', ''),
                     ('', ''),
                 ]
+                settings = ImageGenerationSettings.from_dict({{
+                    'enabled': True,
+                    'text_channels': [
+                        {{'api_url': 'https://first-text.example', 'api_key': 'test', 'model': 'first-text'}},
+                        {{'api_url': 'https://backup-text.example', 'api_key': 'test', 'model': 'backup-text'}},
+                    ],
+                    'edit_channels': [
+                        {{'api_url': 'https://first-edit.example', 'api_key': 'test', 'model': 'first-edit'}},
+                        {{'api_url': 'https://backup-edit.example', 'api_key': 'test', 'model': 'backup-edit'}},
+                    ],
+                }})
+                images = GeminiImageService(settings, Path('.'))
+                for mode in ('text', 'edit'):
+                    routes = await images._request_routes(mode)
+                    assert [route.model for route in routes] == [f'first-{{mode}}', f'backup-{{mode}}']
+                settings.text_channels.reverse()
+                assert (await images._request_routes('text'))[0].model == 'backup-text'
                 assert await bridge.generate_video(
                     None,
                     '视频提示词',
@@ -394,7 +496,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(bridge.media_available("audio"))
         self.assertFalse(bridge.media_available("unknown"))
 
-    async def test_bridge_passes_separate_image_models(self):
+    async def test_bridge_leaves_model_selection_to_daily_life(self):
         calls = []
 
         class Plugin:
@@ -403,14 +505,13 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 event,
                 prompt,
                 *,
-                text_model="",
-                edit_model="",
                 contains_character=False,
+                **kwargs,
             ):
                 calls.append(
-                    (event, prompt, text_model, edit_model, contains_character)
+                    (event, prompt, contains_character, kwargs)
                 )
-                return "image:model-selected"
+                return "image:default-channel"
 
         bridge = DailyLifeBridge(
             types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
@@ -419,26 +520,23 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         result = await bridge.generate_image(
             "event",
             "配图提示词",
-            text_model="gpt-image-text",
-            edit_model="gpt-image-edit",
             contains_character=True,
         )
 
-        self.assertEqual(result, "image:model-selected")
+        self.assertEqual(result, "image:default-channel")
         self.assertEqual(
             calls,
             [
                 (
                     "event",
                     "配图提示词",
-                    "gpt-image-text",
-                    "gpt-image-edit",
                     True,
+                    {},
                 )
             ],
         )
 
-    async def test_bridge_reports_old_daily_life_model_contract(self):
+    async def test_bridge_needs_no_model_selection_contract(self):
         class Plugin:
             async def generate_share_image(
                 self, event, prompt, *, contains_character=False
@@ -453,17 +551,12 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await bridge.generate_image(
                 None,
                 "配图提示词",
-                text_model="gpt-image-text",
-                edit_model="gpt-image-edit",
             ),
-            "",
+            "old-image",
         )
         self.assertEqual(
             bridge.media_result("image"),
-            (
-                "error",
-                "生活插件版本不支持分别指定文生图和图生图模型，请更新生活插件",
-            ),
+            ("ok", ""),
         )
 
     async def test_bridge_records_media_call_outcomes(self):

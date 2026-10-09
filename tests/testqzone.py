@@ -2430,7 +2430,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         service = _new_qzone_service(service_module)
         attempts = 0
 
-        async def unavailable_cookie():
+        async def unavailable_cookie(**kwargs):
             nonlocal attempts
             attempts += 1
             raise RuntimeError("OneBot 暂不可用")
@@ -3247,18 +3247,22 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return {"code": 0}
 
         service = Service()
-        # Capture identities are replaced with distinct author/login test IDs.
-        # Cached like URLs must not change the comment topic into a bare tid.
+        # 抓包身份已替换为不同的动态作者和登录账号测试 ID。
+        # 缓存的点赞 URL 不能将评论 topicId 改为单独的 tid。
         for has_feed_keys in (False, True):
             with self.subTest(has_feed_keys=has_feed_keys):
                 service.calls.clear()
                 post = service_module.QzonePost(
-                    uin=20002, tid="post-1", appid=311,
+                    uin=20002,
+                    tid="post-1",
+                    appid=311,
                     busi_param={"from": "feeds"},
                     curkey="https://user.qzone.qq.com/20002/mood/post-1"
-                    if has_feed_keys else "",
+                    if has_feed_keys
+                    else "",
                     unikey="https://user.qzone.qq.com/20002/mood/post-1"
-                    if has_feed_keys else "",
+                    if has_feed_keys
+                    else "",
                 )
                 service._post_cache[post.key] = post
 
@@ -3270,24 +3274,27 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 referer = data.pop("qzreferrer")
                 self.assertIn("/qzone/app/mood_v6/html/index.html#mood&", referer)
                 self.assertIn("&uin=20002&", referer)
-                self.assertEqual(data, {
-                    "uin": 10001,
-                    "hostUin": 20002,
-                    "topicId": "20002_post-1",
-                    "commentUin": 10001,
-                    "content": "有多无聊",
-                    "richval": "",
-                    "richtype": "",
-                    "inCharset": "",
-                    "outCharset": "",
-                    "ref": "",
-                    "private": 0,
-                    "with_fwd": 0,
-                    "to_tweet": 0,
-                    "hostuin": 10001,
-                    "code_version": 1,
-                    "format": "fs",
-                })
+                self.assertEqual(
+                    data,
+                    {
+                        "uin": 10001,
+                        "hostUin": 20002,
+                        "topicId": "20002_post-1",
+                        "commentUin": 10001,
+                        "content": "有多无聊",
+                        "richval": "",
+                        "richtype": "",
+                        "inCharset": "",
+                        "outCharset": "",
+                        "ref": "",
+                        "private": 0,
+                        "with_fwd": 0,
+                        "to_tweet": 0,
+                        "hostuin": 10001,
+                        "code_version": 1,
+                        "format": "fs",
+                    },
+                )
                 self.assertEqual(headers["Origin"], service.BASE_URL)
                 self.assertEqual(headers["Referer"], referer)
 
@@ -3339,9 +3346,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_comment_reads_captured_html_callback_via_gateway(self):
         service_module = _load_qzone_service()
-        response_text = (ROOT / "tests/fixtures/qzone_mood_comment_success.html").read_text(
-            encoding="utf-8"
-        )
+        response_text = (
+            ROOT / "tests/fixtures/qzone_mood_comment_success.html"
+        ).read_text(encoding="utf-8")
 
         class FakeResponse:
             status = 200
@@ -3375,7 +3382,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         post = service_module.QzonePost(uin=20002, tid="post-1")
         service._post_cache[post.key] = post
 
-        # Exercise the real gateway/parser, including JS try/catch before JSON.
+        # 验证实际网关和解析器，覆盖 JSON 前包含 JS try/catch 的响应。
         parsed = _parser().parse_qzone_response(response_text)
         self.assertEqual(parsed["code"], 0)
         self.assertEqual(parsed["data"]["id"], 3)

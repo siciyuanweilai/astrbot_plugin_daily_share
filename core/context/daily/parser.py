@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from ..contextbase import ContextComponent
 from ..shared import datetime, logger
 
@@ -7,10 +9,184 @@ from ..shared import datetime, logger
 class ContextLifeParseService(ContextComponent):
     """解析生活插件结构化数据为自然语言上下文。"""
 
+    @staticmethod
+    def _current_facts(data: dict) -> dict:
+        value = data.get("current_facts")
+        return value if isinstance(value, dict) else {}
+
+    def _current_action(self, data: dict) -> str:
+        facts = self._current_facts(data)
+        if facts.get("valid") is False:
+            return ""
+        action = facts.get("current_action") or {}
+        if not isinstance(action, dict) or not action.get("activity"):
+            return ""
+        label = {
+            "running": "进行中",
+            "paused": "已暂停，尚未完成",
+            "ready": "等待结算，尚未确认完成",
+            "settling": "结算中，尚未确认完成",
+        }.get(action.get("status"))
+        return (
+            f"{self._compact_life_text(action['activity'], 240)}（{label}）"
+            if label
+            else ""
+        )
+
+    @staticmethod
+    def _public_expression(data: dict) -> str:
+        guidance = data.get("share_guidance") or {}
+        expression = guidance.get("expression") if isinstance(guidance, dict) else None
+        if not isinstance(expression, dict):
+            return ""
+        safe = {
+            key: [
+                " ".join(value.split())[:100]
+                for value in expression.get(key, [])
+                if isinstance(value, str)
+            ][:4]
+            for key in ("tones", "habits", "avoid")
+            if isinstance(expression.get(key), list)
+        }
+        return (
+            "【当前对象表达软偏好，仅调整语气，不公开私聊内容】\n"
+            + json.dumps(safe, ensure_ascii=False)
+            if any(safe.values())
+            else ""
+        )
+
+    def _parse_group_life_data(self, data: dict) -> str:
+        """先按字段选择群聊材料，文案与配图均不接收私人记忆。"""
+        facts = {}
+        if self._current_facts(data).get("valid") is False:
+            return ""
+        action = self._current_action(data)
+        if action:
+            facts["当前实际活动"] = action
+        state = data.get("state")
+        state = state if isinstance(state, dict) else {}
+        awareness = data.get("current_awareness")
+        awareness = awareness if isinstance(awareness, dict) else {}
+        for label, value, limit in (
+            ("天气", data.get("weather"), 120),
+            ("心情", state.get("mood"), 80),
+            ("时段", awareness.get("time_period"), 40),
+        ):
+            if isinstance(value, str) and value.strip():
+                facts[label] = self._compact_life_text(value, limit)
+        busyness = state.get("busyness")
+        if (
+            isinstance(busyness, (int, float))
+            and not isinstance(busyness, bool)
+            and 0 <= busyness <= 100
+        ):
+            facts["忙碌度"] = f"{busyness:g}/100"
+        payload = {"当前状态": facts} if facts else {}
+
+        if self.life_conf.get("group_share_schedule", False):
+            schedule = []
+            timeline = data.get("timeline")
+            for item in timeline if isinstance(timeline, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                activity = item.get("activity")
+                if not isinstance(activity, str) or not activity.strip():
+                    continue
+                entry = {"活动": self._compact_life_text(activity, 240)}
+                time = item.get("time")
+                if isinstance(time, str) and time.strip():
+                    entry["时间"] = self._compact_life_text(time, 20)
+                entry["执行状态"] = {
+                    "planned": "计划中，尚未确认执行",
+                    "active": "进行中",
+                    "completed": "已完成",
+                    "skipped": "已跳过",
+                    "cancelled": "已取消",
+                    "expired": "已过期，尚未确认执行",
+                    "elapsed": "时间已过，尚未确认执行",
+                }.get(str(item.get("execution_state") or ""), "尚未确认执行")
+                schedule.append(entry)
+            if schedule:
+                payload["日程计划"] = schedule
+
+        appearance = {}
+        meta = data.get("meta")
+        meta = meta if isinstance(meta, dict) else {}
+        for label, value in (
+            ("穿搭", data.get("outfit")),
+            ("发型名称", meta.get("hair_style")),
+            ("发型细节", meta.get("hair")),
+            ("妆容", meta.get("makeup")),
+            ("美甲", meta.get("nails")),
+        ):
+            if isinstance(value, str) and value.strip():
+                appearance[label] = value.strip()
+        if appearance:
+            payload["主角本人配图外观"] = appearance
+        return json.dumps(payload, ensure_ascii=False, indent=2) if payload else ""
+
+    def _parse_qzone_post_data(self, data: dict) -> str:
+        """只选当前字段，不从完整日程或私聊记忆推断已发生的事。"""
+        if self._current_facts(data).get("valid") is False:
+            return "【当前生活材料】居住地背景正在刷新，旧地点、天气、穿搭、心情和日程不能当作当前事实。"
+        facts = {}
+        weather = (
+            self._compact_life_text(data.get("weather"), 120)
+            if isinstance(data.get("weather"), str)
+            else ""
+        )
+        if weather:
+            facts["当前天气"] = weather
+        state = data.get("state")
+        if isinstance(state, dict):
+            for key, label, limit in (
+                ("summary", "当前状态", 240),
+                ("mood", "当前心情", 80),
+            ):
+                value = (
+                    self._compact_life_text(state.get(key), limit)
+                    if isinstance(state.get(key), str)
+                    else ""
+                )
+                if value:
+                    facts[label] = value
+        timeline = data.get("timeline")
+        current_action = self._current_action(data)
+        if current_action:
+            facts["当前实际活动"] = current_action
+        elif not self._current_facts(data) and isinstance(timeline, list):
+            active = [
+                item
+                for item in timeline
+                if isinstance(item, dict) and item.get("execution_state") == "active"
+            ]
+            if len(active) == 1:
+                activity = (
+                    self._compact_life_text(active[0].get("activity"), 240)
+                    if isinstance(active[0].get("activity"), str)
+                    else ""
+                )
+                if activity:
+                    facts["正在进行的活动"] = activity
+        if not facts:
+            return ""
+        return "\n".join(
+            part
+            for part in (
+                "【当前生活材料】\n" + json.dumps(facts, ensure_ascii=False, indent=2),
+                self._public_expression(data),
+            )
+            if part
+        )
+
     def _parse_life_data(self, data: dict) -> str:
         """解析生活日程插件返回的结构化数据为自然语言。"""
         try:
             parts: list[str] = []
+            if self._current_facts(data).get("valid") is False:
+                return (
+                    "【生活背景待刷新】旧地点、天气、穿搭、心情和日程不代表当前事实。"
+                )
             self._append_life_overview(parts, data)
 
             state_text = self._format_life_state(data.get("state", {}))
@@ -29,9 +205,20 @@ class ContextLifeParseService(ContextComponent):
             if rhythm:
                 parts.append(rhythm)
 
-            current_activity = self._current_life_activity(data.get("timeline", []))
+            current_activity = self._current_action(data)
+            if current_activity:
+                current_activity = "【当前实际活动】" + current_activity
+            elif not self._current_facts(data):
+                current_activity = self._current_life_activity(data.get("timeline", []))
             if current_activity:
                 parts.append(current_activity)
+            body = self._current_facts(data).get("body")
+            if isinstance(body, dict) and body:
+                parts.append(
+                    "【已观测身体状态】"
+                    + json.dumps(body, ensure_ascii=False)
+                    + "；仅为身体状态，不能推断动作已完成，未观测时段不能编造经历。"
+                )
 
             self._append_life_memories(parts, data)
 

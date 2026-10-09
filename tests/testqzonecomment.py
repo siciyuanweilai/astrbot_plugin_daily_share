@@ -167,6 +167,23 @@ class FakeDb:
     async def set_qzone_state(self, key, value):
         self.state[key] = value
 
+    async def update_qzone_state(self, key, updates):
+        current = self.state.setdefault(key, {})
+        current.update(updates)
+        return current
+
+    async def merge_cache_entries(
+        self, domain, key, entries, *, max_items, cache_field=None
+    ):
+        current = self.state.setdefault(key, {})
+        cache = current if cache_field is None else current.setdefault(cache_field, {})
+        for item_key, value in entries.items():
+            cache.pop(item_key, None)
+            cache[item_key] = value
+        for item_key in list(cache)[: max(0, len(cache) - max_items)]:
+            cache.pop(item_key, None)
+        return current
+
 
 class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
     async def test_transient_query_failure_logs_debug(self):
@@ -240,7 +257,10 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             plugin=types.SimpleNamespace(
                 qzone_conf={},
                 _cached_qq_adapter_id="",
-                ctx_service=types.SimpleNamespace(),
+                ctx_service=types.SimpleNamespace(
+                    bot_map={},
+                    get_onebot_bot=lambda **kwargs: None,
+                ),
             )
         )
         post = models.QzonePost(uin=1, tid="self")
@@ -726,7 +746,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("明显风险", manager.prompts[0])
         self.assertNotIn("无法安全评论", manager.system_prompts[0])
 
-    async def test_auto_interaction_prompts_include_configured_style_supplements(self):
+    async def test_auto_interaction_ignores_removed_style_configuration(self):
         module, models = _load_auto_comment_module()
 
         class Manager(module.TaskQzoneAutoCommentService):
@@ -736,10 +756,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                     "qzone_auto_reply_prompt": "回得俏皮一点，但不要阴阳怪气。",
                 }
                 self.prompts = []
+                self.systems = []
                 self.plugin = types.SimpleNamespace(basic_conf={})
 
             async def llm(self, **kwargs):
                 self.prompts.append(kwargs.get("prompt", ""))
+                self.systems.append(kwargs.get("system_prompt", ""))
                 return "收到"
 
         manager = Manager()
@@ -752,19 +774,126 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         await manager.generate_qzone_auto_comment(friend_post)
         await manager._generate_qzone_auto_reply(self_post, comment)
+        reply = models.QzoneComment(
+            uin=2, nickname="Alice", content="thanks", tid="c2", parent_tid="c1"
+        )
+        await manager._generate_qzone_auto_reply_thread(friend_post, comment, reply)
 
-        self.assertIn("【自动评论风格补充】", manager.prompts[0])
-        self.assertIn("像熟人随口一句，别太正式。", manager.prompts[0])
-        self.assertIn(
-            "不违背上方任务、人设、身份、关系边界、上下文事实和 QQ 空间互动规则",
-            manager.prompts[0],
+        self.assertFalse(hasattr(manager._qzone_auto_config(), "comment_prompt"))
+        self.assertFalse(hasattr(manager._qzone_auto_config(), "reply_prompt"))
+        for prompt in [*manager.prompts, *manager.systems]:
+            self.assertNotIn("【自动评论风格补充】", prompt)
+            self.assertNotIn("【自动回评风格补充】", prompt)
+            for key in ("qzone_auto_comment_prompt", "qzone_auto_reply_prompt"):
+                self.assertNotIn(manager.qzone_conf[key], prompt)
+
+    async def test_life_chat_style_is_unified_for_comments_and_replies_with_fallback(
+        self,
+    ):
+        if __package__:
+            from .testidentity import _load_daily_share_modules
+        else:
+            from testidentity import _load_daily_share_modules
+
+        content_module, _ = _load_daily_share_modules()
+        module, models = _load_auto_comment_module()
+        prompts = []
+        systems = []
+        style_calls = []
+
+        class LifePlugin:
+            enabled = True
+            failing = False
+
+            async def get_share_chat_style(self, *, scene=""):
+                style_calls.append(scene)
+                if self.failing:
+                    raise RuntimeError("正在重载")
+                return {"enabled": self.enabled, "prompt": "统一表达偏好，不刻意追问。"}
+
+        life_plugin = LifePlugin()
+        metadata = types.SimpleNamespace(
+            name="astrbot_plugin_daily_life",
+            root_dir_name="astrbot_plugin_daily_life",
+            activated=True,
+            star_cls=life_plugin,
         )
-        self.assertIn("【自动回评风格补充】", manager.prompts[1])
-        self.assertIn("回得俏皮一点，但不要阴阳怪气。", manager.prompts[1])
-        self.assertIn(
-            "不违背上方任务、人设、身份、关系边界、上下文事实和 QQ 空间互动规则",
-            manager.prompts[1],
+
+        async def llm(**kwargs):
+            prompts.append(kwargs["prompt"])
+            systems.append(kwargs["system_prompt"])
+            return "自然回复"
+
+        class Manager(module.TaskQzoneAutoCommentService):
+            pass
+
+        manager = Manager()
+        original = {
+            "qzone_share_output_format": "原说说排版。",
+            "qzone_auto_comment_prompt": "原评论语气。",
+            "qzone_auto_reply_prompt": "原回评语气。",
+        }
+        manager.qzone_conf = dict(original)
+        content_service = content_module.ContentService(
+            {"qzone_conf": manager.qzone_conf},
+            llm,
+            types.SimpleNamespace(get_all_stars=lambda: [metadata]),
+            types.SimpleNamespace(),
         )
+        manager.plugin = types.SimpleNamespace(
+            basic_conf={}, call_llm=llm, content_service=content_service
+        )
+        friend = models.QzonePost(uin=2, tid="friend", name="Alice", text="书店")
+        own = models.QzonePost(uin=1, tid="self", name="Me", text="日常")
+        parent = models.QzoneComment(uin=2, nickname="Alice", content="好看", tid="c1")
+        reply = models.QzoneComment(
+            uin=2, nickname="Alice", content="谢谢", tid="c2", parent_tid="c1"
+        )
+        for follow, life_enabled, activated, failing in (
+            (None, True, True, False),
+            (False, True, True, False),
+            (True, True, True, False),
+            (True, False, True, False),
+            (True, True, False, False),
+            (True, True, True, True),
+            (False, True, True, False),
+        ):
+            if follow is None:
+                manager.qzone_conf.pop("qzone_follow_life_chat_style", None)
+            else:
+                manager.qzone_conf["qzone_follow_life_chat_style"] = follow
+            life_plugin.enabled = life_enabled
+            life_plugin.failing = failing
+            metadata.activated = activated
+            before = len(style_calls)
+            self.assertEqual(
+                await manager.generate_qzone_auto_comment(friend), "自然回复"
+            )
+            self.assertEqual(
+                await manager._generate_qzone_auto_reply(own, parent), "自然回复"
+            )
+            self.assertEqual(
+                await manager._generate_qzone_auto_reply_thread(friend, parent, reply),
+                "自然回复",
+            )
+            self.assertEqual(len(style_calls) - before, 3 if activated else 0)
+            if activated:
+                self.assertEqual(
+                    style_calls[-3:], ["qzone_comment", "qzone_reply", "qzone_reply"]
+                )
+            active = bool(activated and life_enabled and not failing)
+            for prompt in [*prompts[-3:], *systems[-3:]]:
+                self.assertNotIn(original["qzone_auto_comment_prompt"], prompt)
+                self.assertNotIn(original["qzone_auto_reply_prompt"], prompt)
+            for system in systems[-3:]:
+                self.assertEqual("【daily_life 聊天表达参考】" in system, active)
+                self.assertEqual("统一表达偏好，不刻意追问。" in system, active)
+                self.assertIn("只输出一句自然", system)
+                self.assertIn("公开互动边界", system)
+                self.assertIn("不要冒充动态作者或同楼其他人", systems[-1])
+            self.assertEqual(
+                {key: manager.qzone_conf[key] for key in original}, original
+            )
 
     async def test_auto_interaction_system_prompts_do_not_request_skip(self):
         module, models = _load_auto_comment_module()
@@ -1239,7 +1368,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("展厅里有人注视蓝色画作", manager.prompts[1])
 
-    async def test_auto_comment_image_vision_cache_uses_post_context_when_image_url_changes(
+    async def test_auto_comment_image_vision_cache_misses_when_image_identity_changes(
         self,
     ):
         module, models = _load_auto_comment_module()
@@ -1298,11 +1427,14 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             manager.context.calls,
-            ["https://m.qpic.cn/psc?/V10abc/photo-a.jpg&token=aaa"],
+            [
+                "https://m.qpic.cn/psc?/V10abc/photo-a.jpg&token=aaa",
+                "https://r.qzone.qq.com/photo/random-cdn-path.jpg?token=bbb",
+            ],
         )
         self.assertIn("一名女生在展厅里看蓝色画作", manager.prompts[1])
 
-    async def test_auto_comment_image_vision_cache_uses_stable_post_id_without_time(
+    async def test_auto_comment_image_vision_cache_does_not_trust_post_id_without_image_identity(
         self,
     ):
         module, models = _load_auto_comment_module()
@@ -1357,11 +1489,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             manager.context.calls,
-            ["https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa"],
+            [
+                "https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa",
+                "https://r.qzone.qq.com/photo/new-cdn-path.jpg?token=bbb",
+            ],
         )
         self.assertIn("女生在展厅里看蓝色画作", manager.prompts[1])
 
-    async def test_auto_comment_image_vision_cache_uses_stable_body_identity(self):
+    async def test_auto_comment_image_vision_cache_does_not_trust_body_without_image_identity(
+        self,
+    ):
         module, models = _load_auto_comment_module()
 
         class Context:
@@ -1416,7 +1553,10 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             manager.context.calls,
-            ["https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa"],
+            [
+                "https://m.qpic.cn/psc?/old-cdn/photo-a.jpg&token=aaa",
+                "https://r.qzone.qq.com/photo/new-cdn-path.jpg?token=bbb",
+            ],
         )
         self.assertIn("女生在展厅里看蓝色画作", manager.prompts[1])
 
@@ -5631,7 +5771,10 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
             async def query_recent_posts(self, *, pos=0, num=5, with_detail=False):
                 self.recent_calls += 1
-                return [friend_post, models.QzonePost(uin=2, tid="friend-album", appid=4)]
+                return [
+                    friend_post,
+                    models.QzonePost(uin=2, tid="friend-album", appid=4),
+                ]
 
             async def query_home_posts(self, *, pos=0, num=5):
                 self.home_calls += 1

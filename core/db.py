@@ -236,6 +236,19 @@ class DatabaseManager:
     async def update_cache_state(self, key: str, updates: dict):
         return await self.state.update_cache_state(key, updates)
 
+    async def merge_cache_entries(
+        self,
+        domain: str,
+        key: str,
+        entries: dict,
+        *,
+        max_items: int,
+        cache_field: str | None = None,
+    ) -> dict:
+        return await self.state.merge_cache_entries(
+            domain, key, entries, max_items=max_items, cache_field=cache_field
+        )
+
     async def initialize(self) -> None:
         async with self._initialize_lock:
             if self._initialized:

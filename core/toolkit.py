@@ -57,12 +57,11 @@ async def call_default_daily_life_media_tool(
     *,
     media_kind: str,
     prompt: str,
-    text_image_model: str = "",
-    edit_image_model: str = "",
     image_ref: str = "",
     text: str = "",
     emotion: str = "",
     emotion_category: str = "",
+    voice_style: str = "",
     event=None,
     contains_character: bool = False,
     bridge: DailyLifeBridge | None = None,
@@ -74,8 +73,6 @@ async def call_default_daily_life_media_tool(
             await bridge.generate_image(
                 event,
                 prompt,
-                text_model=str(text_image_model or "").strip(),
-                edit_model=str(edit_image_model or "").strip(),
                 contains_character=contains_character,
             )
             or None
@@ -95,6 +92,7 @@ async def call_default_daily_life_media_tool(
                 str(text or prompt or "").strip(),
                 emotion=emotion,
                 emotion_category=emotion_category,
+                **({"voice_style": voice_style} if voice_style else {}),
             )
             or None
         )

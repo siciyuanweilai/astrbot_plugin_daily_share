@@ -4,7 +4,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...args import find_invalid_non_news_args
 from ...config import NEWS_SOURCE_MAP, ShareType
-from ...constants import TYPE_CN_MAP
+from ...constants import SOURCE_CN_MAP, TYPE_CN_MAP
 from ..supportcomponent import SupportComponent
 
 
@@ -52,6 +52,13 @@ class PluginShareTypedRouteService(SupportComponent):
         specific_target: str | None = None,
         share_global_scope: bool = False,
     ):
+        allowed_args = {"图片", "广播", "空间", *NEWS_SOURCE_MAP, *SOURCE_CN_MAP}
+        invalid_args = [part for part in parts[2:] if part not in allowed_args]
+        if invalid_args:
+            yield event.plain_result(
+                f"无效新闻参数: {' '.join(invalid_args)}。支持新闻源、图片、广播、空间。"
+            )
+            return
         news_src = self.manual._parse_manual_news_source(parts)
         if "图片" in parts:
             async for result in self.start_route._start_news_image_task(

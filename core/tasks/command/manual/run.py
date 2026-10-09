@@ -3,6 +3,7 @@ from __future__ import annotations
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType, TimePeriod
+from ...continuation import preserve_share
 from .logbook import TaskCommandLocalRecordService
 
 
@@ -60,6 +61,49 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
         self.services.progress.complete_share_progress_step(
             progress_id, "content", "文案已生成"
         )
+        return await self.send_prepared_command_share(
+            event=event,
+            target_umo=target_umo,
+            target_type_enum=target_type_enum,
+            period=period,
+            life_ctx=life_ctx,
+            news_data=news_data,
+            img_path=img_path,
+            need_image=need_image,
+            need_video=need_video,
+            need_voice=need_voice,
+            history_source=history_source,
+            progress_id=progress_id,
+            finish_progress=finish_progress,
+            content=content,
+        )
+
+    @preserve_share("command")
+    async def send_prepared_command_share(
+        self,
+        *,
+        target_umo: str,
+        target_type_enum: ShareType,
+        period: TimePeriod,
+        life_ctx: str,
+        news_data,
+        img_path: str | None = None,
+        need_image: bool,
+        need_video: bool,
+        need_voice: bool,
+        history_source: str,
+        progress_id: str,
+        content: str,
+        event: AstrMessageEvent | None = None,
+        finish_progress=None,
+    ) -> bool:
+        if finish_progress is None:
+
+            def finish_progress(success, message):
+                self.services.progress.finish_share_progress(
+                    progress_id, success=success, message=message
+                )
+
         hot_news_image_url = img_path if target_type_enum == ShareType.NEWS else None
         (
             img_path,
@@ -81,6 +125,9 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             need_voice=need_voice,
         )
 
+        continuations = getattr(self.plugin, "share_continuations", None)
+        if continuations is not None:
+            await continuations.mark_submitting()
         sent, media_result = await self._send_command_generated_share(
             target_umo=target_umo,
             content=content,
@@ -91,12 +138,13 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             progress_id=progress_id,
         )
         if not sent:
-            await self.send_event(
-                event,
-                event.plain_result(
-                    "内容已生成，但发送失败，请查看日志或检查平台连接状态。"
-                ),
-            )
+            if event:
+                await self.send_event(
+                    event,
+                    event.plain_result(
+                        "内容已生成，但发送失败，请查看日志或检查平台连接状态。"
+                    ),
+                )
             finish_progress(False, "发送失败")
             return False
 
@@ -134,8 +182,9 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             ),
         )
         self.services.executor_helpers.log_partial_send_errors(target_umo, media_result)
-        await self.services.executor_helpers.notify_partial_send_errors(
-            event, media_result
-        )
+        if event:
+            await self.services.executor_helpers.notify_partial_send_errors(
+                event, media_result
+            )
         finish_progress(True, "分享完成")
         return True

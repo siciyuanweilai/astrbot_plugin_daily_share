@@ -1,5 +1,7 @@
+import asyncio
 import re
 import time
+from collections import OrderedDict
 
 from astrbot.api import logger
 
@@ -12,6 +14,46 @@ class PluginToolContextService(SupportComponent):
     _NEWS_LINK_CONTEXT_MARKER = "# 每日分享新闻缓存上下文"
     _QZONE_CONTEXT_MARKER = "# 每日分享 QQ 空间上下文"
     _QZONE_CONTEXT_TTL_SECONDS = 1800
+    _PROMPT_CACHE_MAX_ITEMS = 512
+    _PROMPT_CACHE_TTL_SECONDS = 5.0
+    _EMPTY_PROMPT_CACHE_TTL_SECONDS = 1.0
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime)
+        self._prompt_cache = OrderedDict()
+
+    async def cached_context_prompt(
+        self, kind: str, target_uid: str, builder, *, timeout: float
+    ) -> str:
+        target = str(target_uid or "").strip()
+        if not target:
+            return ""
+        key = (kind, target)
+        now = time.monotonic()
+        entry = self._prompt_cache.get(key)
+        if entry and now < entry[0]:
+            self._prompt_cache.move_to_end(key)
+            return entry[1]
+        self._prompt_cache.pop(key, None)
+        if timeout <= 0:
+            return ""
+        try:
+            prompt = str(await asyncio.wait_for(builder(target), timeout) or "")
+        except asyncio.TimeoutError:
+            logger.debug("[日常分享] 工具上下文读取超时，跳过本次注入")
+            prompt = ""
+        ttl = (
+            self._PROMPT_CACHE_TTL_SECONDS
+            if prompt
+            else self._EMPTY_PROMPT_CACHE_TTL_SECONDS
+        )
+        self._prompt_cache[key] = (time.monotonic() + ttl, prompt)
+        while len(self._prompt_cache) > self._PROMPT_CACHE_MAX_ITEMS:
+            self._prompt_cache.popitem(last=False)
+        return prompt
+
+    def _invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
+        self._prompt_cache.pop((kind, str(target_uid or "").strip()), None)
 
     def _strip_news_link_reference_tail(self, text: str) -> str:
         """移除 news_link 自然回复末尾由模型补出的参考链接列表。"""
@@ -135,8 +177,13 @@ class PluginToolContextService(SupportComponent):
         return False
 
     def _append_request_context_prompt(self, req, prompt: str) -> None:
-        current = str(getattr(req, "system_prompt", "") or "").rstrip()
-        req.system_prompt = f"{current}\n\n{prompt}" if current else prompt
+        from astrbot.core.agent.message import TextPart
+
+        parts = getattr(req, "extra_user_content_parts", None)
+        if parts is None:
+            parts = []
+            req.extra_user_content_parts = parts
+        parts.append(TextPart(text=prompt))
 
     @staticmethod
     def _qzone_context_item(post, index: int, *, self_uin: int = 0) -> dict:
@@ -205,6 +252,7 @@ class PluginToolContextService(SupportComponent):
                 "items": items,
             },
         )
+        self._invalidate_context_prompt("qzone", target)
 
     async def _remember_qzone_context_focus(
         self, target_uid: str, post_id: str
@@ -221,6 +269,7 @@ class PluginToolContextService(SupportComponent):
             snapshot = {}
         snapshot.update({"timestamp": time.time(), "focus_post_id": focus})
         await db.set_context_state(key, snapshot)
+        self._invalidate_context_prompt("qzone", target)
 
     async def _clear_qzone_context_focus(
         self, target_uid: str, post_id: str = ""
@@ -242,6 +291,7 @@ class PluginToolContextService(SupportComponent):
         snapshot["focus_post_id"] = ""
         snapshot["timestamp"] = time.time()
         await db.set_context_state(key, snapshot)
+        self._invalidate_context_prompt("qzone", target)
 
     async def _build_qzone_context_prompt(self, target_uid: str) -> str:
         db = self.db

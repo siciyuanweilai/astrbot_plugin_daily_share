@@ -114,17 +114,10 @@ class _TaskManager:
         self.snapshots = []
         self.snapshot_store = self
         self.qzone_share = self
-        self.xiaohongshu_share = self
         self.delivery_assets = self
         self.executor_helpers = self
 
     async def execute_qzone_share(self, *args, **kwargs):
-        self.calls.append((args, kwargs))
-        self.started.set()
-        await self.release.wait()
-        return True
-
-    async def execute_xiaohongshu_share(self, *args, **kwargs):
         self.calls.append((args, kwargs))
         self.started.set()
         await self.release.wait()
@@ -177,7 +170,6 @@ class ShareCommandBackgroundTests(unittest.IsolatedAsyncioTestCase):
                     basic_conf={},
                     extra_shares_conf=[],
                     qzone_conf={},
-                    xiaohongshu_conf={"server_url": "http://127.0.0.1:18061/api"},
                     contact_aliases={},
                     context=None,
                     ctx_service=None,
@@ -341,7 +333,7 @@ class ShareCommandBackgroundTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("C:/Temp/news.png", event.sent)
         self.assertFalse(self.host.is_share_busy(event.unified_msg_origin))
 
-    async def test_xiaohongshu_command_uses_type_before_target(self):
+    async def test_removed_publish_suffix_is_rejected(self):
         event = _Event()
         event.message_str = "/分享 心情 小红书"
 
@@ -349,17 +341,22 @@ class ShareCommandBackgroundTests(unittest.IsolatedAsyncioTestCase):
             item async for item in self.host.main_route.handle_share_command(event)
         ]
 
-        self.assertEqual(results, ["正在生成并发布到小红书，请稍候..."])
-        await asyncio.wait_for(self.host.task_manager.started.wait(), timeout=1)
-        self.assertEqual(
-            self.host.task_manager.calls[0][1]["force_type"].value,
-            "mood",
-        )
+        self.assertIn("无效参数: 小红书", results[0])
+        self.assertEqual(self.host.task_manager.calls, [])
+        self.assertEqual(self.host._tasks, [])
 
-        self.host.task_manager.release.set()
-        await asyncio.wait_for(self.host._tasks[-1], timeout=1)
+    async def test_removed_news_source_does_not_fall_back_to_random_news(self):
+        for suffix in ("小红书", "xiaohongshu", "xhs"):
+            event = _Event()
+            event.message_str = f"/分享 新闻 {suffix}"
+            results = [
+                item async for item in self.host.main_route.handle_share_command(event)
+            ]
+            self.assertIn(f"无效新闻参数: {suffix}", results[0])
+            self.assertEqual(self.host.task_manager.calls, [])
+            self.assertEqual(self.host._tasks, [])
 
-    async def test_old_xiaohongshu_command_order_returns_format_hint(self):
+    async def test_removed_publish_command_is_unknown(self):
         event = _Event()
         event.message_str = "/分享 小红书 心情"
 
@@ -367,7 +364,7 @@ class ShareCommandBackgroundTests(unittest.IsolatedAsyncioTestCase):
             item async for item in self.host.main_route.handle_share_command(event)
         ]
 
-        self.assertEqual(results, ["小红书指令格式已更新，请使用：/分享 [类型] 小红书"])
+        self.assertIn("未知指令或无效类型: 小红书", results[0])
         self.assertEqual(self.host.task_manager.calls, [])
 
 

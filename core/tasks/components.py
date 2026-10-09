@@ -11,7 +11,6 @@ from .helpers import TaskExecutorHelperService
 from .moments import TaskQzoneService
 from .progress import TaskProgressService
 from .qinteract import TaskQzoneAutoCommentService
-from .redbook import TaskXiaohongshuService
 from .runtime import TaskRuntime
 from .scheduler import TaskSchedulerService
 from .selector import TaskTypeSelectorService
@@ -43,7 +42,6 @@ class TaskServices:
     delivery_assets: TaskDeliveryAssetsService
     weixin_delivery: TaskDeliveryWeixinService
     delivery: TaskDeliveryService
-    xiaohongshu_share: TaskXiaohongshuService
 
     @classmethod
     def build(
@@ -68,7 +66,6 @@ class TaskServices:
             delivery_assets=TaskDeliveryAssetsService(*args),
             weixin_delivery=TaskDeliveryWeixinService(*args),
             delivery=TaskDeliveryService(*args),
-            xiaohongshu_share=TaskXiaohongshuService(*args),
         )
         for service in services:
             service.connect(services)

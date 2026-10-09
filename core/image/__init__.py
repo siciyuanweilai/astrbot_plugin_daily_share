@@ -4,6 +4,7 @@ from astrbot.api import logger
 
 from ..config import ShareType, TimePeriod
 from ..constants import share_type_label
+from ..integrations.mediajob import current_share_job
 from ..toolkit import call_default_daily_life_media_tool
 from .composer import ImageVisualService
 from .motion import ImageVideoService
@@ -56,6 +57,15 @@ class ImageService(ImageVisualService, ImageVideoService):
         """生成图片的入口函数"""
         if not self.img_conf.get("enable_ai_image", False):
             return None
+        job = current_share_job.get()
+        if job is not None and job.get("image_failed"):
+            return None
+        if job is not None and job.get("image_path"):
+            return GeneratedImage(
+                path=job["image_path"],
+                description=job.get("image_description", ""),
+                contains_character=bool(job.get("contains_character")),
+            )
 
         # 1. 智能判断：是否画人
         involves_self = await self._check_involves_self(
@@ -118,12 +128,6 @@ class ImageService(ImageVisualService, ImageVideoService):
             self.context,
             media_kind="image",
             prompt=prompt,
-            text_image_model=str(
-                self.img_conf.get("daily_life_text_image_model", "") or ""
-            ).strip(),
-            edit_image_model=str(
-                self.img_conf.get("daily_life_edit_image_model", "") or ""
-            ).strip(),
             event=event,
             contains_character=involves_self,
             bridge=self.daily_life_bridge,

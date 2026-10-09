@@ -127,11 +127,23 @@ def _install_stub_modules():
     components.Record = Record
     components.Video = Video
 
+    agent_message = types.ModuleType("astrbot.core.agent.message")
+
+    class TextPart:
+        def __init__(self, text):
+            self.text = text
+
+        def model_dump_for_context(self):
+            return {"type": "text", "text": self.text}
+
+    agent_message.TextPart = TextPart
+
     sys.modules["astrbot"] = astrbot
     sys.modules["astrbot.api"] = astrbot_api
     sys.modules["astrbot.api.star"] = star
     sys.modules["astrbot.api.event"] = event
     sys.modules["astrbot.api.message_components"] = components
+    sys.modules["astrbot.core.agent.message"] = agent_message
     aiohttp = types.ModuleType("aiohttp")
     aiohttp.ClientError = Exception
     aiohttp.ClientSession = object
@@ -325,9 +337,9 @@ class DashboardMediaPreviewTests(unittest.TestCase):
 
         asyncio.run(plugin.inject_tool_context(event, req))
 
-        self.assertEqual(req.extra_user_content_parts, [])
-        self.assertTrue(req.system_prompt.startswith("基础提示\n\n"))
-        context_text = req.system_prompt
+        self.assertEqual(req.system_prompt, "基础提示")
+        self.assertEqual(len(req.extra_user_content_parts), 1)
+        context_text = req.extra_user_content_parts[0].text
         self.assertIn("每日分享新闻缓存上下文", context_text)
         self.assertIn("最近新闻源：澎湃热搜", context_text)
         self.assertIn("可查条目数：2", context_text)
@@ -405,9 +417,9 @@ class DashboardMediaPreviewTests(unittest.TestCase):
 
         asyncio.run(plugin.inject_tool_context(event, req))
 
-        self.assertEqual(req.extra_user_content_parts, [])
-        self.assertTrue(req.system_prompt.startswith("基础提示\n\n"))
-        context_text = req.system_prompt
+        self.assertEqual(req.system_prompt, "基础提示")
+        self.assertEqual(len(req.extra_user_content_parts), 1)
+        context_text = req.extra_user_content_parts[0].text
         self.assertIn("每日分享 QQ 空间上下文", context_text)
         self.assertIn("列表来源：我的说说", context_text)
         self.assertIn("需要列表、详情或操作时调用 qzone 工具", context_text)
@@ -457,8 +469,8 @@ class DashboardMediaPreviewTests(unittest.TestCase):
 
         asyncio.run(plugin.inject_tool_context(event, req))
 
-        self.assertEqual(req.extra_user_content_parts, [])
-        self.assertIn("每日分享 QQ 空间上下文", req.system_prompt)
+        self.assertEqual(req.system_prompt, "基础提示")
+        self.assertIn("每日分享 QQ 空间上下文", req.extra_user_content_parts[0].text)
 
     def test_qzone_list_stores_recent_context_snapshot(self):
         mod = _load_main_module()

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
 from contextvars import ContextVar
 from typing import Any
 
 from astrbot.api import logger
+
+from .mediajob import ShareMediaPending, current_share_job, save_share_job
 
 DAILY_LIFE_PLUGIN_ID = "astrbot_plugin_daily_life"
 _MEDIA_METHODS = {
@@ -16,8 +20,10 @@ _MEDIA_METHODS = {
 class DailyLifeBridge:
     """每日分享与生活插件之间唯一的公开调用边界。"""
 
-    def __init__(self, context: Any):
+    def __init__(self, context: Any, db: Any = None):
         self.context = context
+        self.db = db
+        self._receipt_lock = asyncio.Lock()
         self._search_notices: set[str] = set()
         self._media_results: ContextVar[dict[str, tuple[str, str]]] = ContextVar(
             f"daily_share_media_results_{id(self)}",
@@ -53,6 +59,29 @@ class DailyLifeBridge:
         except Exception as exc:
             logger.warning(f"[上下文] 读取生活插件目标上下文失败: {exc}")
             return {}
+
+    async def get_share_chat_style_prompt(self, *, scene: str = "") -> str:
+        """通过公开入口获取语气参考，不复用聊天长度或分段发送规则。"""
+        plugin = self._plugin()
+        method = getattr(plugin, "get_share_chat_style", None) if plugin else None
+        if not callable(method):
+            return ""
+        try:
+            result = await method(scene=scene) if scene else await method()
+        except Exception as exc:
+            logger.debug(f"[日常分享] 读取生活插件聊天表达失败: {exc}")
+            return ""
+        if not isinstance(result, dict) or result.get("enabled") is not True:
+            return ""
+        text = result.get("prompt")
+        if not isinstance(text, str) or not text.strip():
+            return ""
+        text = " ".join(text.split())[:500]
+        return (
+            f"【daily_life 聊天表达参考】\n{text}\n"
+            "此段作为当前公开场景的语气与表达节奏参考。"
+            "不覆盖本轮任务、人设、身份关系、事实与公开隐私边界；不套用聊天字数限制、分段发送或标点清洗。"
+        )
 
     def search_available(self) -> bool:
         plugin = self._plugin()
@@ -168,24 +197,58 @@ class DailyLifeBridge:
         event: Any,
         prompt: str,
         *,
-        text_model: str = "",
-        edit_model: str = "",
         contains_character: bool = False,
     ) -> str:
-        options = {"contains_character": contains_character}
-        text_model = str(text_model or "").strip()
-        edit_model = str(edit_model or "").strip()
-        if text_model:
-            options["text_model"] = text_model
-        if edit_model:
-            options["edit_model"] = edit_model
+        job = current_share_job.get()
+        plugin = self._plugin()
+        task_method = getattr(plugin, "generate_share_image_task", None)
+        if job is not None and callable(task_method):
+            job.update(image_description=prompt, contains_character=contains_character)
+            await save_share_job(job)
+            result = await task_method(
+                event,
+                prompt,
+                task_key=f"{job['id']}:image",
+                contains_character=contains_character,
+            )
+            if not isinstance(result, dict):
+                raise RuntimeError("分享生图任务返回格式无效")
+            if result.get("status") == "pending":
+                job["pending_media"] = "image"
+                self._set_media_result("image", "pending", "原图片任务仍在处理")
+                raise ShareMediaPending("原图片任务仍在处理")
+            if result.get("status") == "ready":
+                path = str(result.get("path") or "")
+                job["image_path"] = path
+                await save_share_job(job)
+                self._set_media_result("image", "ok")
+                return path
+            self._set_media_result("image", "error", "原图片任务失败，未重新提交")
+            return ""
         return await self._call_media(
             "generate_share_image",
             "配图",
             event,
             prompt,
-            **options,
+            contains_character=contains_character,
         )
+
+    async def get_image_task(self, task_key: str) -> dict:
+        return await self._get_media_task(task_key, "image")
+
+    async def get_video_task(self, task_key: str) -> dict:
+        return await self._get_media_task(task_key, "video")
+
+    async def _get_media_task(self, task_key: str, kind: str) -> dict:
+        plugin = self._plugin()
+        method = getattr(plugin, f"get_share_{kind}_task", None)
+        if not callable(method):
+            return {"status": "unavailable"}
+        try:
+            result = await method(task_key)
+            return result if isinstance(result, dict) else {"status": "failed"}
+        except Exception:
+            return {"status": "unavailable"}
 
     async def generate_video(
         self,
@@ -194,13 +257,45 @@ class DailyLifeBridge:
         *,
         reference_image: str = "",
     ) -> str:
-        return await self._call_media(
+        job = current_share_job.get()
+        if job is not None:
+            if job.get("video_started"):
+                return str(job.get("video_url") or "")
+            job["video_started"] = True
+            await save_share_job(job)
+            plugin = self._plugin()
+            method = getattr(plugin, "generate_share_video_task", None)
+            if callable(method):
+                job["pending_media"] = "video"
+                await save_share_job(job)
+                result = await method(
+                    event,
+                    prompt,
+                    task_key=f"{job['id']}:video",
+                    reference_image=reference_image,
+                )
+                if result.get("status") == "pending":
+                    self._set_media_result("video", "pending", "原视频任务仍在处理")
+                    raise ShareMediaPending("原视频任务仍在处理")
+                value = (
+                    str(result.get("url") or "")
+                    if result.get("status") == "ready"
+                    else ""
+                )
+                job.update(video_url=value, pending_media="")
+                await save_share_job(job)
+                return value
+        result = await self._call_media(
             "generate_share_video",
             "视频",
             event,
             prompt,
             reference_image=str(reference_image or "").strip(),
         )
+        if job is not None:
+            job["video_url"] = result
+            await save_share_job(job)
+        return result
 
     async def generate_voice(
         self,
@@ -208,14 +303,83 @@ class DailyLifeBridge:
         *,
         emotion: str = "",
         emotion_category: str = "",
+        voice_style: str = "",
     ) -> str:
-        return await self._call_media(
+        job = current_share_job.get()
+        if job is not None:
+            if job.get("audio_started"):
+                return str(job.get("audio_path") or "")
+            job["audio_started"] = True
+            await save_share_job(job)
+        result = await self._call_media(
             "generate_share_voice",
             "语音",
             text,
             emotion=emotion,
             emotion_category=emotion_category,
+            **({"voice_style": voice_style} if voice_style else {}),
         )
+        if job is not None:
+            job["audio_path"] = result
+            await save_share_job(job)
+        return result
+
+    async def prepare_expression(self, text: str, *, scene: str) -> dict:
+        plugin = self._plugin()
+        method = getattr(plugin, "prepare_share_expression", None)
+        if not callable(method):
+            return {"text": text}
+        try:
+            result = await method(text, scene=scene)
+            return result if isinstance(result, dict) else {"text": text}
+        except Exception as exc:
+            logger.debug(f"[日常分享] 生活插件表达检查失败：{type(exc).__name__}")
+            return {"text": text}
+
+    async def record_public_activity(self, receipt: dict) -> bool:
+        event_id = str(receipt.get("event_id") or "")
+        if not event_id:
+            return False
+        key = hashlib.sha256(event_id.encode()).hexdigest()
+        async with self._receipt_lock:
+            if self.db is not None:
+                await self.db.update_context_state(
+                    "public_activity_outbox", {key: dict(receipt)}
+                )
+            delivered = await self._send_public_receipt(receipt)
+            if delivered and self.db is not None:
+                await self.db.update_context_state(
+                    "public_activity_outbox", {key: None}
+                )
+            return delivered
+
+    async def flush_public_receipts(self) -> None:
+        if self.db is None:
+            return
+        async with self._receipt_lock:
+            receipts = await self.db.get_context_state("public_activity_outbox", {})
+            if not receipts:
+                return
+            remaining = {}
+            for key, receipt in receipts.items():
+                if isinstance(receipt, dict) and not await self._send_public_receipt(
+                    receipt
+                ):
+                    remaining[key] = receipt
+            await self.db.set_context_state("public_activity_outbox", remaining)
+
+    async def _send_public_receipt(self, receipt: dict) -> bool:
+        plugin = self._plugin()
+        method = getattr(plugin, "record_public_activity", None)
+        if not callable(method):
+            return False
+        try:
+            return bool(await method(dict(receipt)))
+        except Exception as exc:
+            logger.warning(
+                f"[日常分享] 公开活动回传失败，保留本地回执：{type(exc).__name__}"
+            )
+            return False
 
     async def _call_media(self, method_name: str, label: str, *args, **kwargs) -> str:
         media_kind = next(
@@ -257,24 +421,6 @@ class DailyLifeBridge:
                     "unavailable",
                     "生活插件正在初始化、重载或停止",
                 )
-            elif (
-                method_name == "generate_share_image"
-                and (
-                    str(kwargs.get("text_model") or "").strip()
-                    or str(kwargs.get("edit_model") or "").strip()
-                )
-                and (
-                    "unexpected keyword argument 'text_model'" in detail
-                    or "unexpected keyword argument 'edit_model'" in detail
-                )
-            ):
-                self._set_media_result(
-                    media_kind,
-                    "error",
-                    "生活插件版本不支持分别指定文生图和图生图模型，请更新生活插件",
-                )
-            elif method_name == "generate_share_image" and "指定的生图模型" in detail:
-                self._set_media_result(media_kind, "error", detail)
             elif method_name == "generate_share_video" and "视频任务超时" in detail:
                 self._set_media_result(
                     media_kind,

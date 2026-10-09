@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 
 from astrbot.api import logger
@@ -18,15 +19,34 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
     async def _save_news_short_url_cache(self, cache: dict) -> None:
         if not isinstance(cache, dict):
             return
-        overflow = len(cache) - NEWS_SHORT_URL_CACHE_MAX_ITEMS
-        for key in list(cache.keys())[: max(0, overflow)]:
-            cache.pop(key, None)
-        await self.db.set_cache_state(NEWS_SHORT_URL_CACHE_KEY, cache)
+        await self.db.merge_cache_entries(
+            "cache",
+            NEWS_SHORT_URL_CACHE_KEY,
+            cache,
+            max_items=NEWS_SHORT_URL_CACHE_MAX_ITEMS,
+        )
 
     async def _shorten_news_url(self, url: str) -> str:
         original_url = self._clean_snapshot_text(url, 500)
         if not original_url:
             return ""
+
+        locks = getattr(self, "_news_short_url_locks", None)
+        if locks is None:
+            locks = self._news_short_url_locks = {}
+        lock, users = locks.get(original_url, (asyncio.Lock(), 0))
+        locks[original_url] = (lock, users + 1)
+        try:
+            async with lock:
+                return await self._shorten_news_url_once(original_url)
+        finally:
+            users = locks[original_url][1] - 1
+            if users:
+                locks[original_url] = (lock, users)
+            else:
+                locks.pop(original_url, None)
+
+    async def _shorten_news_url_once(self, original_url: str) -> str:
 
         cache = await self._news_short_url_cache()
         cached = cache.get(original_url)
@@ -43,8 +63,9 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
             short_url = self._clean_snapshot_text(short_url, 500)
             if not short_url:
                 return original_url
-            cache[original_url] = {"short_url": short_url, "at": int(time.time())}
-            await self._save_news_short_url_cache(cache)
+            await self._save_news_short_url_cache(
+                {original_url: {"short_url": short_url, "at": int(time.time())}}
+            )
             return short_url
         except Exception as e:
             logger.debug(f"[日常分享] 生成新闻短链接失败，保留原链接: {e}")

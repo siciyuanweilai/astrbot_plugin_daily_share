@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime
 
 from astrbot.api import logger
@@ -110,14 +111,18 @@ class PluginToolService(SupportComponent):
 
             target_uid = getattr(event, "unified_msg_origin", "")
             prompts = []
+            deadline = time.monotonic() + 0.15
             if (
                 "news_link" in tool_names
                 and not self.tool_context._request_context_has_marker(
                     req, self.tool_context._NEWS_LINK_CONTEXT_MARKER
                 )
             ):
-                prompt = await self.tool_context._build_news_link_context_prompt(
-                    target_uid
+                prompt = await self.tool_context.cached_context_prompt(
+                    "news",
+                    target_uid,
+                    self.tool_context._build_news_link_context_prompt,
+                    timeout=deadline - time.monotonic(),
                 )
                 if prompt:
                     prompts.append(prompt)
@@ -127,7 +132,12 @@ class PluginToolService(SupportComponent):
                 req,
                 self.tool_context._QZONE_CONTEXT_MARKER,
             ):
-                prompt = await self.tool_context._build_qzone_context_prompt(target_uid)
+                prompt = await self.tool_context.cached_context_prompt(
+                    "qzone",
+                    target_uid,
+                    self.tool_context._build_qzone_context_prompt,
+                    timeout=deadline - time.monotonic(),
+                )
                 if prompt:
                     prompts.append(prompt)
 

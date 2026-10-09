@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from ..contextbase import ContextComponent
 from ..shared import ShareType
 
@@ -25,9 +27,6 @@ class ContextLifeFormatService(ContextComponent):
         self, context: str, share_type: ShareType, group_info: dict | None = None
     ) -> str:
         """格式化群聊生活上下文。"""
-        if not self.life_conf.get("life_context_in_group", True):
-            return ""
-
         if (
             share_type == ShareType.MOOD
             and group_info
@@ -35,11 +34,9 @@ class ContextLifeFormatService(ContextComponent):
         ):
             return ""
 
-        if self.life_conf.get("group_share_schedule", False):
-            identity_rule = self._build_people_identity_rule()
-            return f"\n\n【你的当前状态与记忆】\n{context}{identity_rule}\n(注意：这是群聊，你可以提及上述状态，但请保持自然，不要像汇报工作一样)\n"
-
         full_status = self._group_safe_life_status(context)
+        if not full_status:
+            return ""
 
         if share_type == ShareType.GREETING:
             return f"\n\n【你的状态】\n{full_status}\n结合天气、时段(早/晚)和状态，自然地向大家打招呼\n"
@@ -52,24 +49,38 @@ class ContextLifeFormatService(ContextComponent):
         return ""
 
     def _group_safe_life_status(self, context: str) -> str:
-        weather, period, busy, curr_act, mood_str = None, None, False, None, None
-        for line in context.split("\n"):
-            if "天气" in line or "温度" in line:
-                weather = line.strip()
-            elif "时段" in line:
-                period = line.strip()
-            elif "今日基调" in line:
-                mood_str = line.strip()
-            elif "今日计划" in line:
-                busy = True
-            elif "【当前活动】" in line:
-                curr_act = line.strip()
-
-        status_parts = [item for item in (weather, mood_str, period) if item]
-        activity = curr_act or ("（今日状态：比较忙碌）" if busy else "")
-        if activity:
-            status_parts.append(activity)
-        return "\n".join(status_parts) if status_parts else "未知"
+        try:
+            data = json.loads(context)
+        except (TypeError, ValueError):
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        material = {}
+        state = data.get("当前状态")
+        if isinstance(state, dict):
+            state = {
+                key: state[key]
+                for key in ("天气", "心情", "时段", "忙碌度", "当前实际活动")
+                if isinstance(state.get(key), str) and state[key].strip()
+            }
+            if state:
+                material["当前状态"] = state
+        schedule = data.get("日程计划")
+        if self.life_conf.get("group_share_schedule", False) and isinstance(
+            schedule, list
+        ):
+            entries = [
+                {
+                    key: item[key]
+                    for key in ("活动", "时间", "执行状态")
+                    if isinstance(item.get(key), str)
+                }
+                for item in schedule
+                if isinstance(item, dict) and isinstance(item.get("活动"), str)
+            ]
+            if entries:
+                material["日程计划"] = entries
+        return json.dumps(material, ensure_ascii=False, indent=2) if material else ""
 
     def _format_life_context_for_private(
         self, context: str, share_type: ShareType

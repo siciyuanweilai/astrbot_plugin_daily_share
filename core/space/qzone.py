@@ -11,6 +11,7 @@ from astrbot.api import logger
 
 from ..platform import ONEBOT_PLATFORM_TYPES, get_platform_bindings, get_platform_client
 from .endpoints import QzoneServiceConstants
+from .errors import QzoneImageUploadError, QzonePublishUnknownError
 from .feeds.detail import QzoneFeedDetailService
 from .feeds.extra import QzoneFeedExtraService
 from .feeds.homefeed import QzoneFeedHomeService
@@ -189,6 +190,7 @@ class QzoneService:
         self.ctx_service = plugin.ctx_service
         self._ctx: QzoneContext | None = None
         self._ctx_at = 0.0
+        self._cache_bot = None
         self._ctx_fetch_lock = asyncio.Lock()
         self._session = None
         self._h2_session = None
@@ -214,6 +216,8 @@ class QzoneService:
         cast(Any, QzoneReplyVerifyService._attach_reply_failure_debug).__func__
     )
     _bot_nickname: Any = QzoneClientGateway._bot_nickname
+    _ensure_bot_cache_scope: Any = QzoneClientGateway._ensure_bot_cache_scope
+    _ensure_request_bot: Any = QzoneClientGateway._ensure_request_bot
     _can_try_addreply_ugc_thread_variant: Any = classmethod(
         cast(Any, QzoneReplyTargetService._can_try_addreply_ugc_thread_variant).__func__
     )
@@ -741,7 +745,12 @@ class QzoneService:
         if images:
             logger.info(f"[日常分享] 正在上传 QQ 空间配图，共 {len(images)} 张...")
             for image in images:
-                picbo, richval = await self._upload_image(image)
+                try:
+                    picbo, richval = await self._upload_image(image)
+                except Exception as exc:
+                    raise QzoneImageUploadError(
+                        f"QQ 空间配图上传失败（尚未提交说说）: {exc}"
+                    ) from exc
                 pic_bos.append(picbo)
                 richvals.append(richval)
             logger.info("[日常分享] QQ 空间配图上传完成，正在发布说说...")
@@ -766,6 +775,7 @@ class QzoneService:
                     "网络",
                     "Connection",
                     "disconnect",
+                    "状态未知",
                 )
             ):
                 logger.warning(
@@ -780,7 +790,7 @@ class QzoneService:
                 if confirmed is not None:
                     logger.info("[日常分享] 已从最新动态确认 QQ 空间说说发布成功。")
                     return confirmed
-                raise RuntimeError(
+                raise QzonePublishUnknownError(
                     "QQ 空间说说提交状态未知，为避免重复发布已停止自动重试；请先检查空间动态"
                 ) from exc
             else:
@@ -910,6 +920,7 @@ class QzoneService:
         return (kind, *normalized)
 
     def _cached_query_posts(self, cache_key: tuple) -> list[QzonePost] | None:
+        self._ensure_bot_cache_scope()
         entry = self._query_cache.get(cache_key)
         if not entry:
             return None
@@ -951,8 +962,10 @@ class QzoneService:
         self._post_cache.clear()
         self._post_detail_cache_at.clear()
         self._query_cache.clear()
+        self._last_friend_feeds_meta = {}
 
     def _cached_detail_post(self, post_id: str) -> QzonePost | None:
+        self._ensure_bot_cache_scope()
         key = str(post_id or "").strip()
         if not key:
             return None
@@ -999,6 +1012,7 @@ class QzoneService:
                 self._query_cache.pop(cache_key, None)
 
     def _require_post(self, post_id: str) -> QzonePost:
+        self._ensure_bot_cache_scope()
         key = str(post_id or "").strip()
         post = self._post_cache.get(key)
         if post:

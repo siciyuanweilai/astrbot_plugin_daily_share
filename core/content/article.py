@@ -7,7 +7,11 @@ from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
 from ..database.keys import is_public_share_target, public_share_target_label
-from ..prompt import build_common_content_rules
+from ..prompt import (
+    build_common_content_rules,
+    build_current_time_context,
+    build_task_prompt,
+)
 from .contentbase import ContentComponent
 from .evidence import strip_news_reference_links
 
@@ -26,7 +30,6 @@ class ContentNewsService(ContentComponent):
         selected_items: Sequence[dict],
         *,
         source_name: str,
-        enable_web_search: bool,
         target_umo: str,
     ) -> list[tuple[Any, str]]:
         """优先使用接口摘要；缺少摘要时再补联网检索。"""
@@ -41,7 +44,7 @@ class ContentNewsService(ContentComponent):
             if api_bg:
                 search_results[idx] = (title, api_bg)
                 api_bg_count += 1
-            elif enable_web_search:
+            else:
                 pending_indexes.append(idx)
                 pending_tasks.append(
                     self.daily_life_bridge.search_evidence(
@@ -50,8 +53,6 @@ class ContentNewsService(ContentComponent):
                         target_umo=target_umo,
                     )
                 )
-            else:
-                search_results[idx] = (title, "")
 
         if pending_tasks:
             logger.info(
@@ -71,8 +72,6 @@ class ContentNewsService(ContentComponent):
             logger.info(
                 f"[内容服务] {source_name} 已使用接口自带摘要/正文，跳过联网检索。"
             )
-        else:
-            logger.info("[内容服务] 联网搜索功能已关闭，且接口未提供可用摘要。")
 
         return [
             result if result is not None else (item.get("title", ""), "")
@@ -156,18 +155,14 @@ class ContentNewsService(ContentComponent):
             else "私聊可以详细展开想法，并结合你当下的状态"
         )
         length_rule = "字数：120-150字" if is_group else "字数：150-200字"
-
-        return f"""
-【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({ctx["period_label"]})
-你看到了今天的{source_name}，想选择{share_count}条和{target_label}分享。
-
-{user_info_prompt}
-{ctx["life_hint"]}
-{ctx["structured_history_hint"]}
-{dynamics_prompt}
-{source_name}（含 API 摘要/检索真相）：
-{news_text}
-
+        opening_prompt = f"""【开头方式】（必须自然提到平台"{source_name}"）
+- "刚在{source_name}看到..."
+- "翻到{source_name}的时候注意到..."
+- "今天{source_name}这条..."
+- 其他自然的方式"""
+        title_requirement = "6. 用【】标注热搜标题"
+        length_requirement = f"7. {length_rule}"
+        rules = f"""
 {common_rules}
 {ctx.get("output_format_hint", "")}
 
@@ -175,11 +170,7 @@ class ContentNewsService(ContentComponent):
 - 请先阅读新闻列表；如果条目附带 [真实背景与人物]，优先依据其中的人名、数据和事件信息。
 - 背景没有明确给出的细节用概括表达，不要从记忆、关系档案或想象里补人物、地点和经过。
 
-【开头方式】（必须自然提到平台"{source_name}"）
-- "刚在{source_name}看到..."
-- "翻到{source_name}的时候注意到..."
-- "今天{source_name}这条..."
-- 其他自然的方式
+{opening_prompt}
 {organization_title}
 {organization_rules}
 
@@ -189,12 +180,22 @@ class ContentNewsService(ContentComponent):
 3. 观点真诚，结合新闻下方的真实背景表达看法，不要只复述标题。
 4. 避免过度情绪化或标题党式表达
 5. {chat_detail_rule}
-6. 用【】标注热搜标题
-7. {length_rule}
+{title_requirement}
+{length_requirement}
 8. 不要输出网址、Markdown 链接或检索引用编号；新闻链接仅在用户明确索要时由专用工具发送
 9. 直接输出分享内容
-
-直接输出："""
+"""
+        return build_task_prompt(
+            rules,
+            build_current_time_context(ctx),
+            f"你看到了今天的{source_name}，想选择{share_count}条和{target_label}分享。",
+            user_info_prompt,
+            ctx["life_hint"],
+            ctx["structured_history_hint"],
+            dynamics_prompt,
+            f"{source_name}（含 API 摘要/检索真相）：\n{news_text}",
+            output="直接输出：",
+        )
 
     async def _gen_news(self, news_data: tuple[list, str] | None, ctx: dict):
         """生成新闻分享，带基于联网搜索的自动核查功能。"""
@@ -209,7 +210,6 @@ class ContentNewsService(ContentComponent):
         detect_name = ctx.get("detect_name", "")
 
         allow_detail = self.context_conf.get("group_share_schedule", False)
-        enable_web_search = self.news_conf.get("enable_web_search", True)
 
         news_list, source_key = news_data
         source_config = NEWS_SOURCE_MAP.get(source_key, {"name": "热搜", "icon": "📰"})
@@ -221,7 +221,6 @@ class ContentNewsService(ContentComponent):
         search_results = await self._collect_news_backgrounds(
             selected_to_search,
             source_name=source_name,
-            enable_web_search=enable_web_search,
             target_umo=ctx.get("target_id", ""),
         )
         share_count = self._resolve_news_share_count(
@@ -230,6 +229,15 @@ class ContentNewsService(ContentComponent):
         news_text = self._build_news_source_text(
             source_name, selected_to_search, search_results
         )
+
+        if ctx.get("is_qzone_post", False):
+            res = await self._generate_qzone_post(
+                ctx,
+                f"这次想聊{source_name}里的{share_count}条新闻，说自己真正关注的一点和看法。"
+                "资料不足时只谈已知内容，不补事件经过；正文不附网址或检索引用。",
+                news_text,
+            )
+            return strip_news_reference_links(res) if res else None
 
         user_info_prompt = ""
         if not is_group and not is_qzone:
@@ -246,6 +254,7 @@ class ContentNewsService(ContentComponent):
             action="分享新闻",
             allow_detail=allow_detail,
             public_label=public_label,
+            include_time=False,
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 

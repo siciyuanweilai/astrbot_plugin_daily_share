@@ -19,6 +19,13 @@ class LlmService:
         self.context = context
         self.basic_conf = basic_conf
         self._is_terminated = is_terminated
+        self.token_usage = {
+            "reported_calls": 0,
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+        }
+        self.token_usage_by_provider: dict[str, dict[str, int]] = {}
 
     def _llm_system_default_provider(self) -> str:
         try:
@@ -67,7 +74,7 @@ class LlmService:
             configured = int(self.basic_conf.get("llm_timeout", 60))
         except (TypeError, ValueError):
             configured = 60
-        requested = int(timeout or configured)
+        requested = configured if timeout is None else int(timeout)
         return max(1, min(requested, configured))
 
     def _llm_switch_to_default(self, current_provider_id: str, *, reason: str) -> str:
@@ -83,7 +90,7 @@ class LlmService:
         self,
         prompt: str,
         system_prompt: str | None = None,
-        timeout: int = 60,
+        timeout: int | None = None,
         max_retries: int = 2,
         tools: list | None = None,
         umo: str | None = None,
@@ -209,7 +216,72 @@ class LlmService:
         response = await asyncio.wait_for(
             self.context.llm_generate(**kwargs), timeout=timeout
         )
+        self._record_token_usage(response, provider_id)
         return response.completion_text.strip() if response else ""
+
+    def _record_token_usage(self, response, provider_id: str) -> None:
+        self.record_token_usage(response, provider_id)
+
+    def record_token_usage(
+        self, response, provider_id: str, *, purpose: str = "text"
+    ) -> None:
+        """只统计框架归一化的服务端用量，识图调用也使用同一口径。"""
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        try:
+
+            def value(name: str) -> int:
+                raw = (
+                    usage.get(name, 0)
+                    if isinstance(usage, dict)
+                    else getattr(usage, name, 0)
+                )
+                return max(0, int(raw or 0))
+
+            cached = value("input_cached")
+            total_input = value("input_other") + cached
+            output = value("output")
+        except (TypeError, ValueError):
+            return
+        if not (total_input or output):
+            # 部分提供商返回默认的全零 TokenUsage，不能视为已报告未命中。
+            return
+        self.token_usage["reported_calls"] += 1
+        self.token_usage["input_tokens"] += total_input
+        self.token_usage["cached_input_tokens"] += cached
+        self.token_usage["output_tokens"] += output
+        provider_usage = self.token_usage_by_provider.setdefault(
+            provider_id,
+            {
+                "reported_calls": 0,
+                "input_tokens": 0,
+                "cached_input_tokens": 0,
+                "output_tokens": 0,
+                "cached_calls": 0,
+            },
+        )
+        provider_usage["reported_calls"] += 1
+        provider_usage["input_tokens"] += total_input
+        provider_usage["cached_input_tokens"] += cached
+        provider_usage["output_tokens"] += output
+        provider_usage["cached_calls"] += int(cached > 0)
+        cache_ratio = (
+            f"{cached / total_input:.1%}" if total_input else "未报告输入 token"
+        )
+        cumulative_input = provider_usage["input_tokens"]
+        cumulative_ratio = (
+            f"{provider_usage['cached_input_tokens'] / cumulative_input:.1%}"
+            if cumulative_input
+            else "未报告输入 token"
+        )
+        logger.debug(
+            f"[日常分享] 模型用量：服务提供商={provider_id}，"
+            f"输入 token={total_input}，缓存输入 token（cached_input）={cached}，"
+            f"输出 token={output}，来源={purpose}，缓存 token 占比={cache_ratio}，"
+            f"该服务累计缓存 token 占比={cumulative_ratio}，"
+            f"有缓存调用={provider_usage['cached_calls']}/{provider_usage['reported_calls']}"
+        )
 
     def _llm_exception_action(
         self,

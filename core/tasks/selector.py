@@ -4,7 +4,6 @@ from astrbot.api import logger
 
 from ..config import (
     SHARE_TYPE_SEQUENCES,
-    XIAOHONGSHU_SHARE_TYPE_SEQUENCES,
     ShareType,
     TimePeriod,
 )
@@ -12,7 +11,6 @@ from ..constants import normalize_share_type_sequence, normalize_share_type_toke
 from ..database.keys import (
     GLOBAL_STATE_KEY,
     QZONE_STATE_KEY,
-    XIAOHONGSHU_TARGET_ID,
     target_state_key,
 )
 from .taskbase import TaskServiceBase
@@ -68,10 +66,6 @@ class TaskTypeSelectorService(TaskServiceBase):
         if is_qzone:
             conf_node = self.qzone_conf
             prefix = "qzone_"
-        elif target_id == XIAOHONGSHU_TARGET_ID:
-            conf_node = self.xiaohongshu_conf
-            prefix = "xiaohongshu_"
-            default_sequences = XIAOHONGSHU_SHARE_TYPE_SEQUENCES
         else:
             conf_node = self.basic_conf
             prefix = ""

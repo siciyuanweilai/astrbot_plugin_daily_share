@@ -7,7 +7,9 @@ from astrbot.api import logger
 from ..database.keys import is_public_share_target, public_share_target_label
 from ..prompt import (
     build_common_content_rules,
+    build_current_time_context,
     build_opening_integrity_rule,
+    build_task_prompt,
 )
 from .contentbase import ContentComponent
 
@@ -23,23 +25,19 @@ class ContentRecommendationService(ContentComponent):
         baike_label: str,
         web_label: str,
     ) -> str:
-        if self.news_conf.get("enable_web_search", True):
-            info, search_payload = await asyncio.gather(
-                self.news_service.get_baike_info(keyword),
-                self.daily_life_bridge.search_evidence(
-                    keyword,
-                    category=search_kind,
-                    target_umo=target_umo,
-                ),
-            )
-            web_info = (
-                str(search_payload.get("content") or "").strip()[:2000]
-                if search_payload.get("status") == "ok"
-                else ""
-            )
-        else:
-            info = await self.news_service.get_baike_info(keyword)
-            web_info = ""
+        info, search_payload = await asyncio.gather(
+            self.news_service.get_baike_info(keyword),
+            self.daily_life_bridge.search_evidence(
+                keyword,
+                category=search_kind,
+                target_umo=target_umo,
+            ),
+        )
+        web_info = (
+            str(search_payload.get("content") or "").strip()[:2000]
+            if search_payload.get("status") == "ok"
+            else ""
+        )
         if not info and not web_info:
             return ""
         lines = [f"\n\n【{heading}】"]
@@ -58,6 +56,7 @@ class ContentRecommendationService(ContentComponent):
             return None
 
         is_group = ctx["is_group"]
+        is_qzone_post = ctx.get("is_qzone_post", False)
         is_qzone = is_public_share_target(ctx.get("target_id"))
         public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
@@ -117,6 +116,7 @@ class ContentRecommendationService(ContentComponent):
             action="推荐",
             allow_detail=allow_detail,
             public_label=public_label,
+            include_time=False,
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
@@ -125,47 +125,68 @@ class ContentRecommendationService(ContentComponent):
         opening_rule = build_opening_integrity_rule(
             f"- {opening_guide}\n- 可以用“最近发现了一个...”或“最近在重温...”这类自然开头。\n- 不要评价群聊气氛。"
         )
-        prompt = f"""
-【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({ctx["period_label"]})
-你现在的任务是：向{target_str}推荐【{target_work}】。
+        opening_requirement = "2. 开头必须有明确的推荐表达"
+        title_requirement = (
+            "5. 务必用【】将推荐目标的名称括起来，使用本次输入中指定的名称。"
+        )
+        length_requirement = (
+            f"6. {'字数：80-120字' if is_group else '字数：120-150字'}。"
+        )
+        rules = f"""
+{common_rules}
+你现在的任务是：向{target_str}推荐本次输入中指定的目标。
 
 【核心指令】
 1. 必须基于下面的资料进行推荐，不要更换目标。
 
-{baike_context}
-{user_info_prompt}
-{ctx["life_hint"]}
-{ctx["structured_history_hint"]}
-{dynamics_prompt}
-
-{common_rules}
 {ctx.get("output_format_hint", "")}
 {opening_rule}
 
 【推荐文案要求】
 1. 以你的人设性格说话，真实自然
-2. 开头必须有明确的推荐表达
+{opening_requirement}
 3. 真诚推荐，避免营销号式的夸张表达
 4. 结合资料介绍它的亮点。
-5. 务必用【】将推荐目标的名称【{target_work}】括起来。
-6. {"字数：80-120字" if is_group else "字数：120-150字"}。
+{title_requirement}
+{length_requirement}
 7. 直接输出推荐内容。
 """
-
-        res = await self._call_llm(
-            prompt=prompt,
-            system_prompt=ctx["system_prompt"],
-            target_umo=ctx.get("target_id"),
+        prompt = build_task_prompt(
+            rules,
+            build_current_time_context(ctx),
+            f"【本次推荐目标】【{target_work}】",
+            baike_context,
+            user_info_prompt,
+            ctx["life_hint"],
+            ctx["structured_history_hint"],
+            dynamics_prompt,
+            output="直接输出推荐内容：",
         )
+
+        if is_qzone_post:
+            res = await self._generate_qzone_post(
+                ctx,
+                f"这次想分享{target_work}值得关注的一点，依据资料说清楚自己的理由。"
+                "没有使用或观看证据时，不声称自己用过或看过；不要更换推荐目标。",
+                baike_context,
+            )
+        else:
+            res = await self._call_llm(
+                prompt=prompt,
+                system_prompt=ctx["system_prompt"],
+                target_umo=ctx.get("target_id"),
+            )
 
         if res:
             try:
-                matches = re.findall(r"【(.*?)】", res)
+                matches = [] if is_qzone_post else re.findall(r"【(.*?)】", res)
                 keyword = matches[0] if matches else target_work or res[:10]
                 await self.db.record_topic(target_id, "rec", keyword)
             except Exception as e:
                 logger.debug(f"[内容服务] 记录推荐主题失败: {e}")
-            if self.content_lib_conf.get("show_rec_type_prefix", True):
+            if not is_qzone_post and self.content_lib_conf.get(
+                "show_rec_type_prefix", True
+            ):
                 return f"推荐类型: {rec_type} - {sub_style}\n\n{res}"
             return res
         return None

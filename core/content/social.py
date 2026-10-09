@@ -1,6 +1,10 @@
 from ..config import TimePeriod
 from ..database.keys import is_public_share_target, public_share_target_label
-from ..prompt import build_common_content_rules
+from ..prompt import (
+    build_common_content_rules,
+    build_current_time_context,
+    build_task_prompt,
+)
 from .contentbase import ContentComponent
 
 
@@ -8,6 +12,10 @@ class ContentSocialService(ContentComponent):
     async def _gen_greeting(self, period: TimePeriod, ctx: dict):
         p_label = ctx["period_label"]
         is_group = ctx["is_group"]
+        if ctx.get("is_qzone_post", False):
+            return await self._generate_qzone_post(
+                ctx, "这次想按当前时段随口打个招呼，可带一句当下状态。"
+            )
         is_qzone = is_public_share_target(ctx.get("target_id"))
         public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
@@ -31,6 +39,7 @@ class ContentSocialService(ContentComponent):
             action="问候",
             allow_detail=allow_detail,
             public_label=public_label,
+            include_time=False,
         )
         greeting_constraint = ""
         opening_rule = ""
@@ -54,41 +63,47 @@ class ContentSocialService(ContentComponent):
             )
             opening_rule = '- 自然切入："今天心情不错呢" / "刚忙完..." / "今天有点..."'
 
+        opening_prompt = f"""【开头方式】（自然直接）
+{opening_rule}
+
+- 心情切入："今天心情不错呢"
+- 状态切入："刚忙完..." / "今天有点..."
+- 天气切入：（仅在天气特殊时使用）"""
+        length_requirement = (
+            f"5. {'简短（80-100字）' if is_group else '可适当长一些（100-120字）'}"
+        )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
 
-        prompt = f"""
-【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({p_label})
-你现在要向{target_str}发送一条温馨自然的问候。
-
-{user_info_prompt}
-{ctx["life_hint"]}
-{ctx["structured_history_hint"]}
-{dynamics_prompt}
+        rules = f"""
 {common_rules}
+你现在要向{target_str}发送一条温馨自然的问候。
 {ctx.get("output_format_hint", "")}
 
 【问候写法】
 - 可以参考生活状态、天气或正在做的事，让问候更像当下自然说出口的话。
 - 群聊请直接开启新问候，不评价群氛围；私聊可以更个人化；{public_label}写成自己的状态记录。
 
-【开头方式】（自然直接）
-{opening_rule}
-
-- 心情切入："今天心情不错呢"
-- 状态切入："刚忙完..." / "今天有点..."
-- 天气切入：（仅在天气特殊时使用）
+{opening_prompt}
 
 要求：
 1. 以你的人设性格说话，真实自然
 2. 基于当前真实时间问候
 3. 忽略群聊历史，直接开启新问候
 {greeting_constraint}
-5. {"简短（80-100字）" if is_group else "可适当长一些（100-120字）"}
+{length_requirement}
 6. 直接输出内容，不要解释
-
-请生成{p_label}问候："""
+"""
+        prompt = build_task_prompt(
+            rules,
+            build_current_time_context(ctx),
+            user_info_prompt,
+            ctx["life_hint"],
+            ctx["structured_history_hint"],
+            dynamics_prompt,
+            output=f"请生成{p_label}问候：",
+        )
 
         res = await self._call_llm(
             prompt=prompt,
@@ -101,6 +116,10 @@ class ContentSocialService(ContentComponent):
 
     async def _gen_mood(self, period, ctx):
         is_group = ctx["is_group"]
+        if ctx.get("is_qzone_post", False):
+            return await self._generate_qzone_post(
+                ctx, "这次想说一句当前在意的小事、心情或念头，选有依据的一点即可。"
+            )
         is_qzone = is_public_share_target(ctx.get("target_id"))
         public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
@@ -124,6 +143,7 @@ class ContentSocialService(ContentComponent):
             action="分享心情",
             allow_detail=allow_detail,
             public_label=public_label,
+            include_time=False,
         )
         # 3. 共鸣策略
         resonance_guide = ""
@@ -153,15 +173,11 @@ class ContentSocialService(ContentComponent):
 - 如果要写睡前祝福，只能放在正文最后；可以自然使用“晚安”“安安”“好梦”“早点睡，做个好梦”等表达。
 """
 
-        prompt = f"""
-【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({ctx["period_label"]})
-你想和{target_str}分享一下现在的心情或想法。
+        length_requirement = f"5. 字数：{'80-100字' if is_group else '100-120字'}"
 
-{user_info_prompt}
-{ctx["life_hint"]}
-{ctx["structured_history_hint"]}
-{dynamics_prompt}
+        rules = f"""
 {common_rules}
+你想和{target_str}分享一下现在的心情或想法。
 {ctx.get("output_format_hint", "")}
 {resonance_guide}
 {time_greeting_rule}
@@ -175,10 +191,18 @@ class ContentSocialService(ContentComponent):
 2. 分享此刻的感受、想法或小感悟
 3. 忽略群聊历史，直接开启新话题
 4. 基于当前真实时间感悟
-5. 字数：{"80-100字" if is_group else "100-120字"}
+{length_requirement}
 6. 直接输出内容
-
-你的随想："""
+"""
+        prompt = build_task_prompt(
+            rules,
+            build_current_time_context(ctx),
+            user_info_prompt,
+            ctx["life_hint"],
+            ctx["structured_history_hint"],
+            dynamics_prompt,
+            output="你的随想：",
+        )
 
         res = await self._call_llm(
             prompt=prompt,

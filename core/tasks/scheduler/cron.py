@@ -31,7 +31,7 @@ class ScheduleJobDefinition:
 class TaskSchedulerCronService(SchedulerComponent):
     @staticmethod
     def _normalize_crontab_weekday(field: str) -> str | None:
-        """Convert standard crontab Sunday=0/7 to APScheduler Monday=0."""
+        """将标准 crontab 的周日=0/7 转换为 APScheduler 的周一=0 编号。"""
         text = str(field or "").strip().lower()
         if text == "*":
             return "*"

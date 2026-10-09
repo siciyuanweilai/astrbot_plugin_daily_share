@@ -44,8 +44,9 @@ class ImageVisualFrameService:
         """固定人物、静物或风景模式，避免模型构图覆盖上游决策。"""
         normalized = dict(visuals or {})
         visual_mode = self._resolve_visual_mode(normalized, contains_character)
+        extracted_mode = normalized.get("visual_mode")
         normalized["visual_mode"] = visual_mode
-        if visual_mode != "person":
+        if visual_mode != "person" and extracted_mode != visual_mode:
             normalized["composition"] = ""
             normalized["frame_logic"] = ""
             normalized["composition_logic"] = ""
@@ -59,7 +60,9 @@ class ImageVisualFrameService:
         frame_logic = str(
             visuals.get("frame_logic", "") or visuals.get("composition_logic", "") or ""
         ).strip()
-        if visual_mode == "person" and composition:
+        if composition and (
+            visual_mode == "person" or visuals.get("visual_mode") == visual_mode
+        ):
             return (
                 composition,
                 frame_logic

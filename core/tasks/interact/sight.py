@@ -193,7 +193,7 @@ def _qzone_image_context_cache_keys(
         str(total),
     )
     if int(getattr(post, "appid", 0) or 0) == 4:
-        # Album uploads can share text/time; bind fallback cache to actual photos.
+        # 不同相册上传可能具有相同正文和时间，兜底缓存必须绑定实际照片。
         prefix += (
             "photo",
             str(getattr(post, "photo_batch_key", "") or ""),
@@ -229,16 +229,18 @@ def _qzone_image_context_cache_key(
 def _qzone_image_vision_cache_keys(
     post, image_url: str, *, index: int, total: int, scope: str = ""
 ) -> list[str]:
-    url_key = _qzone_image_url_cache_key(image_url)
-    if int(getattr(post, "appid", 0) or 0) == 4:
-        # Do not reuse legacy album cache entries that may contain cross-photo aliases.
-        url_key = _qzone_image_context_hash("photo_image", url_key)
+    image_key = _qzone_image_url_cache_key(image_url)
+    # 为所有缓存键增加版本标识，避免复用已被位置别名污染的摘要。
+    url_key = _qzone_image_context_hash("image_v2", image_key)
     keys = [url_key]
     keys.extend(
         _qzone_image_context_cache_keys(post, index=index, total=total, scope=scope)
     )
     keys = list(dict.fromkeys(key for key in keys if key))
-    return keys
+    return [
+        keys[0],
+        *[_qzone_image_context_hash("image_v2", image_key, key) for key in keys[1:]],
+    ]
 
 
 def _prune_qzone_image_vision_cache(cache: dict) -> None:
@@ -254,20 +256,23 @@ async def _save_qzone_image_vision_cache(
     state: dict | None,
     *,
     state_key: str = QZONE_AUTO_COMMENT_STATE_KEY,
+    updates: dict | None = None,
 ) -> None:
     if not isinstance(state, dict):
         return
     try:
-        source_cache = dict(_qzone_image_vision_cache(state))
-        if not source_cache:
-            return
-        latest = await owner.db.get_qzone_state(state_key, {})
-        if not isinstance(latest, dict):
-            latest = {}
+        source_cache = dict(
+            _qzone_image_vision_cache(state) if updates is None else updates
+        )
+        latest = await owner.db.merge_cache_entries(
+            "qzone",
+            state_key,
+            source_cache,
+            max_items=QZONE_AUTO_COMMENT_IMAGE_VISION_CACHE_MAX_ITEMS,
+            cache_field=QZONE_AUTO_COMMENT_IMAGE_VISION_CACHE_KEY,
+        )
         latest_cache = _qzone_image_vision_cache(latest)
-        latest_cache.update(source_cache)
         state[QZONE_AUTO_COMMENT_IMAGE_VISION_CACHE_KEY] = latest_cache
-        await owner.db.set_qzone_state(state_key, latest)
     except Exception as exc:
         logger.debug(f"[日常分享] QQ 空间说说配图识别缓存保存失败: {exc}")
 
@@ -438,6 +443,16 @@ async def _describe_qzone_image(owner, image_url: str, *, target_umo: str = "") 
             logger.debug(f"[日常分享] QQ 空间说说配图识别跳过: {exc}")
             return ""
 
+        recorder = getattr(
+            getattr(getattr(owner, "plugin", None), "llm_service", None),
+            "record_token_usage",
+            None,
+        )
+        if callable(recorder):
+            try:
+                recorder(result, provider_id, purpose="qzone_vision")
+            except Exception as exc:
+                logger.debug(f"[日常分享] 识图用量统计未完成: {type(exc).__name__}")
         description = _clean_auto_comment_text(
             _qzone_completion_text(result), max_bytes=180
         )
@@ -456,7 +471,7 @@ async def _describe_qzone_image(owner, image_url: str, *, target_umo: str = "") 
     return ""
 
 
-async def _qzone_image_refs_context(
+async def _qzone_image_refs_descriptions(
     owner,
     image_refs: list[tuple[object, str, str]],
     *,
@@ -464,21 +479,21 @@ async def _qzone_image_refs_context(
     target_umo: str = "",
     state_key: str = QZONE_AUTO_COMMENT_STATE_KEY,
     label: str = "QQ 空间说说配图",
-    heading: str = "配图识别",
     author: str = "",
     log_missing: bool = True,
-) -> str:
+) -> list[tuple[int, str, str]]:
     enabled_refs = _enabled_qzone_image_refs(
         owner, image_refs, label=label, author=author, log_missing=log_missing
     )
     if enabled_refs is None:
-        return ""
+        return []
     image_refs = enabled_refs
 
     logger.debug(f"[日常分享] {label}识别开始: {author}，图片 {len(image_refs)} 张")
     cache = _qzone_image_vision_cache(state)
     descriptions = []
     cache_changed = False
+    cache_updates = {}
     for index, (source, scope, image_url) in enumerate(image_refs, start=1):
         cache_keys = _qzone_image_vision_cache_keys(
             source, image_url, index=index, total=len(image_refs), scope=scope
@@ -488,12 +503,15 @@ async def _qzone_image_refs_context(
             "",
         )
         if cached:
+            cache_updates.update(
+                {key: cached for key in cache_keys if not cache.get(key)}
+            )
             changed = _fill_qzone_image_cache_aliases(cache, cache_keys, cached)
             cache_changed = cache_changed or changed
             logger.debug(
                 f"[日常分享] {label}识别命中缓存: 图{index}（{scope}），{cached}"
             )
-            descriptions.append((scope, cached))
+            descriptions.append((index, scope, cached))
             continue
         try:
             description = await _describe_qzone_image(
@@ -506,20 +524,30 @@ async def _qzone_image_refs_context(
             continue
         for key in cache_keys:
             cache[key] = description
+            cache_updates[key] = description
         cache_changed = True
-        descriptions.append((scope, description))
+        descriptions.append((index, scope, description))
         logger.debug(f"[日常分享] {label}识别成功: 图{index}（{scope}），{description}")
 
     before_prune_size = len(cache)
     _prune_qzone_image_vision_cache(cache)
     if cache_changed or len(cache) != before_prune_size:
-        await _save_qzone_image_vision_cache(owner, state, state_key=state_key)
+        await _save_qzone_image_vision_cache(
+            owner, state, state_key=state_key, updates=cache_updates
+        )
     if not descriptions:
         logger.debug(f"[日常分享] {label}识别未获得有效摘要，按纯文字评论: {author}")
+    return descriptions
+
+
+def _qzone_image_descriptions_context(
+    descriptions: list[tuple[int, str, str]], *, heading: str = "配图识别"
+) -> str:
+    if not descriptions:
         return ""
     lines = [
         f"图{index}（{scope}）: {description}"
-        for index, (scope, description) in enumerate(descriptions, start=1)
+        for index, scope, description in descriptions
     ]
     return f"【{heading}】\n" + "\n".join(lines)
 
@@ -556,15 +584,15 @@ async def _qzone_auto_comment_image_context(
 ) -> str:
     _enabled, limit, _provider_id = _qzone_image_vision_config(owner)
     author = getattr(post, "name", "") or getattr(post, "uin", "") or ""
-    return await _qzone_image_refs_context(
+    descriptions = await _qzone_image_refs_descriptions(
         owner,
         _qzone_post_image_refs(post, limit=limit),
         state=state,
         target_umo=target_umo,
         label="QQ 空间说说配图",
-        heading="配图识别",
         author=author,
     )
+    return _qzone_image_descriptions_context(descriptions)
 
 
 async def _qzone_auto_reply_image_context(
@@ -594,14 +622,14 @@ async def _qzone_auto_reply_image_context(
             else []
         )
         author = getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
-    return await _qzone_image_refs_context(
+    descriptions = await _qzone_image_refs_descriptions(
         owner,
         refs,
         state=state,
         target_umo=target_umo,
         state_key=QZONE_AUTO_REPLY_STATE_KEY,
         label="QQ 空间评论配图",
-        heading="评论配图识别",
         author=author,
         log_missing=False,
     )
+    return _qzone_image_descriptions_context(descriptions, heading="评论配图识别")

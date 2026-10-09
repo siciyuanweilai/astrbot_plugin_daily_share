@@ -107,7 +107,7 @@ def photo_reply_target_error(
 async def _verify_photo_reply(
     service, *, owner, album, pic, root, target, reply, content
 ):
-    """Read back the returned ID; never resend or use mood-comment deletion."""
+    """按返回的回复 ID 回查结果，不重发，也不调用说说评论删除接口。"""
     status = "not_found"
     for delay in (0, 0.8, 1.6):
         if delay:
@@ -184,10 +184,10 @@ def _photo_submit_result(
 
 
 class QzonePhotoService(QzoneMethodSet):
-    """Read and comment on one photo in a Qzone album."""
+    """读取 QQ 空间相册中的单张照片并发表评论。"""
 
     async def query_photo_posts(self, post_id: str) -> list[QzonePost]:
-        """Read a feed's explicit photos as separate, safely routable targets."""
+        """读取动态中明确标识的照片，分别建立可安全提交的目标。"""
         post = self._require_post(post_id)
         if int(post.appid or 311) != 4:
             return [post]
@@ -289,7 +289,7 @@ class QzonePhotoService(QzoneMethodSet):
                     f"[日常分享] QQ 空间批量相册读取照片评论失败: {target.key}: {exc}"
                 )
                 continue
-            # Never carry a batch's unbound HTML comments into an individual photo.
+            # 不将上传批次中未绑定照片的 HTML 评论带入单张照片。
             result.append(
                 replace(
                     post,
@@ -330,7 +330,7 @@ class QzonePhotoService(QzoneMethodSet):
                         complete = False
                         logger.debug(
                             "[日常分享] QQ 空间相册共享 topicId 未确认同批，跳过照片: "
-                            f"{photo.key!r}, referenced_photo={sibling_key!r}"
+                            f"{photo.key!r}，引用照片={sibling_key!r}"
                         )
                         continue
                     photo.feed_topic_id = f"{photo.comment_topic_id}_0_0"
@@ -485,7 +485,7 @@ class QzonePhotoService(QzoneMethodSet):
         feed_topic_id: str = "",
         parent_comment: QzoneComment | None = None,
     ) -> dict[str, Any]:
-        """Reply in the original photo comment thread, mentioning the target."""
+        """在原照片评论楼层内回评，并 @ 当前被回复者。"""
         owner = _positive_uin(owner_uin, label="相册主人 QQ")
         album = _photo_identifier(album_id, label="相册 ID")
         pic = _photo_identifier(pic_key, label="照片 picKey")

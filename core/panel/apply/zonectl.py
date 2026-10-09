@@ -29,11 +29,6 @@ class DashboardApplyQzoneService(PanelComponent):
                 min_value=1,
                 max_value=10,
             )
-        if f"{prefix}_prompt" in source:
-            target[f"{prefix}_prompt"] = self.validation._page_clean_text(
-                source.get(f"{prefix}_prompt"),
-                max_len=500,
-            )
 
     def _page_apply_qzone_section(self, sections: dict) -> None:
         qzone_body = self.runtime.fields._page_payload_section(sections, "qzone")
@@ -76,11 +71,6 @@ class DashboardApplyQzoneService(PanelComponent):
             )
             qzone["qzone_share_type"] = (
                 TYPE_CN_MAP[share_type.value] if share_type else "自动"
-            )
-        if "qzone_share_output_format" in qzone_body:
-            qzone["qzone_share_output_format"] = self.validation._page_clean_text(
-                qzone_body.get("qzone_share_output_format"),
-                max_len=1200,
             )
         if "qzone_image_enabled_types" in qzone_body:
             qzone["qzone_image_enabled_types"] = self.validation._page_type_list_value(

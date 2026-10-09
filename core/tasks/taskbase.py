@@ -22,7 +22,6 @@ class TaskConfigState:
     tts: dict
     context: dict
     receiver: dict
-    xiaohongshu: dict
 
     @classmethod
     def from_runtime(cls, runtime: TaskRuntime) -> TaskConfigState:
@@ -34,7 +33,6 @@ class TaskConfigState:
             tts=runtime.tts_conf,
             context=runtime.context_conf,
             receiver=runtime.receiver_conf,
-            xiaohongshu=runtime.xiaohongshu_conf,
         )
 
 
@@ -139,10 +137,6 @@ class TaskServiceBase:
     @property
     def receiver_conf(self) -> dict:
         return self.config.receiver
-
-    @property
-    def xiaohongshu_conf(self) -> dict:
-        return self.config.xiaohongshu
 
 
 __all__ = ["TaskConfigState", "TaskServiceBase", "TaskSharedState"]

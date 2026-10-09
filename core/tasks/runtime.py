@@ -36,7 +36,6 @@ class TaskRuntime:
     tts_conf: dict
     context_conf: dict
     receiver_conf: dict
-    xiaohongshu_conf: dict
 
     @classmethod
     def from_services(
@@ -58,7 +57,6 @@ class TaskRuntime:
             tts_conf=services.tts_conf,
             context_conf=services.context_conf,
             receiver_conf=services.receiver_conf,
-            xiaohongshu_conf=services.xiaohongshu_conf,
         )
 
     @classmethod

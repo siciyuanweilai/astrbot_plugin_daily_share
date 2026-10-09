@@ -11,7 +11,7 @@ from .decoder import _safe_int
 def parse_photo_batch_topic(
     topic_id: str, *, album_id: str
 ) -> tuple[str, str, int] | None:
-    """Parse the observed upload suffix; a viewer must still verify its claims."""
+    """解析已观察到的上传标识尾缀，仍须通过照片查看器核验各字段。"""
     prefix = f"{album_id}_"
     topic = unquote(str(topic_id or "").strip())
     if not album_id or not topic.startswith(prefix):
@@ -52,7 +52,7 @@ def parse_feed_photo_targets(
         if normalized.get("name") == "feed_data":
             album = album or str(normalized.get("tid") or "").strip()
             if not pic:
-                # A batch's subid is not necessarily a photo key.
+                # 上传批次的 subid 不一定是照片 picKey。
                 batch_topic = parse_photo_batch_topic(topic, album_id=album)
                 prefix = f"{album}_"
                 if batch_topic:
@@ -68,7 +68,7 @@ def parse_feed_photo_targets(
         )
         feed_topic = ""
         if topic and pic:
-            # picKey may itself contain underscores; remove only the exact known suffix.
+            # picKey 本身可能包含下划线，仅移除精确匹配的已知尾缀。
             suffix = f"_{pic}_0_0"
             if not album:
                 batch_parts = topic.rsplit("_", 2)
@@ -77,7 +77,7 @@ def parse_feed_photo_targets(
                 elif topic.endswith(f"_{pic}"):
                     album = topic.removesuffix(f"_{pic}")
                 elif len(batch_parts) == 3 and batch_parts[0].endswith(f"_{pic}"):
-                    # Keep unknown suffixes as conflicting topics, not new albums.
+                    # 未知尾缀保留为存在冲突的 topicId，不将其解释为新相册。
                     album = batch_parts[0].removesuffix(f"_{pic}")
                 else:
                     album = topic
@@ -160,7 +160,7 @@ def parse_feed_photo_targets(
                 self.stack.append((tag, blocked))
             if blocked:
                 return
-            # Identifier attributes must belong to the same element.
+            # 配对的标识属性必须属于同一个 HTML 元素。
             album, owner = add({k.removeprefix("data-"): v for k, v in values.items()})
             for name in ("href", "link"):
                 url = values.get(name) or ""
@@ -192,7 +192,7 @@ def parse_feed_photo_targets(
     PhotoTags().feed(raw_html)
     result = list(targets.values())
     if declared_count > len(result):
-        # A partly resolved batch is not a unique single-photo target.
+        # 仅解析出部分照片的批次不能视为唯一的单照片目标。
         result.append(
             QzonePhoto(
                 owner_uin=owner_uin,

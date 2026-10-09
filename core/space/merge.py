@@ -13,7 +13,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
         detail.curkey = detail.curkey or base.curkey
         detail.unikey = detail.unikey or base.unikey
         detail.busi_param = detail.busi_param or base.busi_param
-        # Generic detail parsers default to 311; keep explicit feed type/targets.
+        # 通用详情解析器默认使用 appid=311，保留动态明确提供的类型和目标。
         if int(base.appid or 311) != 311:
             detail.appid = base.appid
         photos = {}

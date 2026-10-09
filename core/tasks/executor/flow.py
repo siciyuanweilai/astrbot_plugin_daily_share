@@ -8,6 +8,7 @@ from ...config import ShareType, TimePeriod
 from ...constants import period_label, share_type_label
 from ...database.keys import SOURCE_SCHEDULED, SOURCE_SMART
 from ...toolkit import format_exception
+from ..continuation import preserve_share
 from ..taskbase import TaskServiceBase
 
 
@@ -207,6 +208,10 @@ class TaskExecutorFlowService(TaskServiceBase):
         )
         return False, ""
 
+    async def send_prepared_chat_share(self, **kwargs) -> bool:
+        return await self._send_execute_share_content(**kwargs)
+
+    @preserve_share("chat")
     async def _send_execute_share_content(
         self,
         *,
@@ -246,6 +251,9 @@ class TaskExecutorFlowService(TaskServiceBase):
         )
 
         send_img_path = send_img_path or img_path
+        continuations = getattr(self.plugin, "share_continuations", None)
+        if continuations is not None:
+            await continuations.mark_submitting()
         sent, media_result = await self._send_execute_share_result(
             uid=uid,
             content=content,
@@ -466,6 +474,14 @@ class TaskExecutorFlowService(TaskServiceBase):
         for target_index, uid in enumerate(targets, 1):
             if self.plugin._is_terminated:
                 break
+            continuations = getattr(self.plugin, "share_continuations", None)
+            if (
+                history_source in {SOURCE_SCHEDULED, SOURCE_SMART}
+                and continuations is not None
+                and await continuations.has_pending_share(uid)
+            ):
+                logger.info(f"[日常分享] {uid} 已有待续接分享，本轮不再生成新任务")
+                continue
             life_ctx = await self.ctx_service.get_life_context(uid)
             ok = await self._execute_share_for_target(
                 uid=uid,

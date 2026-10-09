@@ -58,11 +58,6 @@ NEWS_SOURCE_MAP = {
         "name": "B站热搜",
         "icon": "📺",
     },
-    "xiaohongshu": {
-        "url": "https://api.nycnm.cn/api/v2/xhsrs",
-        "name": "小红书热搜",
-        "icon": "📕",
-    },
     "douyin": {
         "url": "https://api.nycnm.cn/api/v2/douyinrs",
         "name": "抖音热搜",
@@ -136,7 +131,7 @@ NEWS_SOURCE_MAP = {
     },
 }
 
-# 时间段新闻源偏好 (已包含所有 19 个新闻源)
+# 时间段新闻源偏好 (已包含所有 18 个新闻源)
 NEWS_TIME_PREFERENCES = {
     # 凌晨
     TimePeriod.DAWN: {
@@ -158,7 +153,6 @@ NEWS_TIME_PREFERENCES = {
         "kuaishou": 0.02,
         "acfun": 0.02,
         "bili": 0.01,
-        "xiaohongshu": 0.01,
     },
     # 早晨
     TimePeriod.MORNING: {
@@ -175,7 +169,6 @@ NEWS_TIME_PREFERENCES = {
         "51cto": 0.05,
         "yicai": 0.05,
         "cls": 0.06,
-        "xiaohongshu": 0.02,
         "ifanr": 0.02,
         "bili": 0.01,
         "douyin": 0.01,
@@ -201,7 +194,6 @@ NEWS_TIME_PREFERENCES = {
         "ifanr": 0.02,
         "bili": 0.01,
         "kuaishou": 0.02,
-        "xiaohongshu": 0.01,
         "acfun": 0.01,
     },
     # 中午
@@ -209,7 +201,6 @@ NEWS_TIME_PREFERENCES = {
         "weibo": 0.14,
         "zhihu": 0.12,
         "douyin": 0.12,
-        "xiaohongshu": 0.10,
         "kuaishou": 0.08,
         "bili": 0.08,
         "toutiao": 0.08,
@@ -245,7 +236,6 @@ NEWS_TIME_PREFERENCES = {
         "51cto": 0.02,
         "yicai": 0.02,
         "ifanr": 0.01,
-        "xiaohongshu": 0.01,
         "bili": 0.01,
     },
     # 傍晚
@@ -266,7 +256,6 @@ NEWS_TIME_PREFERENCES = {
         "51cto": 0.01,
         "ifanr": 0.01,
         "acfun": 0.01,
-        "xiaohongshu": 0.01,
         "bili": 0.01,
         "yicai": 0.01,
     },
@@ -290,7 +279,6 @@ NEWS_TIME_PREFERENCES = {
         "acfun": 0.01,
         "bili": 0.01,
         "thepaper": 0.01,
-        "xiaohongshu": 0.01,
     },
     # 深夜
     TimePeriod.LATE_NIGHT: {
@@ -310,7 +298,6 @@ NEWS_TIME_PREFERENCES = {
         "51cto": 0.01,
         "ifanr": 0.01,
         "acfun": 0.01,
-        "xiaohongshu": 0.01,
         "thepaper": 0.01,
         "bili": 0.01,
     },
@@ -356,18 +343,6 @@ SHARE_TYPE_SEQUENCES = {
         "心情",  # 第1次：深夜心情
         "问候",  # 第2次：晚安问候
     ],
-}
-
-# 小红书按时段的默认内容序列；与仪表盘中的小红书时段序列保持一致。
-XIAOHONGSHU_SHARE_TYPE_SEQUENCES = {
-    TimePeriod.DAWN: ["心情"],
-    TimePeriod.MORNING: ["问候", "心情"],
-    TimePeriod.FORENOON: ["心情"],
-    TimePeriod.NOON: ["心情"],
-    TimePeriod.AFTERNOON: ["心情"],
-    TimePeriod.EVENING: ["心情"],
-    TimePeriod.NIGHT: ["心情"],
-    TimePeriod.LATE_NIGHT: ["心情", "问候"],
 }
 
 # 默认知识库细分

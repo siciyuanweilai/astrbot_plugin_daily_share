@@ -235,6 +235,9 @@ class RuntimeService:
         plugin._is_initialized = True
         self.set_runtime_state("ready")
         self.track_task(self._delayed_init_bots())
+        continuations = getattr(plugin, "share_continuations", None)
+        if continuations is not None:
+            self.track_task(continuations.run())
 
     async def terminate(self) -> None:
         async with self._lifecycle_lock:

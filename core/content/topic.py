@@ -1,4 +1,4 @@
-from ..prompt import build_topic_category_boundary
+from ..prompt import build_task_prompt, build_topic_category_boundary
 from .contentbase import ContentComponent
 
 
@@ -23,25 +23,25 @@ class ContentTopicService(ContentComponent):
             target_item_desc, constraint = build_topic_category_boundary(category_type)
 
             system_prompt = "你是一个品味独特的资深鉴赏家和推荐官。"
-            user_prompt = f"""
-任务：推荐一个【{sub_category}】风格的【{category_type}】{target_item_desc}。
-【已推荐过的列表】：{history_str}
-
+            rules = """
 要求：
 1. 请优先选择【口碑极佳】的目标。
 2. 拒绝那些被推荐烂了的“教科书式标准答案”。
 3. 可以是经典名作，但最好能让人有“眼前一亮”或“值得重温”的感觉。
 4. 不要输出上述“已推荐过的列表”中的内容，必须换一个新的。
 5. 只输出名称，不要书名号，不要解释，不要标点。
-{constraint}
 """
+            user_prompt = build_task_prompt(
+                rules,
+                constraint,
+                f"任务：推荐一个【{sub_category}】风格的【{category_type}】{target_item_desc}。",
+                f"【已推荐过的列表】：{history_str}",
+                output="只输出名称：",
+            )
         else:
             # === 知识类提示词 ===
             system_prompt = "你是一个眼光独到的科普博主和生活达人。"
-            user_prompt = f"""
-请输出一个属于【{category_type}-{sub_category}】领域的知识点关键词。
-【已分享过的列表】：{history_str}
-
+            rules = """
 要求：
 1. 话题范围灵活：可以是【冷知识】、【常见误区】、【实用技巧】或【有趣现象】。
 2. 核心标准是“有趣”或“有用”：
@@ -51,6 +51,12 @@ class ContentTopicService(ContentComponent):
 3. 不要输出上述“已分享过的列表”中的内容，必须换一个新的。
 4. 只输出关键词，不要任何解释，不要标点符号。
 """
+            user_prompt = build_task_prompt(
+                rules,
+                f"请输出一个属于【{category_type}-{sub_category}】领域的知识点关键词。",
+                f"【已分享过的列表】：{history_str}",
+                output="只输出关键词：",
+            )
 
         # 调用大语言模型
         res = await self._call_llm(

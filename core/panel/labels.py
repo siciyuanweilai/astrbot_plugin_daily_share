@@ -4,7 +4,6 @@ from ..database.keys import (
     BRIEFING_TARGET_ALIASES,
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
-    XIAOHONGSHU_TARGET_ID,
 )
 from .panelcomponent import PanelComponent
 
@@ -69,7 +68,6 @@ class DashboardLabelsService(PanelComponent):
             return "\u5168\u5c40"
         known_labels = {
             QZONE_TARGET_ID: "QQ \u7a7a\u95f4",
-            XIAOHONGSHU_TARGET_ID: "小红书",
             GLOBAL_TARGET_ID: "\u5168\u5c40\u5206\u4eab",
             **dict.fromkeys(BRIEFING_TARGET_ALIASES, "早报"),
         }

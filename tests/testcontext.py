@@ -736,6 +736,246 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("【近期互动反馈】近期互动反馈整体积极", text)
         self.assertIn("【当前目标熟悉用语】", text)
 
+    async def test_legacy_life_switch_does_not_disable_public_context(self):
+        _, service = _service(
+            stars=[_StarRef("astrbot_plugin_daily_life", _DailyLifePlugin())],
+        )
+        service.life_conf["enable_life_context"] = False
+        text = await service.get_life_context("aiocqhttp:FriendMessage:123")
+        self.assertIn("【今日天气】北京 晴 20°C", text)
+        self.assertIn("【关系档案】", text)
+
+    async def test_group_context_selects_structured_status_and_keeps_image_appearance(
+        self,
+    ):
+        _, service = _service()
+        raw = await _DailyLifePlugin().get_share_context()
+        raw["current_awareness"] = {"time_period": "下午"}
+        raw["memo"] = "私聊天气：秘密约会，温度再高也不能公开"
+        raw["schedule"] = "私密地点完整路线"
+        raw["state"]["summary"] = "带精确地址的私人状态"
+        calls = []
+
+        class Bridge:
+            async def get_share_context(self, target_umo=""):
+                calls.append(target_umo)
+                return raw
+
+        service.daily_life_bridge = Bridge()
+        service.life_conf.update(enable_life_context=False, life_context_in_group=False)
+        context = await service.get_life_context("aiocqhttp:GroupMessage:123")
+        self.assertEqual(calls, ["aiocqhttp:GroupMessage:123"])
+        data = json.loads(context)
+        self.assertEqual(data["当前状态"]["天气"], "北京 晴 20°C")
+        self.assertEqual(data["当前状态"]["时段"], "下午")
+        self.assertIn("浅蓝外套和白裙子", context)
+        self.assertIn("松散低马尾", context)
+        self.assertNotIn("日程计划", data)
+        for text in ("阿林", "秘密约会", "私密地点", "精确地址", "在窗边写手帐"):
+            self.assertNotIn(text, context)
+
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        prompt = service.format_life_context(
+            context, config_module.ShareType.MOOD, True
+        )
+        self.assertIn("北京 晴 20°C", prompt)
+        self.assertIn("下午", prompt)
+        self.assertNotIn("浅蓝外套", prompt)
+        self.assertNotIn("松散低马尾", prompt)
+        self.assertEqual(
+            service.format_life_context(
+                context, config_module.ShareType.MOOD, True, {"chat_intensity": "high"}
+            ),
+            "",
+        )
+
+    def test_group_schedule_permission_never_includes_archives_or_infers_execution(
+        self,
+    ):
+        _, service = _service()
+        service.life_conf["group_share_schedule"] = True
+        context = service.life_parse._parse_group_life_data(
+            {
+                "weather": "晴",
+                "schedule": "不能直接公开的完整路线",
+                "memo": "天气里混入私人聊天",
+                "relationships": [{"name": "秘密联系人"}],
+                "timeline": [
+                    {"time": "09:00", "activity": "晨读", "execution_state": "elapsed"},
+                    {
+                        "time": "15:00",
+                        "activity": "写手帐",
+                        "execution_state": "active",
+                    },
+                    {"time": "21:00", "activity": "看书", "execution_state": "planned"},
+                    {"time": "22:00", "activity": "泡茶"},
+                    {"activity": {"private": "不得透传"}},
+                    None,
+                ],
+            }
+        )
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        prompt = service.format_life_context(
+            context, config_module.ShareType.NEWS, True
+        )
+        self.assertIn("晨读", prompt)
+        self.assertIn("时间已过，尚未确认执行", prompt)
+        self.assertIn("进行中", prompt)
+        self.assertIn("计划中，尚未确认执行", prompt)
+        self.assertNotIn("已完成", prompt)
+        for text in ("完整路线", "私人聊天", "秘密联系人", "不得透传"):
+            self.assertNotIn(text, context)
+            self.assertNotIn(text, prompt)
+
+        service.life_conf["group_share_schedule"] = False
+        prompt = service.format_life_context(
+            context, config_module.ShareType.NEWS, True
+        )
+        self.assertIn("晴", prompt)
+        self.assertNotIn("晨读", prompt)
+        self.assertNotIn("日程计划", prompt)
+
+    def test_group_context_never_extracts_keywords_from_unstructured_private_memory(
+        self,
+    ):
+        _, service = _service()
+        config_module = sys.modules[CONFIG_MODULE_NAME]
+        for context in (
+            "【今日备忘录】\n天气里混入私人聊天",
+            "not-json",
+            "[]",
+            '{"备忘录":"温度和天气都是秘密"}',
+            '{"当前状态":{"心情":{"private":"不得透传"}}}',
+        ):
+            with self.subTest(context=context):
+                self.assertEqual(
+                    service.format_life_context(
+                        context, config_module.ShareType.MOOD, True
+                    ),
+                    "",
+                )
+
+    async def test_qzone_share_reads_once_and_separates_post_facts_from_image_context(
+        self,
+    ):
+        _, service = _service()
+        calls = []
+        raw = await _DailyLifePlugin().get_share_context()
+        raw["meta"]["theme"] = "文学化的整天基调"
+        raw["schedule"] = "整天日程和未来计划"
+        raw["timeline"] = [
+            {
+                "time": "00:00",
+                "activity": "计划但未做的事情",
+                "execution_state": "elapsed",
+            },
+            {
+                "time": "00:00",
+                "activity": "提着双皮奶往回走",
+                "execution_state": "active",
+            },
+            {"time": "23:59", "activity": "晚上准备煮汤", "execution_state": "planned"},
+        ]
+
+        class Bridge:
+            async def get_share_context(self, target_umo=""):
+                calls.append(target_umo)
+                return raw
+
+        service.daily_life_bridge = Bridge()
+        result = await service.get_qzone_share_context()
+        self.assertEqual(calls, ["qzone_broadcast"])
+        post = result["post_context"]
+        self.assertIn("北京 晴 20°C", post)
+        self.assertIn("今天偏累，不太想出门", post)
+        self.assertIn("提着双皮奶往回走", post)
+        for text in (
+            "计划但未做的事情",
+            "晚上准备煮汤",
+            "整天日程和未来计划",
+            "文学化的整天基调",
+            "浅蓝外套和白裙子",
+            "松散低马尾",
+            "阿林",
+            "常去咖啡店",
+            "完成手帐",
+            "周末一起看展",
+            "后续推荐可以延续展览主题",
+            "恢复建议",
+        ):
+            self.assertNotIn(text, post)
+        image = result["life_context"]
+        self.assertIn("浅蓝外套和白裙子", image)
+        self.assertIn("松散低马尾", image)
+        self.assertIn("整天日程和未来计划", image)
+        self.assertLess(len(post), 500)
+
+    async def test_qzone_post_context_unavailable_is_empty_even_with_legacy_switch(
+        self,
+    ):
+        _, service = _service()
+        calls = []
+
+        class Bridge:
+            async def get_share_context(self, target_umo=""):
+                calls.append(target_umo)
+                return {}
+
+        service.daily_life_bridge = Bridge()
+        service.life_conf["enable_life_context"] = False
+        self.assertEqual(
+            await service.get_qzone_share_context(),
+            {"life_context": "", "post_context": ""},
+        )
+        self.assertEqual(calls, ["qzone_broadcast"])
+        service.life_conf["enable_life_context"] = True
+        self.assertEqual(
+            await service.get_qzone_share_context(),
+            {"life_context": "", "post_context": ""},
+        )
+        self.assertEqual(calls, ["qzone_broadcast", "qzone_broadcast"])
+
+    def test_qzone_post_context_never_infers_completed_activity_from_elapsed_time(self):
+        _, service = _service()
+        for status in (
+            "planned",
+            "elapsed",
+            "skipped",
+            "cancelled",
+            "expired",
+            "completed",
+            None,
+        ):
+            with self.subTest(status=status):
+                self.assertEqual(
+                    service.life_parse._parse_qzone_post_data(
+                        {
+                            "timeline": [
+                                {
+                                    "time": "00:00",
+                                    "activity": "不确定的事情",
+                                    "execution_state": status,
+                                }
+                            ],
+                            "schedule": "完整日程",
+                            "memo": "私聊备忘",
+                        }
+                    ),
+                    "",
+                )
+        self.assertEqual(
+            service.life_parse._parse_qzone_post_data(
+                {
+                    "state": {"summary": {"private": "不得透传"}},
+                    "timeline": [
+                        {"activity": "第一个活动", "execution_state": "active"},
+                        {"activity": "第二个活动", "execution_state": "active"},
+                    ],
+                }
+            ),
+            "",
+        )
+
     def test_private_life_context_includes_relationship_identity_rule(self):
         _, service = _service()
         config_module = sys.modules[CONFIG_MODULE_NAME]

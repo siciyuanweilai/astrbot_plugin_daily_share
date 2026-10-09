@@ -160,39 +160,6 @@ export function createSettingsConfig({
     return groups[kind] || null;
   }
 
-  function xiaohongshuScheduleField(kind) {
-    return el.configForm?.querySelector(
-      `[data-schedule="xiaohongshu-${kind}"]`,
-    );
-  }
-
-  function syncXiaohongshuScheduleVisibility() {
-    const modeField = el.configForm?.querySelector(
-      '[data-schema-section="xiaohongshu_conf"][data-schema-field="trigger_mode"]',
-    );
-    const modeInput = modeField?.querySelector("input, select, textarea");
-    if (!modeInput) return;
-
-    const mode = {
-      固定时间: "fixed_time",
-      随机时段: "random_period",
-      高级定时: "cron",
-    }[text(modeInput.value).trim()] || text(modeInput.value).trim() || "fixed_time";
-    const visibleKind = {
-      fixed_time: "fixed",
-      random_period: "random",
-      cron: "cron",
-    }[mode] || "fixed";
-
-    for (const kind of ["fixed", "random", "cron"]) {
-      const field = xiaohongshuScheduleField(kind);
-      if (field) field.hidden = kind !== visibleKind;
-    }
-    const delayField = xiaohongshuScheduleField("delay");
-    if (delayField) delayField.hidden = mode !== "fixed_time" && mode !== "cron";
-    syncSweetSelect(modeInput);
-  }
-
   function syncScheduleVisibility(kind) {
     const controls = scheduleControls(kind);
     if (!controls) return;
@@ -216,7 +183,6 @@ export function createSettingsConfig({
   }
 
   function handleScheduleChanged(event) {
-    syncXiaohongshuScheduleVisibility();
     const target = event?.target;
     for (const kind of ["basic", "briefing", "qzone"]) {
       const controls = scheduleControls(kind);
@@ -296,7 +262,6 @@ export function createSettingsConfig({
       adapter: el.cfgAdapterOptions,
     });
     applySchemaExtraValues(state.configData, el.configForm, syncSettingSlider);
-    syncXiaohongshuScheduleVisibility();
     state.configApplying = false;
     setConfigDirty(false);
     syncSweetSelects();

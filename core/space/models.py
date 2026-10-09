@@ -67,7 +67,7 @@ class QzoneComment:
 
 @dataclass(slots=True)
 class QzonePhotoComment:
-    """Comment attached to one Qzone photo."""
+    """QQ 空间单张照片下的评论。"""
 
     comment_id: str = ""
     uin: int = 0
@@ -83,7 +83,7 @@ class QzonePhotoComment:
 
 @dataclass(slots=True)
 class QzonePhoto:
-    """A photo and the comments returned by the Qzone photo viewer."""
+    """QQ 空间照片查看器返回的照片及评论。"""
 
     album_id: str = ""
     pic_key: str = ""

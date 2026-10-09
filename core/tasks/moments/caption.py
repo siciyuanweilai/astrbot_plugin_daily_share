@@ -3,7 +3,6 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType, TimePeriod
 from ...database.keys import QZONE_TARGET_ID
-from ...prompt import build_qzone_diary_prompt
 from .illustration import TaskQzoneMediaService
 
 
@@ -15,20 +14,18 @@ class TaskQzoneContentService(TaskQzoneMediaService):
         *,
         stype: ShareType,
         period: TimePeriod,
-        life_ctx,
+        post_ctx: str,
         news_data,
         progress_id: str,
         event: AstrMessageEvent | None = None,
     ) -> str:
-        qzone_life_prompt = self.ctx_service.format_life_context(
-            life_ctx, stype, False, None
-        )
-        qzone_life_prompt += f"\n\n{build_qzone_diary_prompt()}"
-        qzone_recent_dynamics_str = (
-            await self.services.executor_helpers.format_recent_dynamics(QZONE_TARGET_ID)
+        recent_post_contents = (
+            await self.services.executor_helpers.get_recent_post_contents(
+                QZONE_TARGET_ID
+            )
         )
 
-        logger.info("[日常分享] 正在为 QQ 空间生成文案...")
+        logger.info("[日常分享] 正在为 QQ 空间生成自然状态文案（daily_life 联动）...")
         self.services.progress.update_share_progress(
             progress_id, "content", message="QQ 空间文案生成中"
         )
@@ -37,10 +34,10 @@ class TaskQzoneContentService(TaskQzoneMediaService):
             period,
             QZONE_TARGET_ID,
             False,
-            qzone_life_prompt,
+            post_ctx,
             news_data,
             nickname="",
-            recent_dynamics=qzone_recent_dynamics_str,
+            recent_post_contents=recent_post_contents,
             structured_history="",
         )
         if not qzone_content:

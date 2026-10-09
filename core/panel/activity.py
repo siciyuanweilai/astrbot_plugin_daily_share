@@ -6,8 +6,6 @@ from ..database.keys import (
     HISTORY_SHARE_BRIEFING,
     QZONE_STATE_KEY,
     QZONE_TARGET_ID,
-    XIAOHONGSHU_STATE_KEY,
-    XIAOHONGSHU_TARGET_ID,
 )
 from .common import (
     _PAGE_RECENT_ACTION_LIMIT,
@@ -20,7 +18,6 @@ _PAGE_STATE_KEYS = (
     GLOBAL_STATE_KEY,
     QZONE_STATE_KEY,
     BRIEFING_STATE_KEY,
-    XIAOHONGSHU_STATE_KEY,
 )
 
 
@@ -51,8 +48,6 @@ class DashboardActivityService(PanelComponent):
         kind = str(item.get("kind") or "").strip().lower()
         if target_id == QZONE_TARGET_ID:
             return f"QQ 空间分享{suffix}"
-        if target_id == XIAOHONGSHU_TARGET_ID:
-            return f"小红书发布{suffix}"
         if share_type == HISTORY_SHARE_BRIEFING or target_id in BRIEFING_TARGET_ALIASES:
             return f"早报分享{suffix}"
         if target_id == GLOBAL_TARGET_ID:

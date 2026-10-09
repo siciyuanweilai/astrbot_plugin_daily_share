@@ -93,6 +93,9 @@ class TaskSchedulerSmartService(SchedulerComponent):
                 return True
         return False
 
+    def is_quiet_time(self, dt: datetime, quiet_hours: list[str]) -> bool:
+        return self._smart_quiet_contains(dt, quiet_hours)
+
     def _smart_schedule_signature(
         self,
         *,
@@ -306,6 +309,10 @@ class TaskSchedulerSmartService(SchedulerComponent):
         prompt = (
             "请为每日分享插件生成今天剩余时间的智能定时计划。"
             "需要综合任务目标、生活/日程摘要、近期分享记录和用户偏好选择自然时间。\n"
+            "run_at 必须使用 YYYY-MM-DD HH:MM:SS，秒数请选择 05-55 的自然随机秒，不要使用 :00。\n"
+            "请只输出 JSON 数组，不要解释。数组项格式："
+            '{"run_at":"YYYY-MM-DD HH:MM:SS","share_type":"自动|问候|新闻|心情|知识|推荐","reason":"简短原因"}。\n'
+            "【本次输入】\n"
             f"当前本地时间：{now.strftime('%Y-%m-%d %H:%M:%S')}\n"
             f"任务：{label}\n"
             f"最多安排 {max_count} 次。\n"
@@ -315,9 +322,7 @@ class TaskSchedulerSmartService(SchedulerComponent):
             f"{'生活/日程摘要：' + life_summary + chr(10) if life_summary else ''}"
             f"{'近期分享记录：' + history_summary + chr(10) if history_summary else ''}"
             f"{'用户偏好：' + custom_prompt + chr(10) if custom_prompt else ''}"
-            "run_at 必须使用 YYYY-MM-DD HH:MM:SS，秒数请选择 05-55 的自然随机秒，不要使用 :00。\n"
-            "请只输出 JSON 数组，不要解释。数组项格式："
-            '{"run_at":"YYYY-MM-DD HH:MM:SS","share_type":"自动|问候|新闻|心情|知识|推荐","reason":"简短原因"}。'
+            "只输出本次计划的 JSON 数组。"
         )
         system_prompt = build_smart_schedule_rules()
         result = await self.plugin.call_llm(

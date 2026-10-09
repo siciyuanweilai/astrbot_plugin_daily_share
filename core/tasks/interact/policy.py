@@ -205,7 +205,7 @@ class QzoneAutoPolicyService:
             return "parent_is_self"
         if _comment_thread_has_self_reply_to(post, comment, self_uin, index=index):
             return "already_replied_to_target"
-        # Photo candidates coalesce validated replies by author and recipient.
+        # 相册候选按评论人和被回复者合并已核验的回复。
         is_photo = int(getattr(post, "appid", 311) or 311) == 4
         if not is_photo and _comment_thread_has_later_nonself_reply(
             post, parent_comment, comment, self_uin, index=index

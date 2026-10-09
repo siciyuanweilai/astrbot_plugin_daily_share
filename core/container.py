@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -36,7 +36,6 @@ class PluginServices:
     context_conf: dict
     receiver_conf: dict
     daily_life_bridge: Any = None
-    xiaohongshu_conf: dict = field(default_factory=dict)
 
 
 __all__ = ["PluginServices"]

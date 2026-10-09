@@ -1,4 +1,4 @@
-"""Photo viewer conversation captures with dummy identities and no live writes."""
+"""使用虚拟身份验证照片查看器的对话抓包，不执行真实写入。"""
 
 import copy
 import sys
@@ -449,7 +449,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry["submitted_comment_uin"], 10001)
         self.assertEqual(entry["verified_reply_to_uin"], 20002)
         self.assertEqual(entry["submitted_reply_id"], "1790958140")
-        # Restart-style empty local state still sees the bot's response in viewer data.
+        # 模拟重启后的空本地状态，仍可从查看器数据中识别机器人已有回复。
         self.manager.db = FakeDb()
         self.post.tid = "changed-feed-key"
         self.service._remember_posts([self.post])

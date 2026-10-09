@@ -96,7 +96,6 @@ SOURCE_CN_MAP.update(
         "知乎": "zhihu",
         "微博": "weibo",
         "B站": "bili",
-        "小红书": "xiaohongshu",
         "抖音": "douyin",
         "快手": "kuaishou",
         "头条": "toutiao",

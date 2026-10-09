@@ -73,7 +73,7 @@ class QzoneFeedRecentService(QzoneMethodSet):
     ) -> list[QzonePost]:
         detailed = []
         for post in posts:
-            # Non-mood keys alone cannot reconstruct appid/photo identifiers.
+            # 仅凭非说说动态的键无法重建 appid 和照片标识。
             if int(post.appid or 311) != 311:
                 self._remember_posts([post])
                 self._post_detail_cache_at.pop(post.key, None)

@@ -48,7 +48,7 @@ def photo_reply_mention(content: str) -> tuple[int, str]:
 
 
 def photo_thread_comments(photo: QzonePhoto) -> list[QzoneComment]:
-    """Keep the root submit identity separate from a viewer reply's identity."""
+    """区分原一级评论的提交标识与查看器回复标识。"""
     comments: list[QzoneComment] = []
     seen: set[tuple[str, str, int]] = set()
     for root in photo.comments:
@@ -64,8 +64,8 @@ def photo_thread_comments(photo: QzonePhoto) -> list[QzoneComment]:
         )
         comments.append(parent)
         thread = [parent]
-        # Viewer replies can be returned in either order. Missing/tied times do
-        # not identify a target reliably and remain ineligible for auto replies.
+        # 查看器回复可能按任意顺序返回；时间缺失或相同时，无法可靠定位
+        # 回复对象，继续排除这些自动回评候选。
         for reply in sorted(root.replies, key=lambda item: item.create_time):
             identity = (root.comment_id, reply.comment_id, reply.uin)
             if identity in seen:

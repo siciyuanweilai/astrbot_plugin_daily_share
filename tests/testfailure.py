@@ -206,6 +206,18 @@ class _Db:
     set_context_state = _set_domain_state
     set_cache_state = _set_domain_state
 
+    async def merge_cache_entries(
+        self, domain, key, entries, *, max_items, cache_field=None
+    ):
+        current = self.state.setdefault(key, {})
+        cache = current if cache_field is None else current.setdefault(cache_field, {})
+        for item_key, value in entries.items():
+            cache.pop(item_key, None)
+            cache[item_key] = value
+        for item_key in list(cache)[: max(0, len(cache) - max_items)]:
+            cache.pop(item_key, None)
+        return current
+
     async def add_sent_history(self, *args, **kwargs):
         self.history.append((args, kwargs))
 
@@ -272,6 +284,9 @@ class _CtxService:
     async def get_life_context(self, target_umo=""):
         self.life_context_targets.append(target_umo)
         return {}
+
+    async def get_qzone_share_context(self):
+        return {"life_context": "", "post_context": ""}
 
     def parse_umo(self, target):
         return "aiocqhttp", str(target).split(":")[-1]
@@ -3098,6 +3113,57 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_qzone_life_expression_uses_current_facts_for_text_and_full_context_for_image(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.qzone_conf = {
+            "qzone_follow_life_chat_style": False,
+            "qzone_enable_image": True,
+        }
+        plugin.image_conf = {"enable_ai_image": True}
+        manager = _new_manager(mod, plugin)
+        context_calls = []
+        image_calls = []
+        published = []
+
+        async def share_context():
+            context_calls.append("share_context")
+            return {
+                "life_context": "完整穿搭和外观资料",
+                "post_context": "当前提着双皮奶往回走",
+            }
+
+        async def unexpected_full_context(*args, **kwargs):
+            self.fail("联动模式不能额外读取完整生活上下文")
+
+        async def history(target_id, limit=3):
+            return [{"type": "mood", "content": "以前的长篇文艺说说"}]
+
+        async def image(**kwargs):
+            image_calls.append(kwargs)
+            return None
+
+        async def publish(text, images):
+            published.append((text, images))
+
+        plugin.ctx_service.get_qzone_share_context = share_context
+        plugin.ctx_service.get_life_context = unexpected_full_context
+        plugin.db.get_recent_history_by_target = history
+        manager.qzone_share._generate_qzone_image = image
+        plugin.publish_qzone = publish
+        self.assertTrue(
+            await manager.qzone_share.execute_qzone_share(force_type=mod.ShareType.MOOD)
+        )
+        self.assertEqual(context_calls, ["share_context"])
+        args, kwargs = plugin.content_service.calls[-1]
+        self.assertEqual(args[4], "当前提着双皮奶往回走")
+        self.assertEqual(kwargs.get("recent_dynamics", ""), "")
+        self.assertEqual(kwargs["recent_post_contents"], ["以前的长篇文艺说说"])
+        self.assertEqual(image_calls[0]["life_ctx"], "完整穿搭和外观资料")
+        self.assertEqual(published, [("content", [])])
+
     async def test_execute_qzone_share_ignores_removed_video_config_and_publishes_image(
         self,
     ):
@@ -3139,6 +3205,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self,
     ):
         mod = _load_tasks_module()
+        errors = importlib.import_module(CORE_PACKAGE_NAME + ".space.errors")
         plugin = _Plugin()
         plugin.image_conf = {"enable_ai_image": True, "enable_ai_video": True}
         plugin.qzone_conf = {
@@ -3150,7 +3217,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             payload = {"text": text, "images": list(images or [])}
             published.append(payload)
             if payload["images"]:
-                raise RuntimeError("image upload failed")
+                raise errors.QzoneImageUploadError("image upload failed")
 
         plugin.publish_qzone = safe_publish_qzone
         manager = _new_manager(mod, plugin)
@@ -3295,7 +3362,9 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_daily_life_image_passes_character_signal_without_sending(self):
+    async def test_daily_life_image_ignores_legacy_models_and_preserves_character_signal(
+        self,
+    ):
         mod = _load_tasks_module()
         image_mod = importlib.import_module(f"{CORE_PACKAGE_NAME}.image")
         calls = []
@@ -3388,11 +3457,24 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                     True,
                     False,
                     True,
-                    "gpt-image-text",
-                    "gpt-image-edit",
+                    "",
+                    "",
                 )
             ],
         )
+        self.assertEqual(event.sent, [])
+
+        service._check_involves_self = lambda *args, **kwargs: asyncio.sleep(
+            0, result=False
+        )
+        result = await service.generate_image(
+            "静物文案",
+            mod.ShareType.MOOD,
+            target_umo="aiocqhttp:FriendMessage:100000002",
+            event=event,
+        )
+        self.assertEqual(result.path, "daily-life-image.jpg")
+        self.assertEqual(calls[-1][3:], (False, False, False, "", ""))
         self.assertEqual(event.sent, [])
 
     async def test_execute_share_generates_visual_media_before_audio(self):

@@ -6,7 +6,9 @@ from astrbot.api import logger
 from ..database.keys import is_public_share_target, public_share_target_label
 from ..prompt import (
     build_common_content_rules,
+    build_current_time_context,
     build_opening_integrity_rule,
+    build_task_prompt,
 )
 from .contentbase import ContentComponent
 
@@ -21,6 +23,7 @@ class ContentKnowledgeService(ContentComponent):
             return None
 
         is_group = ctx["is_group"]
+        is_qzone_post = ctx.get("is_qzone_post", False)
         is_qzone = is_public_share_target(ctx.get("target_id"))
         public_label = public_share_target_label(ctx.get("target_id"))
         call_name = ctx.get("nickname", "")
@@ -81,6 +84,7 @@ class ContentKnowledgeService(ContentComponent):
             action="分享知识",
             allow_detail=allow_detail,
             public_label=public_label,
+            include_time=False,
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
@@ -89,21 +93,14 @@ class ContentKnowledgeService(ContentComponent):
         opening_rule = build_opening_integrity_rule(
             f"{opening_guide}\n- 场景关联型：只有逻辑通顺时才结合当前状态。"
         )
-        prompt = f"""
-【当前时间】{ctx["date_str"]} {ctx["time_str"]} ({ctx["period_label"]})
-你现在的任务是：向{target_str}分享下面的冷知识。
-
-【核心任务】
-1. 知识点关键词：【{target_keyword}】
-2. 基于下面的资料进行通俗化讲解。
-
-{baike_context}
-{user_info_prompt}
-{ctx["life_hint"]}
-{ctx["structured_history_hint"]}
-{dynamics_prompt}
-
+        keyword_requirement = "4. 用【】将核心关键词括起来，使用本次输入中指定的名称。"
+        length_requirement = (
+            f"5. {'字数：100-150字' if is_group else '字数：100-200字'}。"
+        )
+        rules = f"""
 {common_rules}
+你现在的任务是：向{target_str}分享下面的冷知识。
+基于本次输入的资料进行通俗化讲解。
 {ctx.get("output_format_hint", "")}
 {opening_rule}
 
@@ -111,26 +108,46 @@ class ContentKnowledgeService(ContentComponent):
 1. 以你的人设性格说话，自然分享。
 2. {"语气轻松简洁" if is_group else "可以详细展开，带点个人见解"}。
 3. 可以加入你的个人感想或小评论
-4. 用【】将核心关键词【{target_keyword}】括起来。
-5. {"字数：100-150字" if is_group else "字数：100-200字"}。
+{keyword_requirement}
+{length_requirement}
 6. 直接输出分享内容。
 """
-
-        res = await self._call_llm(
-            prompt=prompt,
-            system_prompt=ctx["system_prompt"],
-            target_umo=ctx.get("target_id"),
+        prompt = build_task_prompt(
+            rules,
+            build_current_time_context(ctx),
+            f"【核心任务】知识点关键词：【{target_keyword}】",
+            baike_context,
+            user_info_prompt,
+            ctx["life_hint"],
+            ctx["structured_history_hint"],
+            dynamics_prompt,
+            output="直接输出分享内容：",
         )
+
+        if is_qzone_post:
+            res = await self._generate_qzone_post(
+                ctx,
+                f"这次想聊聊{target_keyword}，把资料中有意思的一点用自己的话讲清楚。",
+                baike_context,
+            )
+        else:
+            res = await self._call_llm(
+                prompt=prompt,
+                system_prompt=ctx["system_prompt"],
+                target_umo=ctx.get("target_id"),
+            )
 
         if res:
             try:
-                matches = re.findall(r"【(.*?)】", res)
+                matches = [] if is_qzone_post else re.findall(r"【(.*?)】", res)
                 keyword = matches[0] if matches else target_keyword or res[:10]
                 await self.db.record_topic(target_id, "knowledge", keyword)
             except Exception as e:
                 logger.debug(f"[内容服务] 记录知识主题失败: {e}")
 
-            if self.content_lib_conf.get("show_knowledge_type_prefix", True):
+            if not is_qzone_post and self.content_lib_conf.get(
+                "show_knowledge_type_prefix", True
+            ):
                 return f"知识类型: {main_cat} - {sub_cat}\n\n{res}"
             return res
         return None

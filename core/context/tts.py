@@ -50,6 +50,13 @@ class ContextTtsService(ContextComponent):
         target_emotion, target_category = self._resolve_voice_emotion(
             share_type, period
         )
+        voice_style = ""
+        prepare = getattr(self.service.daily_life_bridge, "prepare_expression", None)
+        if callable(prepare):
+            expression = await prepare(final_text, scene="share_voice")
+            target_emotion = str(expression.get("emotion") or "")
+            target_category = str(expression.get("emotion_category") or "neutral")
+            voice_style = str(expression.get("voice_style") or "neutral")
         return await call_default_daily_life_media_tool(
             self.context,
             media_kind="audio",
@@ -57,6 +64,7 @@ class ContextTtsService(ContextComponent):
             text=final_text,
             emotion=target_emotion,
             emotion_category=target_category,
+            voice_style=voice_style,
             event=event,
             bridge=self.service.daily_life_bridge,
         )

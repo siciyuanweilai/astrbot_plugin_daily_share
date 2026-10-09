@@ -106,19 +106,41 @@ class QzoneClientGateway(QzoneMethodSet):
             }
 
     async def context(self) -> QzoneContext:
+        self._ensure_bot_cache_scope()
         if self._ctx and time.monotonic() - self._ctx_at < self.COOKIE_TTL_SECONDS:
             return self._ctx
 
         async with self._ctx_fetch_lock:
+            self._ensure_bot_cache_scope()
+            bot = self._cache_bot
             now = time.monotonic()
             if self._ctx and now - self._ctx_at < self.COOKIE_TTL_SECONDS:
                 return self._ctx
-            cookie = await self._fetch_bot_cookie()
-            ctx = await self._context_from_cookie(cookie)
+            cookie = await self._fetch_bot_cookie(bot=bot)
+            ctx = await self._context_from_cookie(cookie, bot=bot)
+            if self._get_bot() is not bot:
+                self._ensure_bot_cache_scope()
+                raise RuntimeError("QQ 空间机器人实例在读取登录态期间发生变化，请重试")
 
             self._ctx = ctx
             self._ctx_at = time.monotonic()
             return ctx
+
+    def _ensure_bot_cache_scope(self) -> None:
+        """登录态、列表和详情缓存属于同一个机器人实例。"""
+        bot = self._get_bot()
+        if bot is not self._cache_bot:
+            self.invalidate()
+            self._cache_bot = bot
+
+    def _ensure_request_bot(self, bot, method: str) -> None:
+        self._ensure_bot_cache_scope()
+        if self._cache_bot is bot:
+            return
+        message = "QQ 空间机器人实例在请求期间发生变化，已停止重试"
+        if str(method or "").upper() not in {"GET", "HEAD", "OPTIONS"}:
+            message += "；提交状态未知，请先检查原账号中的结果"
+        raise RuntimeError(message)
 
     def _get_bot(self):
         conf = self._qzone_config()
@@ -156,8 +178,8 @@ class QzoneClientGateway(QzoneMethodSet):
             return None
         return self.ctx_service.get_onebot_bot(target_umo="0", adapter_id="")
 
-    async def _fetch_bot_cookie(self) -> str:
-        bot = self._get_bot()
+    async def _fetch_bot_cookie(self, *, bot=None) -> str:
+        bot = bot if bot is not None else self._get_bot()
         if not bot:
             raise RuntimeError("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
         values: dict[str, str] = {}
@@ -188,7 +210,7 @@ class QzoneClientGateway(QzoneMethodSet):
             )
         return self._cookie_header_from_values(values)
 
-    async def _context_from_cookie(self, cookie: str) -> QzoneContext:
+    async def _context_from_cookie(self, cookie: str, *, bot=None) -> QzoneContext:
         values = self._cookie_values_from_header(cookie)
         uin_text = str(
             values.get("uin") or values.get("p_uin") or values.get("pt2gguin") or "0"
@@ -199,7 +221,7 @@ class QzoneClientGateway(QzoneMethodSet):
         skey = values.get("skey") or p_skey
         if not uin or not p_skey:
             raise RuntimeError("机器人客户端返回的 QQ 空间登录态缺少账号标识或密钥")
-        nickname = await self._bot_nickname(str(uin))
+        nickname = await self._bot_nickname(str(uin), bot=bot)
         return QzoneContext(
             uin=uin,
             skey=skey,
@@ -208,8 +230,8 @@ class QzoneClientGateway(QzoneMethodSet):
             cookie_values=values,
         )
 
-    async def _bot_nickname(self, fallback: str) -> str:
-        bot = self._get_bot()
+    async def _bot_nickname(self, fallback: str, *, bot=None) -> str:
+        bot = bot if bot is not None else self._get_bot()
         if not bot:
             return fallback
         try:
@@ -296,7 +318,9 @@ class QzoneClientGateway(QzoneMethodSet):
         retry_parse_error=True,
     ) -> dict[str, Any]:
         ctx = await self.context()
+        request_bot = self._cache_bot
         session = await self._http()
+        self._ensure_request_bot(request_bot, method)
         request_headers = headers or self._headers(ctx)
         request_cookies = (
             None if self._has_cookie_header(request_headers) else ctx.cookies
@@ -319,6 +343,7 @@ class QzoneClientGateway(QzoneMethodSet):
         except aiohttp.ClientError as exc:
             raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
         payload = await asyncio.to_thread(parse_qzone_response, text)
+        self._ensure_request_bot(request_bot, method)
         payload["_http_status"] = status
         payload["_raw_length"] = len(text or "")
         payload["_raw_blank"] = not str(text or "").strip()
@@ -341,6 +366,7 @@ class QzoneClientGateway(QzoneMethodSet):
             old_ctx = ctx
             self.invalidate()
             new_ctx = await self.context()
+            self._ensure_request_bot(request_bot, method)
             params, data, headers = self._refresh_request_credentials(
                 old_ctx,
                 new_ctx,
@@ -370,7 +396,9 @@ class QzoneClientGateway(QzoneMethodSet):
         retry=True,
     ) -> str:
         ctx = await self.context()
+        request_bot = self._cache_bot
         session = await self._http()
+        self._ensure_request_bot(request_bot, method)
         request_headers = headers or self._headers(ctx)
         request_cookies = (
             None if self._has_cookie_header(request_headers) else ctx.cookies
@@ -392,10 +420,12 @@ class QzoneClientGateway(QzoneMethodSet):
             ) from exc
         except aiohttp.ClientError as exc:
             raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
+        self._ensure_request_bot(request_bot, method)
         if retry and status in {401, 403}:
             old_ctx = ctx
             self.invalidate()
             new_ctx = await self.context()
+            self._ensure_request_bot(request_bot, method)
             params, data, headers = self._refresh_request_credentials(
                 old_ctx,
                 new_ctx,
