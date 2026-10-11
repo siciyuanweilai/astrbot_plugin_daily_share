@@ -508,7 +508,9 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIn("<structured_history>", prompt)
-        self.assertIn("[12:00] 阿林 (图片 / 回复 小舟 / @小舟): 给你看看", prompt)
+        self.assertIn(
+            "[2026-06-26 12:00:00] 阿林 (图片 / 回复 小舟 / @小舟): 给你看看", prompt
+        )
 
     async def test_record_bot_reply_writes_daily_share_assistant_without_internal_trigger(
         self,
@@ -909,6 +911,80 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("松散低马尾", image)
         self.assertIn("整天日程和未来计划", image)
         self.assertLess(len(post), 500)
+
+    async def test_chat_share_snapshot_separates_current_facts_and_target_identity(
+        self,
+    ):
+        _, service = _service()
+        calls = []
+        raw = await _DailyLifePlugin().get_share_context()
+        raw["current_facts"] = {
+            "valid": True,
+            "current_action": {"activity": "练习摄影", "status": "paused"},
+        }
+        raw["share_guidance"] = {
+            "expression": {
+                "tones": ["轻松自然"],
+                "habits": ["少用感叹号"],
+                "evidence": "不得透传的表达证据",
+            }
+        }
+
+        class Bridge:
+            async def get_share_context(self, target_umo=""):
+                calls.append(target_umo)
+                return raw
+
+        service.daily_life_bridge = Bridge()
+        for is_group, scope in (
+            (False, "bot:FriendMessage:u1"),
+            (True, "bot:GroupMessage:g1"),
+        ):
+            result = await service.get_chat_share_context(scope)
+            prompt = service.format_life_context(
+                result["post_context"],
+                sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+                is_group,
+            )
+            self.assertIn("练习摄影（已暂停，尚未完成）", prompt)
+            self.assertIn("轻松自然", prompt)
+            for forbidden in (
+                "浅蓝外套",
+                "松散低马尾",
+                "最近想去看展",
+                "周末看展",
+                "不得透传的表达证据",
+            ):
+                self.assertNotIn(forbidden, prompt)
+            self.assertIn("浅蓝外套", result["life_context"])
+            if is_group:
+                self.assertNotIn("阿林", prompt)
+                self.assertNotIn("阿林", result["life_context"])
+            else:
+                self.assertIn("阿林", prompt)
+        self.assertEqual(calls, ["bot:FriendMessage:u1", "bot:GroupMessage:g1"])
+
+    async def test_chat_share_context_unavailable_and_preferences_without_day(self):
+        _, service = _service()
+
+        class Bridge:
+            async def get_share_context(self, target_umo=""):
+                return {}
+
+        service.daily_life_bridge = Bridge()
+        self.assertEqual(
+            await service.get_chat_share_context("bot:FriendMessage:1"),
+            {"life_context": "", "post_context": ""},
+        )
+        context = service.life_parse._parse_group_life_data(
+            {"share_guidance": {"expression": {"tones": ["轻松自然"]}}}
+        )
+        self.assertIn(
+            "轻松自然",
+            service.format_life_context(
+                context, sys.modules[CONFIG_MODULE_NAME].ShareType.NEWS, True
+            ),
+        )
 
     async def test_qzone_post_context_unavailable_is_empty_even_with_legacy_switch(
         self,

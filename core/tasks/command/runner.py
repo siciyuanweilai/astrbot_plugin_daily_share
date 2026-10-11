@@ -128,7 +128,8 @@ class TaskCommandRunnerService(TaskCommandLocalService):
                 need_video=need_video,
             )
 
-        life_ctx = await self.ctx_service.get_life_context(target_umo)
+        share_context = await self.ctx_service.get_chat_share_context(target_umo)
+        life_ctx = share_context["life_context"]
         loaded_news, news_data, img_path, news_src_key = await self._load_command_news(
             event=event,
             target_umo=target_umo,
@@ -148,6 +149,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             target_type_enum=target_type_enum,
             period=period,
             life_ctx=life_ctx,
+            post_context=share_context["post_context"],
             news_data=news_data,
             img_path=img_path,
             need_image=need_image,

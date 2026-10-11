@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 from contextvars import ContextVar
 from typing import Any
 
 from astrbot.api import logger
 
+from .delivery import ShareDeliveryBridge
 from .mediajob import ShareMediaPending, current_share_job, save_share_job
 
 DAILY_LIFE_PLUGIN_ID = "astrbot_plugin_daily_life"
@@ -17,7 +19,7 @@ _MEDIA_METHODS = {
 }
 
 
-class DailyLifeBridge:
+class DailyLifeBridge(ShareDeliveryBridge):
     """每日分享与生活插件之间唯一的公开调用边界。"""
 
     def __init__(self, context: Any, db: Any = None):
@@ -48,6 +50,17 @@ class DailyLifeBridge:
             return metadata.star_cls
         return None
 
+    @staticmethod
+    def _optional_target_kwargs(method, target: str) -> dict:
+        try:
+            return (
+                {"target_umo": target}
+                if "target_umo" in inspect.signature(method).parameters
+                else {}
+            )
+        except (TypeError, ValueError):
+            return {}
+
     async def get_share_context(self, target_umo: str) -> dict:
         plugin = self._plugin()
         method = getattr(plugin, "get_share_context", None) if plugin else None
@@ -60,8 +73,28 @@ class DailyLifeBridge:
             logger.warning(f"[上下文] 读取生活插件目标上下文失败: {exc}")
             return {}
 
+    async def prepare_image(self, source: str) -> dict:
+        method = getattr(self._plugin(), "prepare_share_image", None)
+        if not callable(method):
+            return {"status": "ok", "source": source, "hint": ""}
+        try:
+            result = await method(source)
+            return result if isinstance(result, dict) else {"status": "unavailable"}
+        except Exception:
+            return {"status": "unavailable"}
+
+    async def describe_video(self, source: str) -> dict:
+        method = getattr(self._plugin(), "describe_share_video", None)
+        if not callable(method):
+            return {"status": "unavailable"}
+        try:
+            result = await method(source)
+            return result if isinstance(result, dict) else {"status": "unavailable"}
+        except Exception:
+            return {"status": "unavailable"}
+
     async def get_share_chat_style_prompt(self, *, scene: str = "") -> str:
-        """通过公开入口获取语气参考，不复用聊天长度或分段发送规则。"""
+        """读取场景表达设置；普通分享同步聊天长度，公开场景保持自己的边界。"""
         plugin = self._plugin()
         method = getattr(plugin, "get_share_chat_style", None) if plugin else None
         if not callable(method):
@@ -76,11 +109,18 @@ class DailyLifeBridge:
         text = result.get("prompt")
         if not isinstance(text, str) or not text.strip():
             return ""
-        text = " ".join(text.split())[:500]
+        chat_share = scene in {"share_private", "share_group"}
+        text = " ".join(text.split())[: 1200 if chat_share else 500]
+        boundary = "当前分享场景" if chat_share else "当前公开场景"
         return (
             f"【daily_life 聊天表达参考】\n{text}\n"
-            "此段作为当前公开场景的语气与表达节奏参考。"
-            "不覆盖本轮任务、人设、身份关系、事实与公开隐私边界；不套用聊天字数限制、分段发送或标点清洗。"
+            f"此段作为{boundary}的语气与表达节奏参考。"
+            "不覆盖本轮任务、人设、身份关系、事实与公开隐私边界；"
+            + (
+                "同步当前私聊/群聊的字数参考，标点由生活插件在生成后统一清洗；保留标题、名称和自定义排版。"
+                if chat_share
+                else "不套用聊天字数限制或分段发送；正常生成标点，正文提交前按生活插件设置统一清洗。"
+            )
         )
 
     def search_available(self) -> bool:
@@ -210,6 +250,7 @@ class DailyLifeBridge:
                 prompt,
                 task_key=f"{job['id']}:image",
                 contains_character=contains_character,
+                **self._optional_target_kwargs(task_method, self.share_target(job)),
             )
             if not isinstance(result, dict):
                 raise RuntimeError("分享生图任务返回格式无效")
@@ -273,6 +314,7 @@ class DailyLifeBridge:
                     prompt,
                     task_key=f"{job['id']}:video",
                     reference_image=reference_image,
+                    **self._optional_target_kwargs(method, self.share_target(job)),
                 )
                 if result.get("status") == "pending":
                     self._set_media_result("video", "pending", "原视频任务仍在处理")
@@ -324,17 +366,32 @@ class DailyLifeBridge:
             await save_share_job(job)
         return result
 
-    async def prepare_expression(self, text: str, *, scene: str) -> dict:
+    async def prepare_expression(
+        self, text: str, *, scene: str, requirements: dict | None = None
+    ) -> dict:
         plugin = self._plugin()
         method = getattr(plugin, "prepare_share_expression", None)
         if not callable(method):
             return {"text": text}
         try:
-            result = await method(text, scene=scene)
+            options = {"requirements": requirements} if requirements is not None else {}
+            result = await method(text, scene=scene, **options)
             return result if isinstance(result, dict) else {"text": text}
         except Exception as exc:
             logger.debug(f"[日常分享] 生活插件表达检查失败：{type(exc).__name__}")
             return {"text": text}
+
+    async def clean_expression_punctuation(self, text: str, *, scene: str) -> str:
+        plugin = self._plugin()
+        method = getattr(plugin, "clean_share_punctuation", None)
+        if not callable(method):
+            return text
+        try:
+            result = await method(text, scene=scene)
+            return result if isinstance(result, str) and result.strip() else text
+        except Exception as exc:
+            logger.debug(f"[日常分享] 生活插件标点清洗失败：{type(exc).__name__}")
+            return text
 
     async def record_public_activity(self, receipt: dict) -> bool:
         event_id = str(receipt.get("event_id") or "")
@@ -354,6 +411,7 @@ class DailyLifeBridge:
             return delivered
 
     async def flush_public_receipts(self) -> None:
+        await self.flush_delivery_receipts()
         if self.db is None:
             return
         async with self._receipt_lock:

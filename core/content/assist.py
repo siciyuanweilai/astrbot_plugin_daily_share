@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from astrbot.api import logger
@@ -42,6 +43,56 @@ class ContentSupportService(ContentComponent):
             logger.info("[内容服务] QQ 空间正文与近期已发布内容重复，跳过本次发布")
             return None
         return result
+
+    async def _review_share_expression(
+        self, text: str | None, ctx: dict, *, required_terms=()
+    ) -> str | None:
+        """只检查当前分享正文；题目、受众及独立格式不能被二次润色覆盖。"""
+        if not text:
+            return None
+        bridge = getattr(self.service, "daily_life_bridge", None)
+        prepare = getattr(bridge, "prepare_expression", None)
+        if not callable(prepare):
+            return text
+        scene = "share_group" if ctx.get("is_group") else "share_private"
+        protected = list(
+            dict.fromkeys(
+                [
+                    *(
+                        str(term)
+                        for term in required_terms
+                        if term and str(term) in text
+                    ),
+                    *re.findall(r"【[^\n【】]+】", text),
+                ]
+            )
+        )
+        output_format = str(ctx.get("output_format_hint") or "")
+        try:
+            expression = await prepare(
+                text,
+                scene=scene,
+                requirements={
+                    "share_type": ctx.get("share_type", ""),
+                    "target_umo": ctx.get("target_id", ""),
+                    "output_format": output_format,
+                    "required_terms": protected,
+                },
+            )
+            rewritten = expression.get("text") if isinstance(expression, dict) else None
+            if not isinstance(rewritten, str) or not rewritten.strip():
+                return text
+            rewritten = rewritten.strip()
+            if any(term not in rewritten for term in protected):
+                return text
+            if output_format and len(rewritten.splitlines()) != len(text.splitlines()):
+                return text
+            return rewritten
+        except Exception as exc:
+            logger.debug(
+                f"[内容服务] 分享表达检查不可用，保留原文：{type(exc).__name__}"
+            )
+            return text
 
     def parse_category_config(self, data: Any) -> dict[str, list[str]]:
         result = {}

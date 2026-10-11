@@ -25,12 +25,13 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
         history_source: str,
         progress_id: str,
         finish_progress,
+        post_context: str | None = None,
     ) -> bool:
         is_group, nickname = await self._command_content_nickname(target_umo, event)
         content_context = await self.services.executor_helpers.prepare_content_context(
             target_umo=target_umo,
             share_type=target_type_enum,
-            life_ctx=life_ctx,
+            life_ctx=post_context if post_context is not None else life_ctx,
             is_group=is_group,
             event=event,
             nickname=nickname,
@@ -50,6 +51,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             nickname=nickname,
             recent_dynamics=content_context["recent_dynamics"],
             structured_history=content_context.get("structured_history", ""),
+            recent_post_contents=content_context.get("recent_post_contents", []),
         )
         if not content:
             await self.send_event(

@@ -262,6 +262,10 @@ async def _execute_qzone_auto_comment_new_posts(
                 _mark_qzone_processed(processed, post_key, QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
                 continue
+            bridge = getattr(owner.plugin, "daily_life_bridge", None)
+            clean = getattr(bridge, "clean_expression_punctuation", None)
+            if callable(clean):
+                comment = await clean(comment, scene="qzone_comment")
             await owner.plugin.qzone_service.comment(post_key, comment)
             _mark_qzone_post_processed(
                 processed,

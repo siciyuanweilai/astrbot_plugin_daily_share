@@ -144,7 +144,7 @@ def _service(response: str, news_service=None, **content_library):
     )
     service.llm_calls = calls
 
-    async def brainstorm(category_type, sub_category, target_id):
+    async def brainstorm(category_type, sub_category, target_id, **kwargs):
         return "电脑" if category_type == "好物" else "蜂蜜"
 
     service.topic._agent_brainstorm_topic = brainstorm
@@ -261,7 +261,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(len(service.llm_calls), 2)
-        self.assertEqual(
+        self.assertIsNone(
             await service.generate(
                 config_module.ShareType.MOOD,
                 config_module.TimePeriod.AFTERNOON,
@@ -269,8 +269,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
                 False,
                 "当前在往回走",
                 recent_post_contents=["糖水喝完了。\n又打包了双皮奶。"],
-            ),
-            "糖水喝完了。\n又打包了双皮奶。",
+            )
         )
 
     async def test_removed_qzone_switch_does_not_restore_legacy_type_templates(self):
@@ -304,7 +303,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("【QQ 空间说说表达】", prompt)
                 self.assertEqual(result, "【蜂蜜】正文")
 
-    async def test_other_targets_keep_all_type_templates_and_formats(self):
+    async def test_other_targets_keep_formats_and_use_natural_expression(self):
         service = _service("【蜂蜜】正文")
         service.basic_conf["share_output_format"] = "普通分享格式"
         config_module = sys.modules[CONFIG_MODULE_NAME]
@@ -314,7 +313,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
         ):
             for stype, marker in (
                 (config_module.ShareType.GREETING, "文案开头必须"),
-                (config_module.ShareType.MOOD, "你的随想"),
+                (config_module.ShareType.MOOD, "直接输出这次想分享的话"),
                 (config_module.ShareType.NEWS, "用【】标注热搜标题"),
                 (config_module.ShareType.KNOWLEDGE, "用【】将核心关键词"),
                 (config_module.ShareType.RECOMMENDATION, "务必用【】将推荐目标"),
@@ -330,7 +329,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
                     )
                     prompt = service.llm_calls[-1]["prompt"]
                     self.assertIn(marker, prompt)
-                    self.assertRegex(prompt, r"\d+-\d+字")
+                    self.assertNotRegex(prompt, r"\d+-\d+字")
                     self.assertIn("普通分享格式", prompt)
                     self.assertNotIn("【本次 QQ 空间状态】", prompt)
                     if stype == config_module.ShareType.KNOWLEDGE:

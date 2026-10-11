@@ -323,8 +323,8 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
                     "生活状态原文",
                 )
                 active = target == "qzone_broadcast"
-                self.assertEqual(len(style_calls) - before, int(active))
-                self.assertEqual("【daily_life 聊天表达参考】" in calls[-1], active)
+                self.assertEqual(len(style_calls) - before, 1)
+                self.assertIn("【daily_life 聊天表达参考】", calls[-1])
                 self.assertIn("生活状态原文", calls[-1])
                 if target == "qzone_broadcast":
                     self.assertNotIn(original["qzone_share_output_format"], calls[-1])
@@ -337,7 +337,8 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn("普通分享两行。", calls[-1])
                     self.assertNotIn("100-120字", calls[-1])
                 else:
-                    self.assertIn("100-120字", calls[-1])
+                    self.assertEqual(style_calls[-1], "share_private")
+                    self.assertNotIn("100-120字", calls[-1])
                 self.assertNotIn(original["qzone_auto_comment_prompt"], calls[-1])
                 self.assertNotIn(original["qzone_auto_reply_prompt"], calls[-1])
                 self.assertEqual(

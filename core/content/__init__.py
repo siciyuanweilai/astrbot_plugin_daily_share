@@ -118,17 +118,33 @@ class ContentService:
         life_hint = life_ctx or ""
         chat_style = ""
         is_qzone_post = target_id == QZONE_TARGET_ID
+        expression_scene = (
+            "qzone_post"
+            if is_qzone_post
+            else ("share_group" if is_group else "share_private")
+        )
+        chat_style = await self.daily_life_bridge.get_share_chat_style_prompt(
+            scene=expression_scene
+        )
         if is_qzone_post:
-            chat_style = await self.get_qzone_chat_style_prompt(scene="qzone_post")
             if not chat_style:
                 chat_style = (
                     "【QQ 空间说说表达】\n"
                     "像平时说话一样随手发一条状态，意思说完就自然停住，"
                     "按语意自然换行，不固定字数、行数或标题模板。"
                 )
+        elif not chat_style:
+            chat_style = (
+                "【日常分享表达】\n"
+                "像平时说话一样自然分享，意思说清楚就停，不凑字数、不补抒情或总结。"
+                "问候心情围绕当下一点；新闻知识推荐保留必要事实和主体，不硬压成一句。"
+            )
 
         ctx_data = {
-            "qzone_chat_style_hint": chat_style,
+            "qzone_chat_style_hint": chat_style if is_qzone_post else "",
+            "share_chat_style_hint": chat_style if not is_qzone_post else "",
+            "expression_scene": expression_scene,
+            "share_type": stype.value,
             "target_id": target_id,
             "is_group": is_group,
             "is_qzone_post": is_qzone_post,
@@ -147,23 +163,36 @@ class ContentService:
             "time_str": time_str,
             "nickname": call_name,
             "detect_name": detect_name,
-            "recent_dynamics": recent_dynamics,
+            "recent_dynamics": "",
             "recent_post_contents": recent_post_contents or [],
         }
 
         try:
             if stype == ShareType.GREETING:
-                return await self.social._gen_greeting(period, ctx_data)
+                result = await self.social._gen_greeting(period, ctx_data)
             elif stype == ShareType.NEWS:
-                return await self.news._gen_news(news_data, ctx_data)
+                result = await self.news._gen_news(news_data, ctx_data)
             elif stype == ShareType.MOOD:
-                return await self.social._gen_mood(period, ctx_data)
+                result = await self.social._gen_mood(period, ctx_data)
             elif stype == ShareType.KNOWLEDGE:
-                return await self.knowledge._gen_knowledge(ctx_data)
+                result = await self.knowledge._gen_knowledge(ctx_data)
             elif stype == ShareType.RECOMMENDATION:
-                return await self.recommendation._gen_rec(ctx_data)
-
-            return await self.social._gen_greeting(period, ctx_data)
+                result = await self.recommendation._gen_rec(ctx_data)
+            else:
+                result = await self.social._gen_greeting(period, ctx_data)
+            if (
+                result
+                and not is_qzone_post
+                and any(
+                    "".join(result.split()) == "".join(text.split())
+                    for text in ctx_data["recent_post_contents"]
+                )
+            ):
+                logger.info(
+                    "[内容服务] 分享正文与当前对象近期已发内容重复，跳过本次发送"
+                )
+                return None
+            return result
 
         except Exception as e:
             logger.error(f"[内容服务] 生成内容出错: {e}")

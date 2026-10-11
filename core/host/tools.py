@@ -12,6 +12,7 @@ from ..database.keys import (
     SOURCE_COMMAND,
 )
 from ..reaction import mark_failed, mark_processing, mark_success
+from ..tasks.interact.receipt import record_qzone_interaction
 from ..tasks.interact.tracker import (
     QZONE_ACTION_COMMENTED,
     QZONE_AUTO_COMMENT_STATE_KEY,
@@ -423,8 +424,15 @@ class PluginToolService(SupportComponent):
         if not comment:
             return "自动评论生成结果为空，已取消发送。"
 
+        bridge = getattr(getattr(self, "plugin", None), "daily_life_bridge", None)
+        clean = getattr(bridge, "clean_expression_punctuation", None)
+        if callable(clean):
+            comment = await clean(comment, scene="qzone_comment")
         post_key = str(getattr(post, "key", "") or "").strip()
         await self.qzone_service.comment(post_key, comment)
+        await record_qzone_interaction(
+            self, post, comment, scene="qzone_comment", actor_id=str(post.uin)
+        )
 
         processed = state.get("processed") if isinstance(state, dict) else {}
         if not isinstance(processed, dict):

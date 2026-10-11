@@ -69,6 +69,11 @@ class ContentComponent:
     async def _generate_qzone_post(self, ctx: dict, task: str, material: str = ""):
         return await self.service.support._generate_qzone_post(ctx, task, material)
 
+    async def _review_share_expression(self, text, ctx: dict, *, required_terms=()):
+        return await self.service.support._review_share_expression(
+            text, ctx, required_terms=required_terms
+        )
+
     def _build_user_prompt(self, *args, **kwargs):
         return self.service.support._build_user_prompt(*args, **kwargs)
 

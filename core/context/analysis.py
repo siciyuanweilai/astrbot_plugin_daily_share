@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .contextbase import ContextComponent
 from .shared import DAILY_SHARE_SOURCE, datetime, time
@@ -74,7 +75,10 @@ class ContextHistoryAnalysisService(ContextComponent):
         except ValueError:
             pass
         try:
-            return datetime.datetime.fromisoformat(text).timestamp()
+            value = datetime.datetime.fromisoformat(text)
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+            return value.timestamp()
         except ValueError:
             return 0
 
@@ -121,7 +125,9 @@ class ContextHistoryAnalysisService(ContextComponent):
         if timestamp:
             parsed = self._parse_history_timestamp(timestamp)
             if parsed > 0:
-                time_text = datetime.datetime.fromtimestamp(parsed).strftime("%H:%M")
+                time_text = datetime.datetime.fromtimestamp(
+                    parsed, ZoneInfo("Asia/Shanghai")
+                ).strftime("%Y-%m-%d %H:%M:%S")
             else:
                 time_text = timestamp[:16]
 

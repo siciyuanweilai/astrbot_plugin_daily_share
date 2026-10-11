@@ -3,6 +3,7 @@ from __future__ import annotations
 from ...database.keys import QZONE_TARGET_ID
 from ...platform import parse_platform_session
 from ..contextbase import ContextComponent
+from .continuity import continuity_prompt
 
 
 class ContextLifePluginService(ContextComponent):
@@ -30,6 +31,19 @@ class ContextLifePluginService(ContextComponent):
             "post_context": self.service.life_parse._parse_qzone_post_data(raw_data),
         }
 
+    async def get_chat_share_context(self, target_umo: str) -> dict[str, str]:
+        """单次读取目标快照，普通分享文案与媒体资料分别选取。"""
+        raw_data = await self.service.daily_life_bridge.get_share_context(target_umo)
+        if not raw_data:
+            return {"life_context": "", "post_context": ""}
+        if self.is_group_chat(target_umo):
+            media = self.service.life_parse._parse_group_life_data(raw_data)
+            return {"life_context": media, "post_context": media}
+        return {
+            "life_context": self._parse_life_data(raw_data),
+            "post_context": self.service.life_parse.parse_private_share_data(raw_data),
+        }
+
     async def get_qzone_interaction_context(self, target_umo: str) -> dict[str, str]:
         """分开返回公开互动的生活状态与目标关系，不携带私聊历史。"""
         empty = {"life_context": "", "relationship_context": ""}
@@ -53,7 +67,16 @@ class ContextLifePluginService(ContextComponent):
             )
             if key in raw_data
         }
-        return {
+        # 使用同一快照的公开投影，不能透传该私聊的共同活动。
+        continuity = raw_data.get("continuity")
+        public_continuity = ""
+        if isinstance(continuity, dict):
+            public = continuity.get("public") if scoped else continuity
+            if isinstance(public, dict):
+                public_continuity = continuity_prompt(
+                    {"continuity": public}, max_items=2, max_chars=120
+                )
+        result = {
             "life_context": "\n\n".join(
                 part
                 for part in (
@@ -70,3 +93,6 @@ class ContextLifePluginService(ContextComponent):
                 else ""
             ),
         }
+        if public_continuity:
+            result["continuity_context"] = public_continuity
+        return result

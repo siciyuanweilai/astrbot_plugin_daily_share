@@ -69,22 +69,23 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertRegex(metadata, r"(?m)^version: 1\.1\.6$")
-        self.assertIn("version-1.1.6", readme)
-        self.assertIn('alt="版本 1.1.6"', readme)
-        self.assertIn("v1.1.6 版本更新", readme)
-        self.assertIn("移除小红书功能", readme)
+        self.assertRegex(metadata, r"(?m)^version: 1\.1\.7$")
+        self.assertIn("version-1.1.7", readme)
+        self.assertIn('alt="版本 1.1.7"', readme)
+        self.assertIn("v1.1.7 版本更新", readme)
+        self.assertIn("daily_life v1.4.4", readme)
         self.assertIn("移除小红书功能", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
         release_headers = re.findall(
             r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
         )
-        self.assertEqual(release_headers[0], ("1.1.6", "2026-10-08"))
+        self.assertEqual(release_headers[0], ("1.1.7", "2026-10-11"))
         pending_headers = re.findall(r"(?m)^## 未发布$", changelog)
         self.assertLessEqual(len(pending_headers), 1)
         if pending_headers:
-            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.6"))
+            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.7"))
+        self.assertLess(changelog.index("## v1.1.7"), changelog.index("## v1.1.6"))
         self.assertLess(changelog.index("## v1.1.6"), changelog.index("## v1.1.5"))
         self.assertLess(changelog.index("v1.1.5"), changelog.index("## 🌐 v1.1.4"))
         self.assertLess(changelog.index("v1.1.4"), changelog.index("v1.1.3"))
@@ -93,6 +94,25 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
+        current_release = changelog.split("## v1.1.7", 1)[1].split("## v1.1.6", 1)[0]
+        for feature in (
+            "普通分享表达与标点清洗",
+            "生活连续性",
+            "发送回执",
+            "GIF",
+            "视频理解",
+            "数据库结构保持 v2",
+            "daily_life v1.4.4",
+            "不包含 daily_life 端改动",
+        ):
+            self.assertIn(feature, current_release)
+        release_notes = (ROOT / "docs" / "release-v1.1.7.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("v1.1.7 · 2026-10-11", release_notes)
+        self.assertIn("不包含 daily_life 端改动", release_notes)
+        self.assertIn("v1.1.6...v1.1.7", release_notes)
+
         current_release = changelog.split("## v1.1.6", 1)[1].split("## v1.1.5", 1)[0]
         self.assertIn("QQ 空间自然表达", current_release)
         self.assertIn("daily_life", current_release)

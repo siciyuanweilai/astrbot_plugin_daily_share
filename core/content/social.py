@@ -63,14 +63,11 @@ class ContentSocialService(ContentComponent):
             )
             opening_rule = '- 自然切入："今天心情不错呢" / "刚忙完..." / "今天有点..."'
 
-        opening_prompt = f"""【开头方式】（自然直接）
-{opening_rule}
-
-- 心情切入："今天心情不错呢"
-- 状态切入："刚忙完..." / "今天有点..."
-- 天气切入：（仅在天气特殊时使用）"""
+        opening_prompt = (
+            f"【开头方式】\n{opening_rule}\n只引用已确认的状态，不照抄示例或编造经历。"
+        )
         length_requirement = (
-            f"5. {'简短（80-100字）' if is_group else '可适当长一些（100-120字）'}"
+            "5. 说清楚这次的招呼就停，不设最低字数，不为了温馨补一段祝愿或安排。"
         )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
@@ -78,6 +75,7 @@ class ContentSocialService(ContentComponent):
 
         rules = f"""
 {common_rules}
+{ctx.get("share_chat_style_hint", "")}
 你现在要向{target_str}发送一条温馨自然的问候。
 {ctx.get("output_format_hint", "")}
 
@@ -110,9 +108,7 @@ class ContentSocialService(ContentComponent):
             system_prompt=ctx["system_prompt"],
             target_umo=ctx.get("target_id"),
         )
-        if res:
-            return f"{res}"
-        return None
+        return await self._review_share_expression(res, ctx)
 
     async def _gen_mood(self, period, ctx):
         is_group = ctx["is_group"]
@@ -158,9 +154,7 @@ class ContentSocialService(ContentComponent):
 可以轻描淡写地带过正在做的事，但不要变成流水账，也不要评价群聊气氛。
 """
         else:
-            resonance_guide = (
-                "【私聊写法】像对亲近的人聊天一样，分享一点具体、细腻、可信的小情绪。"
-            )
+            resonance_guide = "【私聊写法】面向当前对象，按已确认关系自然分享一点可信的心情，不预设亲密程度。"
 
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
@@ -173,24 +167,27 @@ class ContentSocialService(ContentComponent):
 - 如果要写睡前祝福，只能放在正文最后；可以自然使用“晚安”“安安”“好梦”“早点睡，做个好梦”等表达。
 """
 
-        length_requirement = f"5. 字数：{'80-100字' if is_group else '100-120字'}"
+        length_requirement = (
+            "5. 只说此刻在意的一点，意思说完就停，不凑字数、不铺景或升华。"
+        )
 
         rules = f"""
 {common_rules}
+{ctx.get("share_chat_style_hint", "")}
 你想和{target_str}分享一下现在的心情或想法。
 {ctx.get("output_format_hint", "")}
 {resonance_guide}
 {time_greeting_rule}
 
 【状态结合方式】
-- 不要干巴巴汇报行程；把正在做的事转化为可感知的情绪、画面或小念头。
+- 当前活动只作事实参考，不汇报整天行程，不把资料里的修辞当成自己的说话方式。
 - 联系不上当前状态时，直接写心情本身，不要硬凑原因。
 
 要求：
 1. 以你的人设性格说话，真实自然
-2. 分享此刻的感受、想法或小感悟
+2. 自然分享此刻有依据的感受或想法，不要求感悟收尾
 3. 忽略群聊历史，直接开启新话题
-4. 基于当前真实时间感悟
+4. 遵守当前真实时间与实际活动，计划和暂停不能当作已完成
 {length_requirement}
 6. 直接输出内容
 """
@@ -201,7 +198,7 @@ class ContentSocialService(ContentComponent):
             ctx["life_hint"],
             ctx["structured_history_hint"],
             dynamics_prompt,
-            output="你的随想：",
+            output="直接输出这次想分享的话：",
         )
 
         res = await self._call_llm(
@@ -209,4 +206,4 @@ class ContentSocialService(ContentComponent):
             system_prompt=ctx["system_prompt"],
             target_umo=ctx.get("target_id"),
         )
-        return res
+        return await self._review_share_expression(res, ctx)

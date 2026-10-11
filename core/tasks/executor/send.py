@@ -1,6 +1,7 @@
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType
+from ...integrations.delivery import record_confirmed_share
 from .flow import TaskExecutorFlowService
 
 
@@ -51,21 +52,8 @@ class TaskExecutorSendService(TaskExecutorFlowService):
         await self.ctx_service.record_bot_reply_to_history(
             uid, content, image_desc=image_description
         )
-        media_kind = (
-            "video"
-            if media_result.get("video_sent")
-            else "audio"
-            if media_result.get("audio_sent")
-            else "image"
-            if media_result.get("image_sent")
-            else ""
-        )
-        await self.ctx_service.record_external_share(
-            uid,
-            content,
-            image_description,
-            image_sent=bool(media_result.get("image_sent")),
-            media_kind=media_kind,
+        await record_confirmed_share(
+            self.ctx_service, uid, content, image_description, media_result
         )
         await self.services.executor_helpers.record_share_history(
             target_id=uid,

@@ -100,6 +100,33 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.logger_patcher.stop()
 
+    async def test_public_punctuation_cleanup_uses_life_contract_and_falls_back(self):
+        class Plugin:
+            async def clean_share_punctuation(self, text, *, scene):
+                self.seen = (text, scene)
+                return text.replace("，", " ").replace("！", "")
+
+        plugin = Plugin()
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(plugin)])
+        )
+        self.assertEqual(
+            await bridge.clean_expression_punctuation(
+                "好看，真的！", scene="qzone_comment"
+            ),
+            "好看 真的",
+        )
+        self.assertEqual(plugin.seen, ("好看，真的！", "qzone_comment"))
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(object())])
+        )
+        self.assertEqual(
+            await bridge.clean_expression_punctuation(
+                "好看，真的！", scene="qzone_reply"
+            ),
+            "好看，真的！",
+        )
+
     async def test_chat_style_uses_public_contract_and_filters_extra_data(self):
         class Plugin:
             async def get_share_chat_style(self):
@@ -151,6 +178,26 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
         stars.clear()
         self.assertEqual(await bridge.get_share_chat_style_prompt(), "")
+
+    async def test_chat_scene_keeps_length_guidance_and_does_not_exclude_cleanup(self):
+        class Plugin:
+            async def get_share_chat_style(self, *, scene=""):
+                return {
+                    "enabled": True,
+                    "prompt": "语气" * 260 + "轻闲聊参考长度约 12 字左右",
+                }
+
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(get_all_stars=lambda: [_metadata(Plugin())])
+        )
+        for scene in ("share_private", "share_group"):
+            prompt = await bridge.get_share_chat_style_prompt(scene=scene)
+            self.assertIn("约 12 字", prompt)
+            self.assertIn("生成后统一清洗", prompt)
+            self.assertNotIn("不套用聊天字数限制", prompt)
+        public = await bridge.get_share_chat_style_prompt(scene="qzone_post")
+        self.assertIn("不套用聊天字数限制或分段发送", public)
+        self.assertIn("正文提交前按生活插件设置统一清洗", public)
 
     async def test_chat_style_failure_falls_back_and_long_text_is_bounded(self):
         async def get_style():
@@ -508,9 +555,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 contains_character=False,
                 **kwargs,
             ):
-                calls.append(
-                    (event, prompt, contains_character, kwargs)
-                )
+                calls.append((event, prompt, contains_character, kwargs))
                 return "image:default-channel"
 
         bridge = DailyLifeBridge(

@@ -203,5 +203,9 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
             media_result,
         )
         if attach_image:
-            self._mark_send_stage_success(media_result, "image")
+            self._mark_send_stage_success(
+                media_result,
+                "image",
+                probable_sent=bool((media_result or {}).get("text_probable_sent")),
+            )
         return True

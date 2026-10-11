@@ -691,6 +691,30 @@ class QzoneToolPermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["processed"]["10001:tid-1"]["action"], "commented")
         self.assertEqual(state["processed"]["10001:tid-1"]["content"], "自动生成评论")
 
+    async def test_tool_auto_comment_cleans_before_sending_and_records_final_text(self):
+        from unittest.mock import AsyncMock
+
+        bridge = types.SimpleNamespace(
+            clean_expression_punctuation=AsyncMock(return_value="自然表达"),
+            record_public_activity=AsyncMock(return_value=True),
+        )
+        self.host.runtime.plugin = types.SimpleNamespace(daily_life_bridge=bridge)
+        result = await self.host.run_qzone_tool(
+            _Event(role="member", sender_id="10001"),
+            action="auto_comment",
+            post_id="10001:tid-1",
+        )
+        self.assertEqual(result, "自动评论已发送：自然表达")
+        self.assertIn(
+            ("comment", "10001:tid-1", "自然表达"), self.host.qzone_service.calls
+        )
+        bridge.clean_expression_punctuation.assert_awaited_once_with(
+            "自动生成评论", scene="qzone_comment"
+        )
+        self.assertEqual(
+            bridge.record_public_activity.await_args.args[0]["content"], "自然表达"
+        )
+
     async def test_member_can_like_own_qzone_post(self):
         result = await self.host.run_qzone_tool(
             _Event(role="member", sender_id="10001"),

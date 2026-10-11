@@ -224,6 +224,24 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
                 "档案姓名与空间昵称不同仍是同一人", call.kwargs["system_prompt"]
             )
 
+    async def test_public_continuity_survives_long_state_without_private_activities(
+        self,
+    ):
+        self.payloads["qq-test:FriendMessage:20002"]["continuity"] = {
+            "version": 1,
+            "activities": [{"title": "PRIVATE_ACTIVITY", "state": "active"}],
+            "public": {
+                "version": 1,
+                "interests": [{"label": "摄影", "state": "paused"}],
+            },
+        }
+        await self.owner.generate_qzone_auto_comment(self.post)
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("摄影", prompt)
+        self.assertIn("paused", prompt)
+        self.assertNotIn("PRIVATE_", prompt)
+        self.assertEqual(self.calls, ["qq-test:FriendMessage:20002"])
+
     async def test_reply_executor_without_triggering_session_uses_actual_actor(self):
         replyer = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.executors.replyer"]
         task = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.task"]

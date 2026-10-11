@@ -4,7 +4,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_auto_comment_testpkg"
@@ -127,6 +127,7 @@ def _load_qzone_service_module():
     )
     _install_stub_module(
         f"{SPACE_PACKAGE_NAME}.parse",
+        __path__=[str(ROOT / "core" / "space" / "parse")],
         parse_feed_item=lambda *args, **kwargs: None,
         parse_feed_list=lambda *args, **kwargs: [],
         parse_home_feed_list=lambda *args, **kwargs: [],
@@ -2050,6 +2051,11 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.plugin = types.SimpleNamespace(
                     qzone_service=Service(),
+                    daily_life_bridge=types.SimpleNamespace(
+                        clean_expression_punctuation=AsyncMock(
+                            return_value="既然是真的 那今晚的疯狂星期四就靠你表现了"
+                        )
+                    ),
                     emit_dashboard_event=lambda *args, **kwargs: None,
                 )
 
@@ -2080,11 +2086,15 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             manager.plugin.qzone_service.reply,
-            "既然是真的，那今晚的疯狂星期四就靠你表现了。",
+            "既然是真的 那今晚的疯狂星期四就靠你表现了",
         )
         self.assertEqual(
             processed["1:self:r1"]["content"],
+            "既然是真的 那今晚的疯狂星期四就靠你表现了",
+        )
+        manager.plugin.daily_life_bridge.clean_expression_punctuation.assert_awaited_once_with(
             "既然是真的，那今晚的疯狂星期四就靠你表现了。",
+            scene="qzone_reply",
         )
 
     async def test_auto_interaction_system_prompt_always_includes_persona(self):
@@ -2154,11 +2164,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 self.plugin = types.SimpleNamespace(
                     _is_terminated=False,
                     qzone_service=Service(),
+                    daily_life_bridge=types.SimpleNamespace(
+                        clean_expression_punctuation=AsyncMock(
+                            return_value="这家书店听起来好舒服"
+                        )
+                    ),
                     emit_dashboard_event=lambda *args, **kwargs: None,
                 )
 
             async def llm(self, **kwargs):
-                return "这家书店听起来好舒服"
+                return "这家书店，听起来好舒服。"
 
         manager = Manager()
         manager.plugin.call_llm = manager.llm
@@ -2177,6 +2192,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["processed"]["3:new"]["action"], "commented")
         self.assertEqual(state["processed"]["3:new"]["content"], "这家书店听起来好舒服")
         self.assertEqual(state["processed"]["3:new"]["author"], "朋友B")
+        manager.plugin.daily_life_bridge.clean_expression_punctuation.assert_awaited_once_with(
+            "这家书店，听起来好舒服。", scene="qzone_comment"
+        )
 
     async def test_auto_comment_active_window_skips_old_posts(self):
         module, models = _load_auto_comment_module()

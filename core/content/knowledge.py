@@ -48,7 +48,7 @@ class ContentKnowledgeService(ContentComponent):
 
         # 使用智能发散选题
         target_keyword = await self._agent_brainstorm_topic(
-            main_cat, sub_cat, target_id
+            main_cat, sub_cat, target_id, life_context=ctx.get("life_hint", "")
         )
         if not target_keyword:
             logger.warning("[内容服务] 无法生成知识关键词，取消分享")
@@ -94,11 +94,10 @@ class ContentKnowledgeService(ContentComponent):
             f"{opening_guide}\n- 场景关联型：只有逻辑通顺时才结合当前状态。"
         )
         keyword_requirement = "4. 用【】将核心关键词括起来，使用本次输入中指定的名称。"
-        length_requirement = (
-            f"5. {'字数：100-150字' if is_group else '字数：100-200字'}。"
-        )
+        length_requirement = "5. 把一个知识点说清楚就停，不凑字数；保留事实、必要条件与限定，避免改成错误结论。"
         rules = f"""
 {common_rules}
+{ctx.get("share_chat_style_hint", "")}
 你现在的任务是：向{target_str}分享下面的冷知识。
 基于本次输入的资料进行通俗化讲解。
 {ctx.get("output_format_hint", "")}
@@ -106,8 +105,8 @@ class ContentKnowledgeService(ContentComponent):
 
 【要求】
 1. 以你的人设性格说话，自然分享。
-2. {"语气轻松简洁" if is_group else "可以详细展开，带点个人见解"}。
-3. 可以加入你的个人感想或小评论
+2. 语气轻松简洁，像随口分享刚了解的知识，不写教科书或长篇感悟。
+3. 可以说真正关注的一点，不硬加总结或互动提问。
 {keyword_requirement}
 {length_requirement}
 6. 直接输出分享内容。
@@ -135,6 +134,9 @@ class ContentKnowledgeService(ContentComponent):
                 prompt=prompt,
                 system_prompt=ctx["system_prompt"],
                 target_umo=ctx.get("target_id"),
+            )
+            res = await self._review_share_expression(
+                res, ctx, required_terms=(target_keyword,)
             )
 
         if res:

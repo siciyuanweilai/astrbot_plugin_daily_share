@@ -152,6 +152,7 @@ class TaskExecutorFlowService(TaskServiceBase):
         history_source: str,
         specific_target: str | None = None,
         event: AstrMessageEvent | None = None,
+        post_context: str | None = None,
     ) -> tuple[bool | None, str]:
         self.services.progress.update_share_progress(
             progress_id, "content", message="文案生成中"
@@ -159,7 +160,7 @@ class TaskExecutorFlowService(TaskServiceBase):
         content_context = await self.services.executor_helpers.prepare_content_context(
             target_umo=uid,
             share_type=stype,
-            life_ctx=life_ctx,
+            life_ctx=post_context if post_context is not None else life_ctx,
             is_group=is_group,
             event=event,
             nickname=nickname,
@@ -184,6 +185,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             nickname=nickname,
             recent_dynamics=content_context["recent_dynamics"],
             structured_history=content_context.get("structured_history", ""),
+            recent_post_contents=content_context.get("recent_post_contents", []),
         )
         if content:
             self.services.progress.complete_share_progress_step(
@@ -344,6 +346,7 @@ class TaskExecutorFlowService(TaskServiceBase):
         life_ctx: str,
         r_groups: dict,
         r_users: dict,
+        post_context: str | None = None,
     ) -> bool:
         progress_id = ""
         stype = force_type or ShareType.GREETING
@@ -378,6 +381,7 @@ class TaskExecutorFlowService(TaskServiceBase):
                 stype=stype,
                 period=period,
                 life_ctx=life_ctx,
+                post_context=post_context,
                 is_group=target["is_group"],
                 nickname=target["nickname"],
                 news_data=news_data,
@@ -482,7 +486,8 @@ class TaskExecutorFlowService(TaskServiceBase):
             ):
                 logger.info(f"[日常分享] {uid} 已有待续接分享，本轮不再生成新任务")
                 continue
-            life_ctx = await self.ctx_service.get_life_context(uid)
+            share_context = await self.ctx_service.get_chat_share_context(uid)
+            life_ctx = share_context["life_context"]
             ok = await self._execute_share_for_target(
                 uid=uid,
                 target_index=target_index,
@@ -493,6 +498,7 @@ class TaskExecutorFlowService(TaskServiceBase):
                 event=event,
                 history_source=history_source,
                 life_ctx=life_ctx,
+                post_context=share_context["post_context"],
                 period=period,
                 r_groups=r_groups,
                 r_users=r_users,

@@ -35,6 +35,20 @@ class ContextLifeFormatService(ContextComponent):
             return ""
 
         full_status = self._group_safe_life_status(context)
+        try:
+            expression = json.loads(context).get("表达软偏好", "")
+        except (TypeError, ValueError, AttributeError):
+            expression = ""
+        if isinstance(expression, str) and expression.strip():
+            full_status = "\n".join(filter(None, (full_status, expression)))
+        try:
+            data = json.loads(context)
+        except (TypeError, ValueError):
+            data = {}
+        for key in ("生活连续性", "会话时间"):
+            value = data.get(key) if isinstance(data, dict) else None
+            if isinstance(value, str) and value:
+                full_status += "\n" + value
         if not full_status:
             return ""
 

@@ -81,7 +81,9 @@ class ContentRecommendationService(ContentComponent):
         logger.info(f"[内容服务] 推荐方向: {rec_type} ({sub_style})")
 
         # 使用智能发散选题
-        target_work = await self._agent_brainstorm_topic(rec_type, sub_style, target_id)
+        target_work = await self._agent_brainstorm_topic(
+            rec_type, sub_style, target_id, life_context=ctx.get("life_hint", "")
+        )
         if not target_work:
             logger.warning("[内容服务] 无法生成推荐作品名，取消分享")
             return None
@@ -123,17 +125,16 @@ class ContentRecommendationService(ContentComponent):
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         opening_guide = self._recommendation_opening_guide(is_qzone, is_group)
         opening_rule = build_opening_integrity_rule(
-            f"- {opening_guide}\n- 可以用“最近发现了一个...”或“最近在重温...”这类自然开头。\n- 不要评价群聊气氛。"
+            f"- {opening_guide}\n- 没有实际使用、阅读或观看证据时，不声称自己用过、看过或正在重温。\n- 不要评价群聊气氛。"
         )
         opening_requirement = "2. 开头必须有明确的推荐表达"
         title_requirement = (
             "5. 务必用【】将推荐目标的名称括起来，使用本次输入中指定的名称。"
         )
-        length_requirement = (
-            f"6. {'字数：80-120字' if is_group else '字数：120-150字'}。"
-        )
+        length_requirement = "6. 说清值得关注的一点和理由即可，不凑字数，不列长篇卖点，不省略资料中的必要条件。"
         rules = f"""
 {common_rules}
+{ctx.get("share_chat_style_hint", "")}
 你现在的任务是：向{target_str}推荐本次输入中指定的目标。
 
 【核心指令】
@@ -175,6 +176,9 @@ class ContentRecommendationService(ContentComponent):
                 prompt=prompt,
                 system_prompt=ctx["system_prompt"],
                 target_umo=ctx.get("target_id"),
+            )
+            res = await self._review_share_expression(
+                res, ctx, required_terms=(target_work,)
             )
 
         if res:

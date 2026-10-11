@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -76,6 +77,28 @@ class TaskDeliveryChainService(TaskDeliveryDelayService):
         try:
             await self.send_message_chain(uid, chain, event)
             self._mark_send_stage_success(media_result, stage)
+            sent_at = time.time()
+            if isinstance(media_result, dict):
+                media_result[f"{stage}_sent_at"] = sent_at
+            # 回传失败不改变已发送事实，更不能触发平台重发。
+            try:
+                bridge = getattr(self.plugin, "daily_life_bridge", None)
+                record = getattr(bridge, "record_delivery", None)
+                kinds = tuple(
+                    kind
+                    for kind in ("image", "video")
+                    if stage == kind
+                    or any(
+                        type(component).__name__.lower() == kind
+                        for component in getattr(chain, "chain", [])
+                    )
+                )
+                if callable(record):
+                    await record(str(uid), sent_at, media_kinds=kinds)
+            except Exception as exc:
+                logger.warning(
+                    f"[日常分享] 已发送，生活回执暂未登记：{type(exc).__name__}"
+                )
             return True
         except Exception as error:
             if self._is_probable_delivery_timeout(error):

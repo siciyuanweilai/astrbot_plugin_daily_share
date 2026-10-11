@@ -183,6 +183,10 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
                 )
                 return _qzone_reply_skipped_payload(reply)
 
+            bridge = getattr(self.plugin, "daily_life_bridge", None)
+            clean = getattr(bridge, "clean_expression_punctuation", None)
+            if callable(clean):
+                reply = await clean(reply, scene="qzone_reply")
             submit_result = await self.plugin.qzone_service.reply_comment(
                 post.key,
                 comment,

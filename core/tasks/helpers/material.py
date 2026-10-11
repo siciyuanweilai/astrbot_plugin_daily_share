@@ -54,14 +54,15 @@ class TaskHelperContextService(TaskHelperMediaService):
             group_info,
         )
         _, real_id = self.ctx_service.parse_umo(target_umo)
-        recent_dynamics = await self.format_recent_dynamics(
+        recent_post_contents = await self.get_recent_post_contents(
             recent_target_id or target_umo
         )
         return {
             "hist_data": hist_data,
             "structured_history": structured_history,
             "life_prompt": life_prompt,
-            "recent_dynamics": recent_dynamics,
+            "recent_dynamics": "",
+            "recent_post_contents": recent_post_contents,
             "group_info": group_info,
             "real_id": real_id,
         }

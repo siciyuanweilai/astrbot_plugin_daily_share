@@ -288,6 +288,10 @@ class _CtxService:
     async def get_qzone_share_context(self):
         return {"life_context": "", "post_context": ""}
 
+    async def get_chat_share_context(self, target_umo):
+        context = await self.get_life_context(target_umo)
+        return {"life_context": context, "post_context": context}
+
     def parse_umo(self, target):
         return "aiocqhttp", str(target).split(":")[-1]
 
@@ -3113,6 +3117,61 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_chat_share_manual_and_scheduled_use_one_snapshot_and_separate_media(
+        self,
+    ):
+        for manual in (False, True):
+            with self.subTest(manual=manual):
+                mod = _load_tasks_module()
+                plugin = _Plugin()
+                manager = _new_manager(mod, plugin)
+                calls = []
+                media = []
+                target = "aiocqhttp:FriendMessage:100000002"
+
+                async def share_context(target_umo):
+                    calls.append(target_umo)
+                    return {
+                        "life_context": "完整穿搭资料",
+                        "post_context": "当前在休息",
+                    }
+
+                async def history(target_id, limit=3):
+                    return [{"type": "mood", "content": "旧分享正文"}]
+
+                async def send_prepared(**kwargs):
+                    media.append(kwargs["life_ctx"])
+                    return True
+
+                plugin.ctx_service.get_chat_share_context = share_context
+                plugin.ctx_service.format_life_context = lambda context, *args: context
+                plugin.db.get_recent_history_by_target = history
+                if manual:
+                    manager.command_share.send_prepared_command_share = send_prepared
+                    result = await manager.command_share.async_daily_share_task(
+                        _Event(unified_msg_origin=target),
+                        share_type="心情",
+                        source=None,
+                        get_image=False,
+                        need_image=False,
+                        need_video=False,
+                        need_voice=False,
+                        to_qzone=False,
+                    )
+                else:
+                    manager.share._send_execute_share_content = send_prepared
+                    result = await manager.share.execute_share(
+                        force_type=mod.ShareType.MOOD, specific_target=target
+                    )
+                if not manual:
+                    self.assertTrue(result)
+                self.assertEqual(calls, [target])
+                args, kwargs = plugin.content_service.calls[-1]
+                self.assertEqual(args[4], "当前在休息")
+                self.assertEqual(kwargs["recent_dynamics"], "")
+                self.assertEqual(kwargs["recent_post_contents"], ["旧分享正文"])
+                self.assertEqual(media, ["完整穿搭资料"])
+
     async def test_qzone_life_expression_uses_current_facts_for_text_and_full_context_for_image(
         self,
     ):
@@ -3343,8 +3402,16 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(ok)
+        self.assertGreater(media_result["text_sent_at"], 0)
+        self.assertGreaterEqual(
+            media_result["image_sent_at"], media_result["text_sent_at"]
+        )
         self.assertEqual(
-            media_result,
+            {
+                key: value
+                for key, value in media_result.items()
+                if not key.endswith("_sent_at")
+            },
             {
                 "text_sent": True,
                 "audio_sent": False,

@@ -4,6 +4,7 @@ import json
 
 from ..contextbase import ContextComponent
 from ..shared import datetime, logger
+from .continuity import continuity_prompt, timing_prompt
 
 
 class ContextLifeParseService(ContextComponent):
@@ -123,7 +124,38 @@ class ContextLifeParseService(ContextComponent):
                 appearance[label] = value.strip()
         if appearance:
             payload["主角本人配图外观"] = appearance
+        expression = self._public_expression(data)
+        if expression:
+            payload["表达软偏好"] = expression
+        continuity = continuity_prompt(data)
+        if continuity:
+            payload["生活连续性"] = continuity
+        timing = timing_prompt(data)
+        if timing:
+            payload["会话时间"] = timing
         return json.dumps(payload, ensure_ascii=False, indent=2) if payload else ""
+
+    def parse_private_share_data(self, data: dict) -> str:
+        """普通私聊正文选择当前事实与对象称呼，不复述整日背景与旧记忆。"""
+        current = self._parse_qzone_post_data(data)
+        if self._current_facts(data).get("valid") is False:
+            return current
+        relationship = self.service.life_memory.format_qzone_relationship(
+            data.get("relationships", [])
+        )
+        expression = self._public_expression(data) if not current else ""
+        return "\n\n".join(
+            part
+            for part in (
+                current,
+                "【关系档案，仅用于当前对象称呼与关系识别】\n" + relationship
+                if relationship
+                else "",
+                expression,
+                timing_prompt(data),
+            )
+            if part
+        )
 
     def _parse_qzone_post_data(self, data: dict) -> str:
         """只选当前字段，不从完整日程或私聊记忆推断已发生的事。"""
@@ -168,13 +200,15 @@ class ContextLifeParseService(ContextComponent):
                 )
                 if activity:
                     facts["正在进行的活动"] = activity
-        if not facts:
+        continuity = continuity_prompt(data)
+        if not facts and not continuity:
             return ""
         return "\n".join(
             part
             for part in (
                 "【当前生活材料】\n" + json.dumps(facts, ensure_ascii=False, indent=2),
                 self._public_expression(data),
+                continuity,
             )
             if part
         )
@@ -221,6 +255,9 @@ class ContextLifeParseService(ContextComponent):
                 )
 
             self._append_life_memories(parts, data)
+            parts.extend(
+                part for part in (continuity_prompt(data), timing_prompt(data)) if part
+            )
 
             guidance = self._format_share_guidance(data.get("share_guidance", {}))
             if guidance:

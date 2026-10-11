@@ -1,10 +1,16 @@
 from ..prompt import build_task_prompt, build_topic_category_boundary
+from ..context.daily.continuity import topic_continuity
 from .contentbase import ContentComponent
 
 
 class ContentTopicService(ContentComponent):
     async def _agent_brainstorm_topic(
-        self, category_type: str, sub_category: str, target_id: str
+        self,
+        category_type: str,
+        sub_category: str,
+        target_id: str,
+        *,
+        life_context: str = "",
     ) -> str | None:
         """
         选题智能提取：专门负责从给定的类别中，结合历史记录，避坑并选出一个有趣的、不重复的话题/作品名。
@@ -17,6 +23,16 @@ class ContentTopicService(ContentComponent):
             target_id, db_category, days_limit=self.dedup_days
         )
         history_str = "、".join(used_topics) if used_topics else "无"
+        preferences = topic_continuity(life_context)
+        interest_hint = (
+            (
+                preferences + "\n选题可自然贴合 active 兴趣和正在练习的目标；"
+                "paused/retired 不能当成当下热衷方向，待验证目标不能写成已经掌握。"
+                "类别、用户要求及去重规则优先，不强行关联。"
+            )
+            if preferences
+            else ""
+        )
 
         if is_rec:
             # 推荐类提示词
@@ -34,6 +50,7 @@ class ContentTopicService(ContentComponent):
             user_prompt = build_task_prompt(
                 rules,
                 constraint,
+                interest_hint,
                 f"任务：推荐一个【{sub_category}】风格的【{category_type}】{target_item_desc}。",
                 f"【已推荐过的列表】：{history_str}",
                 output="只输出名称：",
@@ -54,6 +71,7 @@ class ContentTopicService(ContentComponent):
             user_prompt = build_task_prompt(
                 rules,
                 f"请输出一个属于【{category_type}-{sub_category}】领域的知识点关键词。",
+                interest_hint,
                 f"【已分享过的列表】：{history_str}",
                 output="只输出关键词：",
             )

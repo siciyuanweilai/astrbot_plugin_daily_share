@@ -152,9 +152,9 @@ class ContentNewsService(ContentComponent):
         chat_detail_rule = (
             "群聊中简洁有重点"
             if is_group
-            else "私聊可以详细展开想法，并结合你当下的状态"
+            else "面向当前对象自然分享，不因私聊而刻意扩写"
         )
-        length_rule = "字数：120-150字" if is_group else "字数：150-200字"
+        length_rule = "每条保留必要事实与简短看法，说清楚就停，不凑字数，不为简短省掉新闻主体或条件"
         opening_prompt = f"""【开头方式】（必须自然提到平台"{source_name}"）
 - "刚在{source_name}看到..."
 - "翻到{source_name}的时候注意到..."
@@ -164,6 +164,7 @@ class ContentNewsService(ContentComponent):
         length_requirement = f"7. {length_rule}"
         rules = f"""
 {common_rules}
+{ctx.get("share_chat_style_hint", "")}
 {ctx.get("output_format_hint", "")}
 
 【新闻资料边界】
@@ -278,5 +279,7 @@ class ContentNewsService(ContentComponent):
         )
 
         if res:
-            return strip_news_reference_links(res)
+            res = strip_news_reference_links(res)
+            res = await self._review_share_expression(res, ctx)
+            return strip_news_reference_links(res) if res else None
         return None

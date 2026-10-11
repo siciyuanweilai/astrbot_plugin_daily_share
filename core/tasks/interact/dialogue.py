@@ -110,6 +110,10 @@ class QzoneAutoPromptService(QzoneAutoPolicyService):
         compact = _compact_qzone_auto_life_context(data.get("life_context"))
         if compact:
             parts.append(f"【当前生活状态参考】\n{compact}")
+        # 有界结构投影独立保留，避免末尾的取消/暂停/验收状态被 900 字截断。
+        continuity = str(data.get("continuity_context") or "").strip()
+        if continuity:
+            parts.append(continuity)
         return "\n\n".join(parts)
 
     async def _qzone_auto_interaction_llm(

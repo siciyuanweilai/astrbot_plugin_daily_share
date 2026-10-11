@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 
 from astrbot.api import logger
 
@@ -25,8 +26,16 @@ class PluginQzoneService(SupportComponent):
             logger.info(f"[日常分享] QQ 空间登录态已就绪: {account}({ctx.uin})")
             logger.info("[日常分享] 正在发布 QQ 空间说说...")
             post = await service.publish_post(text=text or "", images=images or [])
+            sent_at = time.time()
             try:
                 bridge = getattr(self.plugin, "daily_life_bridge", None)
+                delivery = getattr(bridge, "record_delivery", None)
+                if callable(delivery) and getattr(post, "tid", ""):
+                    await delivery(
+                        "qzone_broadcast",
+                        sent_at,
+                        media_kinds=("image",) if images else (),
+                    )
                 record = getattr(bridge, "record_public_activity", None)
                 if callable(record) and getattr(post, "tid", ""):
                     await record(
