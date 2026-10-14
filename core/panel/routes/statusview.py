@@ -2,13 +2,36 @@ from __future__ import annotations
 
 from ...config import NEWS_SOURCE_MAP
 from ..common import _PAGE_RECENT_SHARE_LIMIT
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 from ..revision import target_config_revision
 
 
 class DashboardRouteStatusService(PanelComponent):
+    _is_terminated = RuntimeField("_is_terminated")
+    activity = RuntimeField("activity")
+    basic_conf = RuntimeField("basic_conf")
+    config = RuntimeField("config")
+    content_service = RuntimeField("content_service")
+    db = RuntimeField("db")
+    extra_shares_conf = RuntimeField("extra_shares_conf")
+    image_conf = RuntimeField("image_conf")
+    jobs = RuntimeField("jobs")
+    labels = RuntimeField("labels")
+    llm_service = RuntimeField("llm_service")
+    media_page = RuntimeField("media_page")
+    meta = RuntimeField("meta")
+    plugin = RuntimeField("plugin")
+    qzone_conf = RuntimeField("qzone_conf")
+    qzone_service = RuntimeField("qzone_service")
+    scheduler = RuntimeField("scheduler")
+    server = RuntimeField("server")
+    status_routes = RuntimeField("status_routes")
+    targets = RuntimeField("targets")
+    task_manager = RuntimeField("task_manager")
+    tts_conf = RuntimeField("tts_conf")
+
     async def _build_page_status(self) -> dict:
-        period = self.task_manager.executor_helpers.get_curr_period()
+        period = self.task_manager.executor_helpers.period.get_curr_period()
         qzone_status = await self.qzone_service.status()
         targets = await self.targets._page_targets()
         jobs = self.jobs._page_jobs(targets)
@@ -38,6 +61,7 @@ class DashboardRouteStatusService(PanelComponent):
                 "enabled": bool(self.config.get("enable_auto_share", False)),
                 "terminated": self._is_terminated,
                 "runtime": runtime_status,
+                "model_usage": self.llm_service.usage_snapshot(),
                 "busy": self.is_share_busy(global_scope=True),
                 "preferences": preferences,
                 "scheduler": {
@@ -48,7 +72,7 @@ class DashboardRouteStatusService(PanelComponent):
                 },
                 "period": {
                     "key": period.value,
-                    "range": self.task_manager.executor_helpers.get_period_range_str(
+                    "range": self.task_manager.executor_helpers.period.get_period_range_str(
                         period
                     ),
                 },

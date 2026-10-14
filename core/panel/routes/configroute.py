@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 from ..revision import require_current_revision, settings_config_revision
 
 
 class DashboardRouteConfigService(PanelComponent):
+    apply = RuntimeField("apply")
+    config = RuntimeField("config")
+    payload = RuntimeField("payload")
+    refresh = RuntimeField("refresh")
+    server = RuntimeField("server")
+    status_routes = RuntimeField("status_routes")
+
     async def page_config(self):
         async def handler():
             body = await self.server._page_json_body()

@@ -5,8 +5,6 @@ import ssl
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-from ..methodset import QzoneMethodSet
-
 try:
     import h2.config
     import h2.connection
@@ -16,9 +14,13 @@ except Exception:  # pragma: no cover - 可选运行时依赖
 
 if TYPE_CHECKING:
     from ..models import QzoneContext
+    from ..qzone import QzoneService
 
 
-class QzoneH5NativeService(QzoneMethodSet):
+class QzoneH5NativeService:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     @staticmethod
     def _h5_native_request_path(url: str, params: dict[str, Any] | None = None):
         parsed_url = urlsplit(url)
@@ -47,7 +49,7 @@ class QzoneH5NativeService(QzoneMethodSet):
                 ssl=ssl_context,
                 server_hostname=parsed_url.hostname,
             ),
-            timeout=self._api_timeout_seconds(),
+            timeout=self.owner._api_timeout_seconds(),
         )
 
     @staticmethod
@@ -71,7 +73,7 @@ class QzoneH5NativeService(QzoneMethodSet):
             (":path", path),
             ("accept-encoding", "gzip"),
         ]
-        h2_headers = headers or self._h5_headers(ctx)
+        h2_headers = headers or self.owner._h5_headers(ctx)
         for key, value in h2_headers.items():
             if value is not None:
                 header_items.append((str(key).lower(), str(value)))
@@ -120,13 +122,13 @@ class QzoneH5NativeService(QzoneMethodSet):
                     response["encoding"] = value_text
                 elif key_text.lower() == "content-length":
                     try:
-                        if int(value_text) > self._H5_MAX_RESPONSE_BYTES:
+                        if int(value_text) > self.owner._H5_MAX_RESPONSE_BYTES:
                             raise RuntimeError("QQ 空间 H5 响应过大")
                     except ValueError:
                         pass
         elif isinstance(event, h2.events.DataReceived):
             response["size"] += len(event.data)
-            if response["size"] > self._H5_MAX_RESPONSE_BYTES:
+            if response["size"] > self.owner._H5_MAX_RESPONSE_BYTES:
                 raise RuntimeError("QQ 空间 H5 响应过大")
             response["chunks"].append(event.data)
             conn.acknowledge_received_data(
@@ -134,9 +136,9 @@ class QzoneH5NativeService(QzoneMethodSet):
             )
         elif isinstance(event, h2.events.StreamEnded):
             raw = b"".join(response["chunks"])
-            text = self._decode_h5_body(raw, response.get("encoding") or "").decode(
-                "utf-8", "ignore"
-            )
+            text = self.owner._decode_h5_body(
+                raw, response.get("encoding") or ""
+            ).decode("utf-8", "ignore")
             return int(response.get("status") or 0), text
         return None
 
@@ -151,12 +153,12 @@ class QzoneH5NativeService(QzoneMethodSet):
         }
         while True:
             data = await asyncio.wait_for(
-                reader.read(65535), timeout=self._api_timeout_seconds()
+                reader.read(65535), timeout=self.owner._api_timeout_seconds()
             )
             if not data:
                 break
             for event in conn.receive_data(data):
-                result = self._handle_h5_native_h2_event(conn, event, response)
+                result = self.owner._handle_h5_native_h2_event(conn, event, response)
                 if result is not None:
                     return result
             pending = conn.data_to_send()
@@ -164,7 +166,7 @@ class QzoneH5NativeService(QzoneMethodSet):
                 writer.write(pending)
                 await writer.drain()
         raw = b"".join(response["chunks"])
-        text = self._decode_h5_body(raw, response.get("encoding") or "").decode(
+        text = self.owner._decode_h5_body(raw, response.get("encoding") or "").decode(
             "utf-8", "ignore"
         )
         return int(response.get("status") or 0), text
@@ -188,17 +190,19 @@ class QzoneH5NativeService(QzoneMethodSet):
     ) -> tuple[int, str]:
         if h2 is None:
             raise RuntimeError("原生 HTTP/2 不可用")
-        parsed_url, path = self._h5_native_request_path(url, params)
-        body = self._h5_json_body(payload)
-        reader, writer = await self._open_h5_native_h2_connection(parsed_url)
+        parsed_url, path = self.owner._h5_native_request_path(url, params)
+        body = self.owner._h5_json_body(payload)
+        reader, writer = await self.owner._open_h5_native_h2_connection(parsed_url)
         config = h2.config.H2Configuration(client_side=True, header_encoding="utf-8")
         conn = h2.connection.H2Connection(config=config)
         try:
-            self._ensure_h5_native_h2_alpn(writer)
-            header_items = self._h5_native_h2_header_items(
+            self.owner._ensure_h5_native_h2_alpn(writer)
+            header_items = self.owner._h5_native_h2_header_items(
                 ctx, parsed_url, path, headers
             )
-            await self._send_h5_native_h2_request(writer, conn, header_items, body)
-            return await self._read_h5_native_h2_response(reader, writer, conn)
+            await self.owner._send_h5_native_h2_request(
+                writer, conn, header_items, body
+            )
+            return await self.owner._read_h5_native_h2_response(reader, writer, conn)
         finally:
-            await self._close_h5_native_h2_writer(writer)
+            await self.owner._close_h5_native_h2_writer(writer)

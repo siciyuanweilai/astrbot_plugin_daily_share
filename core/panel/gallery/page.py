@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardMediaPageService(PanelComponent):
+    basic_conf = RuntimeField("basic_conf")
+    db = RuntimeField("db")
+    events = RuntimeField("events")
+    media_files = RuntimeField("media_files")
+    media_kind = RuntimeField("media_kind")
+    media_page = RuntimeField("media_page")
+    media_preview = RuntimeField("media_preview")
+    server = RuntimeField("server")
+
     def _page_dashboard_dynamic_days(self) -> int:
         try:
             days = int(self.basic_conf.get("dashboard_dynamic_days", 60))

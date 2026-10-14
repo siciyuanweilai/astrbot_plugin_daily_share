@@ -1,6 +1,6 @@
-def compact_identity_text(value: str, limit: int = 1000) -> str:
-    text = " ".join(str(value or "").split())
-    return text[:limit]
+def compact_identity_text(value: str) -> str:
+    # 人设是稳定前缀。只归一化空白，不截掉末尾的身份、称谓和禁用条件。
+    return " ".join(str(value or "").split())
 
 
 def build_content_system_prompt(persona_text: str) -> str:
@@ -13,7 +13,7 @@ def build_content_system_prompt(persona_text: str) -> str:
 
 
 def build_persona_figure_prompt(persona_text: str) -> str:
-    text = compact_identity_text(persona_text, 500)
+    text = compact_identity_text(persona_text)
     if not text:
         return ""
     return f"人物形象遵循角色人设原文：{text}, 1个人物, 独奏"

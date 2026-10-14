@@ -1,13 +1,52 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent
+from astrbot.api.event import AstrMessageEvent, MessageChain
 
 from ...toolkit import format_exception, log_exception
+from ..taskbase import TaskServiceBase
+from .chain import TaskDeliveryChainService
 from .chainmedia import TaskDeliveryMediaService
+from .pause import TaskDeliveryDelayService
+from .stage import TaskDeliveryStatusService
+
+if TYPE_CHECKING:
+    from ..components import TaskServices
+    from ..runtime import TaskRuntime
+    from ..taskbase import TaskConfigState, TaskSharedState
 
 
-class TaskDeliverySendService(TaskDeliveryMediaService):
+class TaskDeliveryService(TaskServiceBase):
+    """平台发送编排，显式组合投递、媒体、延迟和结果组件。"""
+
+    def __init__(
+        self,
+        runtime: TaskRuntime,
+        config: TaskConfigState,
+        state: TaskSharedState,
+    ) -> None:
+        super().__init__(runtime, config, state)
+        args = (runtime, config, state)
+        self.status = TaskDeliveryStatusService(*args)
+        self.delay = TaskDeliveryDelayService(*args)
+        self.chains = TaskDeliveryChainService(*args, status=self.status)
+        self.media = TaskDeliveryMediaService(*args, chains=self.chains)
+
+    def connect(self, services: TaskServices) -> None:
+        super().connect(services)
+        for component in (self.status, self.delay, self.chains, self.media):
+            component.connect(services)
+
+    async def send_message_chain(
+        self, uid, chain: MessageChain, event: AstrMessageEvent | None = None
+    ) -> None:
+        await self.chains.send_message_chain(uid, chain, event)
+
+    async def random_sleep(self) -> None:
+        await self.delay.random_sleep()
+
     async def send(
         self,
         uid,
@@ -33,12 +72,12 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
                 audio_path and self.tts_conf.get("prefer_audio_only", False)
             )
 
-            downloaded_img_path, img_path = await self._prepare_delivery_image(
+            downloaded_img_path, img_path = await self.media.prepare_image(
                 uid,
                 img_path,
                 image_optional=image_optional,
             )
-            self._init_media_result(
+            self.status.init_media_result(
                 media_result,
                 downloaded_img_path=downloaded_img_path or "",
                 img_path=img_path or "",
@@ -72,7 +111,7 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
             return state["sent_any"]
 
         except Exception as e:
-            if state["sent_any"] or self._has_sent_stage(media_result):
+            if state["sent_any"] or self.status.has_sent_stage(media_result):
                 logger.warning(
                     f"[日常分享] 分享内容给 {uid} 部分已发送，后续阶段失败: {format_exception(e)}"
                 )
@@ -110,8 +149,12 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
             if audio_path or ((img_path or video_url) and separate_img):
                 await self.random_sleep()
         if audio_path:
-            await self._send_chain_stage(
-                uid, self._build_audio_chain(audio_path), "audio", event, media_result
+            await self.chains.send_chain_stage(
+                uid,
+                self.media.build_audio_chain(audio_path),
+                "audio",
+                event,
+                media_result,
             )
             state["sent_any"] = True
             if (img_path or video_url) and separate_img:
@@ -133,15 +176,21 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
         state: dict,
     ) -> None:
         if video_url:
-            await self._send_chain_stage(
-                uid, self._build_video_chain(video_url), "video", event, media_result
+            await self.chains.send_chain_stage(
+                uid,
+                self.media.build_video_chain(video_url),
+                "video",
+                event,
+                media_result,
             )
             state["sent_any"] = True
             return
         if not img_path or not (separate_img or audio_path):
             return
         try:
-            await self._send_image_chain_with_retry(uid, img_path, event, media_result)
+            await self.media.send_image_chain_with_retry(
+                uid, img_path, event, media_result
+            )
             state["sent_any"] = True
         except Exception as image_error:
             if image_optional and (text_sent or state["sent_any"]):
@@ -150,35 +199,6 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
                 )
                 return
             raise
-
-    async def _prepare_delivery_image(
-        self,
-        uid: str,
-        img_path: str | None,
-        *,
-        image_optional: bool,
-    ) -> tuple[str | None, str | None]:
-        downloaded_img_path = None
-        if img_path and img_path.startswith("http"):
-            filename = self.services.delivery_assets.build_news_image_filename(img_path)
-            dl_path = await self.services.delivery_assets.download_image_to_local(
-                img_path, filename
-            )
-            if dl_path:
-                img_path = dl_path
-                downloaded_img_path = dl_path
-            else:
-                logger.warning("[日常分享] 图片下载失败，已跳过发送该图片。")
-                img_path = None
-
-        img_path = await self.services.weixin_delivery.prepare_image_for_target(
-            uid, img_path
-        )
-        if image_optional and img_path and self.ctx_service.is_weixin_platform(uid):
-            img_path = await self.services.weixin_delivery.prepare_weixin_retry_image(
-                img_path
-            )
-        return downloaded_img_path, img_path
 
     async def _send_delivery_text(
         self,
@@ -195,15 +215,17 @@ class TaskDeliverySendService(TaskDeliveryMediaService):
         attach_image = bool(
             img_path and not video_url and not separate_img and not audio_path
         )
-        await self._send_chain_stage(
+        await self.chains.send_chain_stage(
             uid,
-            self._build_text_chain(clean_text, img_path, attach_image=attach_image),
+            self.media.build_text_chain(
+                clean_text, img_path, attach_image=attach_image
+            ),
             "text",
             event,
             media_result,
         )
         if attach_image:
-            self._mark_send_stage_success(
+            self.status.mark_send_stage_success(
                 media_result,
                 "image",
                 probable_sent=bool((media_result or {}).get("text_probable_sent")),

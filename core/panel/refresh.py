@@ -4,11 +4,33 @@ from astrbot.api import logger
 
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS
 from ..toolkit import format_exception
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardConfigRefreshService(PanelComponent):
     """配置保存后刷新运行时引用和定时任务。"""
+
+    basic_conf = RuntimeField("basic_conf")
+    command_handler = RuntimeField("command_handler")
+    config = RuntimeField("config")
+    contact_aliases = RuntimeField("contact_aliases")
+    content_service = RuntimeField("content_service")
+    context_conf = RuntimeField("context_conf")
+    ctx_service = RuntimeField("ctx_service")
+    extra_shares_conf = RuntimeField("extra_shares_conf")
+    image_conf = RuntimeField("image_conf")
+    image_service = RuntimeField("image_service")
+    llm_service = RuntimeField("llm_service")
+    news_conf = RuntimeField("news_conf")
+    news_service = RuntimeField("news_service")
+    plugin = RuntimeField("plugin")
+    qzone_conf = RuntimeField("qzone_conf")
+    qzone_service = RuntimeField("qzone_service")
+    receiver_conf = RuntimeField("receiver_conf")
+    refresh = RuntimeField("refresh")
+    scheduler = RuntimeField("scheduler")
+    task_manager = RuntimeField("task_manager")
+    tts_conf = RuntimeField("tts_conf")
 
     def _refresh_config_refs(self) -> None:
         self.basic_conf = self.config.setdefault("basic_conf", {})

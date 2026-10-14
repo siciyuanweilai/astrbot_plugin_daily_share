@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzoneUtilService(PanelComponent):
+    qzone_tools = RuntimeField("qzone_tools")
+
     @staticmethod
     def _page_qzone_post_payload(
         post, *, self_uin: int = 0, include_comments: bool = False

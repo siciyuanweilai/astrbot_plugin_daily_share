@@ -5,11 +5,15 @@ from ..database.keys import (
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
 )
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardLabelsService(PanelComponent):
     """仪表盘目标显示名解析。"""
+
+    _page_target_label_cache_data = RuntimeField("_page_target_label_cache_data")
+    ctx_service = RuntimeField("ctx_service")
+    labels = RuntimeField("labels")
 
     def _page_target_label_map(self, targets: dict) -> dict:
         labels = {}

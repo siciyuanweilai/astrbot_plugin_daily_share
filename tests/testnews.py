@@ -84,13 +84,15 @@ class NewsPayloadDecodingTests(unittest.TestCase):
             self.assertNotIn("xiaohongshu", prefs)
             self.assertTrue(set(prefs).issubset(config.NEWS_SOURCE_MAP))
         for mode in ("fixed", "config", "time_based"):
-            service = mod.NewsService({
-                "news_conf": {
-                    "news_random_mode": mode,
-                    "news_api_source": "xiaohongshu",
-                    "news_random_sources": ["xiaohongshu"],
+            service = mod.NewsService(
+                {
+                    "news_conf": {
+                        "news_random_mode": mode,
+                        "news_api_source": "xiaohongshu",
+                        "news_random_sources": ["xiaohongshu"],
+                    }
                 }
-            })
+            )
             self.assertEqual(service.select_news_source(), "zhihu")
 
     def test_invalid_configured_sources_fall_back_to_zhihu(self):

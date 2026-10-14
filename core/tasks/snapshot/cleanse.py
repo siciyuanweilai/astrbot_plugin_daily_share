@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from ..taskbase import TaskServiceBase
+if TYPE_CHECKING:
+    from ..cache import TaskNewsCacheService
 
 
-class TaskNewsCacheNormalizeService(TaskServiceBase):
+class TaskNewsCacheNormalizeService:
+    def __init__(self, owner: TaskNewsCacheService) -> None:
+        self.owner = owner
+
     NEWS_SNAPSHOT_TTL_SECONDS = 1800
 
     def get_news_snapshot_limit(self) -> int:
@@ -22,7 +27,7 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
 
     def _is_news_snapshot_fresh(self, snapshot) -> bool:
         """仅允许最近发送的新闻快照参与上下文和链接反查。"""
-        if not self._is_news_snapshot(snapshot):
+        if not self.owner._is_news_snapshot(snapshot):
             return False
         created_at = str(snapshot.get("created_at") or "").strip()
         if not created_at:
@@ -33,7 +38,7 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
             return False
         now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
         age_seconds = (now - created).total_seconds()
-        return -60 <= age_seconds <= self.NEWS_SNAPSHOT_TTL_SECONDS
+        return -60 <= age_seconds <= self.owner.NEWS_SNAPSHOT_TTL_SECONDS
 
     def _clean_snapshot_text(self, value, max_len: int = 300) -> str:
         text = re.sub(r"\s+", " ", str(value or "")).strip()
@@ -43,11 +48,11 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
 
     def _normalize_news_snapshot_items(self, items) -> list:
         normalized = []
-        for item in list(items or [])[: self.get_news_snapshot_limit()]:
+        for item in list(items or [])[: self.owner.get_news_snapshot_limit()]:
             if not isinstance(item, dict):
                 continue
 
-            title = self._clean_snapshot_text(
+            title = self.owner._clean_snapshot_text(
                 item.get("title") or item.get("name"), 180
             )
             if not title:
@@ -55,7 +60,7 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
 
             entry = {
                 "title": title,
-                "url": self._clean_snapshot_text(
+                "url": self.owner._clean_snapshot_text(
                     item.get("url")
                     or item.get("link")
                     or item.get("mobile_link")
@@ -63,7 +68,7 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
                     or item.get("mobileUrl"),
                     500,
                 ),
-                "hot": self._clean_snapshot_text(
+                "hot": self.owner._clean_snapshot_text(
                     item.get("hot")
                     or item.get("hotValue")
                     or item.get("hot_value")
@@ -72,7 +77,7 @@ class TaskNewsCacheNormalizeService(TaskServiceBase):
                     or item.get("score"),
                     80,
                 ),
-                "description": self._clean_snapshot_text(
+                "description": self.owner._clean_snapshot_text(
                     item.get("description")
                     or item.get("summary")
                     or item.get("desc")

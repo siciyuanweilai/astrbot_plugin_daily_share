@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from typing import TYPE_CHECKING
 
@@ -20,13 +22,15 @@ from .tracker import (
     _qzone_processed_thread_has_self_reply,
 )
 
+if TYPE_CHECKING:
+    from ..qinteract import TaskQzoneAutoCommentService
+
 QZONE_ACTIVE_WINDOW_MIN_TIMESTAMP = 946684800
 
 
 class QzoneAutoPolicyService:
-    if TYPE_CHECKING:
-
-        def _qzone_auto_config(self): ...
+    def __init__(self, owner: TaskQzoneAutoCommentService) -> None:
+        self.owner = owner
 
     @staticmethod
     def _qzone_is_official_qzone_post(post) -> bool:
@@ -35,7 +39,7 @@ class QzoneAutoPolicyService:
 
     def _qzone_auto_active_window_hours(self) -> int:
         try:
-            cfg = self._qzone_auto_config()
+            cfg = self.owner._qzone_auto_config()
         except Exception:
             cfg = None
         try:
@@ -47,7 +51,7 @@ class QzoneAutoPolicyService:
         return max(0, min(168, hours))
 
     def _qzone_auto_timestamp_in_active_window(self, timestamp: int) -> bool:
-        hours = self._qzone_auto_active_window_hours()
+        hours = self.owner._qzone_auto_active_window_hours()
         if hours <= 0:
             return True
         try:
@@ -59,7 +63,7 @@ class QzoneAutoPolicyService:
         return created_at >= int(time.time()) - hours * 3600
 
     def _qzone_auto_post_in_active_window(self, post) -> bool:
-        return self._qzone_auto_timestamp_in_active_window(
+        return self.owner._qzone_auto_timestamp_in_active_window(
             getattr(post, "create_time", 0)
         )
 
@@ -67,7 +71,7 @@ class QzoneAutoPolicyService:
         timestamp = getattr(comment, "create_time", 0) or getattr(
             post, "create_time", 0
         )
-        return self._qzone_auto_timestamp_in_active_window(timestamp)
+        return self.owner._qzone_auto_timestamp_in_active_window(timestamp)
 
     def _qzone_auto_comment_candidate(
         self,
@@ -83,9 +87,9 @@ class QzoneAutoPolicyService:
             processed_action and processed_action != QZONE_ACTION_RETRY_LATER
         ):
             return False
-        if not self._qzone_auto_post_in_active_window(post):
+        if not self.owner._qzone_auto_post_in_active_window(post):
             return False
-        if self._qzone_is_official_qzone_post(post):
+        if self.owner._qzone_is_official_qzone_post(post):
             return False
         try:
             if int(getattr(post, "uin", 0) or 0) == int(self_uin or 0):
@@ -112,9 +116,9 @@ class QzoneAutoPolicyService:
         post_key = _post_key(post)
         if not post_key or _qzone_like_post_processed_action(processed, post):
             return False
-        if not self._qzone_auto_post_in_active_window(post):
+        if not self.owner._qzone_auto_post_in_active_window(post):
             return False
-        if self._qzone_is_official_qzone_post(post):
+        if self.owner._qzone_is_official_qzone_post(post):
             return False
         try:
             if int(getattr(post, "uin", 0) or 0) == int(self_uin or 0):
@@ -151,13 +155,13 @@ class QzoneAutoPolicyService:
         )
         if processed_action and processed_action != QZONE_ACTION_RETRY_LATER:
             return "already_processed"
-        if not self._qzone_auto_comment_in_active_window(post, comment):
+        if not self.owner._qzone_auto_comment_in_active_window(post, comment):
             return "outside_active_window"
         if int(getattr(post, "uin", 0) or 0) != int(self_uin or 0):
             return "not_self_post"
         if int(getattr(comment, "uin", 0) or 0) == int(self_uin or 0):
             return "self_comment"
-        if self._qzone_is_official_qzone_post(post):
+        if self.owner._qzone_is_official_qzone_post(post):
             return "official_qzone"
         if _comment_has_self_reply(post, comment, self_uin, index=index):
             return "already_replied"
@@ -173,7 +177,7 @@ class QzoneAutoPolicyService:
         processed: dict,
         index: QzoneCommentIndex | None = None,
     ) -> bool:
-        return not self._qzone_auto_reply_skip_reason(
+        return not self.owner._qzone_auto_reply_skip_reason(
             post,
             comment,
             self_uin=self_uin,
@@ -191,7 +195,7 @@ class QzoneAutoPolicyService:
         processed: dict,
         index: QzoneCommentIndex | None = None,
     ) -> str:
-        reason = self._qzone_reply_thread_base_skip_reason(
+        reason = self.owner._qzone_reply_thread_base_skip_reason(
             post,
             parent_comment,
             comment,
@@ -258,7 +262,7 @@ class QzoneAutoPolicyService:
         )
         if processed_action and processed_action != QZONE_ACTION_RETRY_LATER:
             return "already_processed"
-        if not self._qzone_auto_comment_in_active_window(post, comment):
+        if not self.owner._qzone_auto_comment_in_active_window(post, comment):
             return "outside_active_window"
         if int(getattr(post, "uin", 0) or 0) != int(self_uin or 0):
             return "not_self_post"
@@ -276,7 +280,7 @@ class QzoneAutoPolicyService:
         processed: dict,
         index: QzoneCommentIndex | None = None,
     ) -> bool:
-        return not self._qzone_auto_reply_thread_skip_reason(
+        return not self.owner._qzone_auto_reply_thread_skip_reason(
             post,
             parent_comment,
             comment,
@@ -306,7 +310,7 @@ class QzoneAutoPolicyService:
         )
         if processed_action and processed_action != QZONE_ACTION_RETRY_LATER:
             return "already_processed"
-        if not self._qzone_auto_comment_in_active_window(post, comment):
+        if not self.owner._qzone_auto_comment_in_active_window(post, comment):
             return "outside_active_window"
         if int(getattr(post, "uin", 0) or 0) == int(self_uin or 0):
             return "not_friend_post"

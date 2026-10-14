@@ -793,6 +793,75 @@ class QzoneParserTests(unittest.TestCase):
             posts[0].videos, ["qzone://video/1075_0b53nrbk4cydeuaogbrsobvda3aevz6agbca"]
         )
 
+    def test_video_album_caption_and_comments_are_separate_in_panel_payload(self):
+        markup = (ROOT / "tests/fixtures/qzone_video_album_feed.html").read_text()
+        item = {"appid": 4, "key": "video-album-key", "uin": 20002, "html": markup}
+        for parse in (parse_recent_feed_list, parse_home_feed_list):
+            with self.subTest(parser=parse.__name__):
+                posts = parse({"data": {"data": [item]}})
+                self.assertEqual(len(posts), 1)
+                payload = posts[0].to_payload(include_comments=True)
+                self.assertEqual(payload["content"], "上传1个视频到《随手一拍》")
+                self.assertEqual(
+                    payload["videos"], ["qzone://video/1075_0b53albumvideo"]
+                )
+                self.assertEqual(
+                    [comment["content"] for comment in payload["comments"]],
+                    ["这水色和秋景拍得挺开阔的", "你看到了什么？"],
+                )
+                self.assertEqual(payload["comments"][1]["parent_id"], "11")
+
+    def test_video_album_without_caption_does_not_use_whole_feed_as_text(self):
+        markup = (ROOT / "tests/fixtures/qzone_video_album_feed.html").read_text()
+        markup = markup.replace('class="qz_summary wupfeed"', 'class="video-content"')
+        markup = markup.replace(
+            '<div class="f-reprint"><p class="item state"><a>上传1个视频到《随手一拍》</a></p></div>',
+            "",
+        )
+        for content in ("", "我的视频正文"):
+            with self.subTest(content=content):
+                item = {
+                    "key": "video-album-key",
+                    "uin": 20002,
+                    "html": markup,
+                    "content": content,
+                }
+                posts = parse_recent_feed_list({"data": {"data": [item]}})
+                self.assertEqual(len(posts), 1)
+                self.assertEqual(posts[0].text, content)
+                self.assertEqual(len(posts[0].comments), 2)
+                self.assertEqual(len(posts[0].videos), 1)
+
+    def test_recent_caption_keeps_nested_body_and_ignores_interaction_nodes(self):
+        for class_name in (
+            "f-info",
+            "txt-box-title",
+            "txt-box",
+            "content-box",
+            "qz_summary",
+        ):
+            with self.subTest(class_name=class_name):
+                markup = f"""
+                    <div class="comments-list"><div class="f-info">评论中的正文样式</div></div>
+                    <div class="{class_name}">
+                      <div>第一行</div><div>第二行<br>我的评论：这里说的是自己的感想</div>
+                      <div class="f-like-list"><div>好友觉得很赞</div></div>
+                      <div class="mod-comments"><div class="f-info">别人的评论</div></div>
+                      <script>隐藏代码</script><style>隐藏样式</style>
+                    </div>
+                """
+                posts = parse_recent_feed_list(
+                    {
+                        "data": {
+                            "data": [{"key": "body-key", "uin": 20002, "html": markup}]
+                        }
+                    }
+                )
+                self.assertEqual(len(posts), 1)
+                self.assertEqual(
+                    posts[0].text, "第一行\n第二行\n我的评论：这里说的是自己的感想"
+                )
+
     def test_feed_detail_extracts_video_vid_from_richval(self):
         post = _parser().parse_feed_item(
             {

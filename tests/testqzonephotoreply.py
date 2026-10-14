@@ -3,8 +3,11 @@
 import sys
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+
+from .testqzonecomment import _interaction_args
 
 from .testqzone import _load_qzone_service, _new_qzone_service
 from .testqzonecomment import FakeDb, _load_auto_comment_module
@@ -240,19 +243,25 @@ class AlbumAutoReplyTests(unittest.IsolatedAsyncioTestCase):
         self.service._request = AsyncMock(side_effect=request)
         service = self.service
 
-        class Manager(self.module.TaskQzoneAutoCommentService):
+        module = self.module
+
+        class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 3,
                     "qzone_auto_interaction_active_hours": 0,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=service,
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=service,
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.generated_for = []
 

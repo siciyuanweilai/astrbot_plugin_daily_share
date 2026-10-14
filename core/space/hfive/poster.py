@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneContext
 from ..parse import parse_qzone_response
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneH5RequestService(QzoneMethodSet):
+
+class QzoneH5RequestService:
     """H5 请求发送。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     async def _h5_post_json(
         self,
@@ -24,16 +29,16 @@ class QzoneH5RequestService(QzoneMethodSet):
         prefer_native_h2: bool = False,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        request_headers = headers or self._h5_headers(ctx)
+        request_headers = headers or self.owner._h5_headers(ctx)
         use_h2 = True
         if prefer_native_h2:
             try:
                 logger.debug("[日常分享] QQ 空间 H5 请求将尝试原生 HTTP/2。")
-                status, text = await self._h5_post_json_native_h2(
+                status, text = await self.owner._h5_post_json_native_h2(
                     ctx, url, payload, params=params, headers=request_headers
                 )
                 payload_data = await asyncio.to_thread(parse_qzone_response, text)
-                parsed = self._annotate_h5_response(
+                parsed = self.owner._annotate_h5_response(
                     payload_data,
                     status=status,
                     text=text,
@@ -42,7 +47,7 @@ class QzoneH5RequestService(QzoneMethodSet):
                 )
                 if status in {401, 403}:
                     return parsed
-                if self._h5_should_retry_same_transport(status):
+                if self.owner._h5_should_retry_same_transport(status):
                     logger.debug(
                         f"[日常分享] QQ 空间原生 HTTP/2 上传返回 {status}，改用 HTTP/1.1 重试: "
                         f"阶段={label or '-'}"
@@ -61,8 +66,8 @@ class QzoneH5RequestService(QzoneMethodSet):
                     f"阶段={label or '-'}，错误={exc}"
                 )
 
-        body = self._h5_json_body(payload)
-        return await self._h5_post_body(
+        body = self.owner._h5_json_body(payload)
+        return await self.owner._h5_post_body(
             ctx,
             url,
             body,
@@ -83,10 +88,10 @@ class QzoneH5RequestService(QzoneMethodSet):
         label: str = "",
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        request_headers = dict(headers or self._h5_headers(ctx))
+        request_headers = dict(headers or self.owner._h5_headers(ctx))
         request_headers["Content-Type"] = content_type
 
-        return await self._h5_post_body(
+        return await self.owner._h5_post_body(
             ctx,
             url,
             body,
@@ -107,20 +112,20 @@ class QzoneH5RequestService(QzoneMethodSet):
         use_h2: bool,
     ) -> tuple[int, str, str]:
         if use_h2:
-            h2_session = await self._h2_http()
+            h2_session = await self.owner._h2_http()
             if h2_session is not None:
                 resp = await h2_session.post(
                     url, params=params, content=body, headers=headers
                 )
                 return resp.status_code, resp.text, "HTTP/2"
 
-        session = await self._http()
+        session = await self.owner._http()
         async with session.post(
             url,
             params=params,
             data=body,
             headers={
-                **self._h5_aiohttp_headers(ctx),
+                **self.owner._h5_aiohttp_headers(ctx),
                 **headers,
             },
         ) as resp:
@@ -140,7 +145,7 @@ class QzoneH5RequestService(QzoneMethodSet):
         last_error: Exception | None = None
         for attempt in range(3):
             try:
-                status, text, transport = await self._h5_post_body_once(
+                status, text, transport = await self.owner._h5_post_body_once(
                     ctx,
                     url,
                     body,
@@ -149,13 +154,13 @@ class QzoneH5RequestService(QzoneMethodSet):
                     use_h2=use_h2,
                 )
             except Exception as exc:
-                mapped_error = self._h5_transport_error(exc, phase=label)
+                mapped_error = self.owner._h5_transport_error(exc, phase=label)
                 if mapped_error is None:
                     raise
                 last_error = mapped_error
             else:
                 payload_data = await asyncio.to_thread(parse_qzone_response, text)
-                parsed = self._annotate_h5_response(
+                parsed = self.owner._annotate_h5_response(
                     payload_data,
                     status=status,
                     text=text,
@@ -170,9 +175,9 @@ class QzoneH5RequestService(QzoneMethodSet):
                     )
                 if status in {401, 403}:
                     raise RuntimeError(f"QQ 空间 H5 上传登录态失效（HTTP {status}）")
-                if self._h5_should_retry_http11(status, transport) and use_h2:
+                if self.owner._h5_should_retry_http11(status, transport) and use_h2:
                     last_error = RuntimeError(
-                        self._h5_error_message(
+                        self.owner._h5_error_message(
                             parsed, f"QQ 空间 H5 上传接口暂不可用（HTTP {status}）"
                         )
                     )
@@ -181,9 +186,9 @@ class QzoneH5RequestService(QzoneMethodSet):
                         f"阶段={label or '-'}"
                     )
                     use_h2 = False
-                elif self._h5_should_retry_same_transport(status):
+                elif self.owner._h5_should_retry_same_transport(status):
                     last_error = RuntimeError(
-                        self._h5_error_message(
+                        self.owner._h5_error_message(
                             parsed, f"QQ 空间 H5 上传接口暂不可用（HTTP {status}）"
                         )
                     )

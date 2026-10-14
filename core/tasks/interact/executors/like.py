@@ -4,6 +4,7 @@ from astrbot.api import logger
 
 from ..scan import _query_qzone_friend_posts
 from ..task import (
+    QzoneStatePersistenceError,
     _qzone_abort_query_failure,
     _qzone_auto_config,
     _qzone_auto_result,
@@ -12,6 +13,7 @@ from ..task import (
     _qzone_mark_result_rate_limited,
     _qzone_prepare_task,
     _qzone_query_fetch_count,
+    checkpoint_qzone_action,
 )
 from ..tracker import (
     QZONE_ACTION_LIKED,
@@ -83,6 +85,11 @@ async def execute_qzone_auto_like_task(
         ):
             result["skipped"] += 1
             continue
+        target_error = str(getattr(post, "like_target_error", "") or "")
+        if target_error:
+            result["skipped"] += 1
+            logger.debug(f"[日常分享] QQ 空间自动点赞跳过: {target_error}")
+            continue
 
         try:
             await owner.plugin.qzone_service.like(post_key)
@@ -93,12 +100,12 @@ async def execute_qzone_auto_like_task(
                 author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
             )
             result["liked"] += 1
-            await owner._qzone_auto_save_state(
+            await checkpoint_qzone_action(
+                owner,
                 QZONE_AUTO_LIKE_STATE_KEY,
                 state,
                 processed,
                 result,
-                run_at=now,
             )
             owner.plugin.emit_dashboard_event(
                 "qzone",
@@ -109,6 +116,8 @@ async def execute_qzone_auto_like_task(
                 f"{getattr(post, 'name', '') or getattr(post, 'uin', '')}"
             )
             await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
+        except QzoneStatePersistenceError:
+            raise
         except Exception as exc:
             if _qzone_is_retry_later_error(exc):
                 result["skipped"] += 1

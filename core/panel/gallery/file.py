@@ -5,10 +5,15 @@ from pathlib import Path
 
 from astrbot.api import logger
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardMediaFileService(PanelComponent):
+    data_dir = RuntimeField("data_dir")
+    db = RuntimeField("db")
+    media_files = RuntimeField("media_files")
+    media_kind = RuntimeField("media_kind")
+
     def _page_resolve_media_path(self, media_path: str) -> Path | None:
         media_path = self.media_kind._page_local_media_ref(media_path)
         if not media_path:

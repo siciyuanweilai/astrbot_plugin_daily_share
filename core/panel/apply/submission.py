@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardApplyPayloadService(PanelComponent):
+    config = RuntimeField("config")
+
     def _apply_page_config_payload(self, body: dict) -> None:
         sections = (
             body.get("sections") if isinstance(body.get("sections"), dict) else body

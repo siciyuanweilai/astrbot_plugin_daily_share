@@ -5,10 +5,14 @@ from astrbot.api.event import AstrMessageEvent
 from ...args import find_invalid_non_news_args
 from ...config import NEWS_SOURCE_MAP, ShareType
 from ...constants import SOURCE_CN_MAP, TYPE_CN_MAP
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginShareTypedRouteService(SupportComponent):
+    manual = RuntimeField("manual")
+    start_route = RuntimeField("start_route")
+    typed_route = RuntimeField("typed_route")
+
     async def _handle_manual_auto_share_command(
         self,
         event: AstrMessageEvent,

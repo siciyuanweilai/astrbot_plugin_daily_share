@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ...config import ShareType, TimePeriod
-from .persona import ImageVisualPersonaService
+
+if TYPE_CHECKING:
+    from .. import ImageService
 
 
-class ImageVisualPromptService(ImageVisualPersonaService):
+class ImageVisualPromptService:
     """组装最终图片生成提示词。"""
+
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     async def _assemble_final_prompt(
         self,
@@ -18,19 +25,19 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         prompts: list[str] = []
 
         if involves_self:
-            await self._append_self_visual_prompts(prompts, visuals, target_umo)
+            await self.owner._append_self_visual_prompts(prompts, visuals, target_umo)
         else:
-            self._append_subject_visual_prompts(prompts, visuals)
+            self.owner._append_subject_visual_prompts(prompts, visuals)
 
-        comp_desc, frame_hint = self._resolve_composition(visuals, involves_self)
+        comp_desc, frame_hint = self.owner._resolve_composition(visuals, involves_self)
 
         if comp_desc:
             prompts.append(comp_desc)
 
-        self._append_environment_prompts(prompts, visuals)
+        self.owner._append_environment_prompts(prompts, visuals)
 
         if involves_self:
-            outfit_consistency = self._format_outfit_consistency_hint(
+            outfit_consistency = self.owner._format_outfit_consistency_hint(
                 visuals, frame_hint
             )
             if outfit_consistency:
@@ -45,11 +52,13 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         self, prompts: list[str], visuals: dict, target_umo: str | None
     ) -> None:
         prompts.append("画面主体是当前角色本人，保持角色外貌身份一致")
-        appearance = await self._get_appearance_keywords(target_umo=target_umo)
+        appearance = await self.owner._get_appearance_keywords(target_umo=target_umo)
         prompts.append(
-            appearance or await self._get_persona_figure_keywords() or "1个人物, 独奏"
+            appearance
+            or await self.owner._get_persona_figure_keywords(target_umo=target_umo)
+            or "1个人物, 独奏"
         )
-        current_appearance = self._format_current_appearance(visuals)
+        current_appearance = self.owner._format_current_appearance(visuals)
         if current_appearance:
             prompts.append(current_appearance)
         outfit = str(visuals.get("outfit", "") or "").strip()
@@ -105,7 +114,10 @@ class ImageVisualPromptService(ImageVisualPersonaService):
         lighting = visuals.get("lighting", "")
         if lighting:
             prompts.append(lighting)
-        elif self._get_current_period() in {TimePeriod.NIGHT, TimePeriod.LATE_NIGHT}:
+        elif self.owner._get_current_period() in {
+            TimePeriod.NIGHT,
+            TimePeriod.LATE_NIGHT,
+        }:
             prompts.append("夜晚, 城市灯光")
         else:
             prompts.append("白天, 自然光")

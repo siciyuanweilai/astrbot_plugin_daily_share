@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardRouteQueryService(PanelComponent):
+    db = RuntimeField("db")
+    labels = RuntimeField("labels")
+    server = RuntimeField("server")
+    status_routes = RuntimeField("status_routes")
+
     async def page_history(self):
         async def handler():
             params = await self.server._page_query_params()

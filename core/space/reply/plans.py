@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzoneContext, QzonePost
 from .commentid import QzoneReplyIdentityService
 from .recipients import QzoneReplyTargetService
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
+
 QZONE_BASE_URL = "https://user.qzone.qq.com"
 
 
-class QzoneReplyPlanService(QzoneMethodSet):
+class QzoneReplyPlanService:
     """准备按顺序尝试的 QQ 空间回评提交方案。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     def _reply_submit_plans(
         self,
@@ -28,12 +33,12 @@ class QzoneReplyPlanService(QzoneMethodSet):
             if int(getattr(post, "uin", 0) or 0) != int(ctx.uin or 0) and int(
                 getattr(parent_comment, "uin", 0) or 0
             ) == int(ctx.uin or 0):
-                variants = self._thread_reply_re_feeds_payload_variants(
+                variants = self.owner._thread_reply_re_feeds_payload_variants(
                     post, comment, parent_comment, reply_targets
                 )
                 if variants:
                     return [
-                        self._reply_submit_plan(
+                        self.owner._reply_submit_plan(
                             ctx,
                             post,
                             comment,
@@ -43,11 +48,11 @@ class QzoneReplyPlanService(QzoneMethodSet):
                         )
                         for variant in variants
                     ]
-            variants = self._thread_reply_payload_variants(
+            variants = self.owner._thread_reply_payload_variants(
                 post, comment, parent_comment, reply_targets
             )
             return [
-                self._reply_submit_plan(
+                self.owner._reply_submit_plan(
                     ctx,
                     post,
                     comment,
@@ -67,7 +72,7 @@ class QzoneReplyPlanService(QzoneMethodSet):
             )
             for transport in transports:
                 plans.append(
-                    self._reply_submit_plan(
+                    self.owner._reply_submit_plan(
                         ctx,
                         post,
                         comment,
@@ -92,6 +97,7 @@ class QzoneReplyPlanService(QzoneMethodSet):
         parent_comment: QzoneComment,
         reply_targets: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+
         submit_tid = str(getattr(comment, "submit_tid", "") or "").strip()
         raw_tid = str(getattr(comment, "raw_tid", "") or "").strip()
         parent_tid = str(
@@ -237,7 +243,7 @@ class QzoneReplyPlanService(QzoneMethodSet):
         )
         topic_id = str((variant or {}).get("topic_id") or "")
         if transport == "sns":
-            data = self._sns_comment_data(
+            data = self.owner._sns_comment_data(
                 ctx,
                 post,
                 content=content,
@@ -250,12 +256,12 @@ class QzoneReplyPlanService(QzoneMethodSet):
                 reply_uin=reply_uin,
                 topic_id=topic_id,
             )
-            url = self.SNS_COMMENT_URL
-            headers = self._comment_sns_headers(
-                ctx, referer=f"{self.BASE_URL}/{post.uin}/mood/{post.tid}"
+            url = self.owner.SNS_COMMENT_URL
+            headers = self.owner._comment_sns_headers(
+                ctx, referer=f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}"
             )
         elif transport == "h5_re_feeds_parent":
-            data = self._h5_thread_parent_comment_data(
+            data = self.owner._h5_thread_parent_comment_data(
                 ctx,
                 post,
                 content=content,
@@ -264,12 +270,12 @@ class QzoneReplyPlanService(QzoneMethodSet):
                 topic_id=topic_id,
                 qzreferrer=str((variant or {}).get("qzreferrer") or ""),
             )
-            url = self.H5_COMMENT_URL
-            headers = self._comment_h5_headers(
+            url = self.owner.H5_COMMENT_URL
+            headers = self.owner._comment_h5_headers(
                 ctx, referer=str(data.get("qzreferrer") or "")
             )
         elif transport == "addreply_ugc":
-            data = self._addreply_ugc_comment_data(
+            data = self.owner._addreply_ugc_comment_data(
                 ctx,
                 post,
                 content=content,
@@ -278,12 +284,12 @@ class QzoneReplyPlanService(QzoneMethodSet):
                 payload_comment_id=payload_comment_id,
                 topic_id=topic_id,
             )
-            url = self.ADD_REPLY_UGC_URL
-            headers = self._pc_form_headers(
+            url = self.owner.ADD_REPLY_UGC_URL
+            headers = self.owner._pc_form_headers(
                 ctx, referer=str(data.get("qzreferrer") or "")
             )
         elif transport == "h5":
-            data = self._h5_comment_data(
+            data = self.owner._h5_comment_data(
                 ctx,
                 post,
                 content=content,
@@ -296,9 +302,9 @@ class QzoneReplyPlanService(QzoneMethodSet):
                 reply_uin=reply_uin,
                 topic_id=topic_id,
             )
-            url = self.H5_COMMENT_URL
-            headers = self._comment_h5_headers(
-                ctx, referer=f"{self.H5_ORIGIN}/{post.uin}/mood/{post.tid}"
+            url = self.owner.H5_COMMENT_URL
+            headers = self.owner._comment_h5_headers(
+                ctx, referer=f"{self.owner.H5_ORIGIN}/{post.uin}/mood/{post.tid}"
             )
         else:
             data = {
@@ -306,7 +312,7 @@ class QzoneReplyPlanService(QzoneMethodSet):
                 "topicId": topic_id or f"{post.uin}_{post.tid}",
                 "content": content,
                 "format": "json",
-                "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",
+                "qzreferrer": f"{self.owner.BASE_URL}/{ctx.uin}",
             }
             if comment_uin:
                 data.update(
@@ -321,7 +327,7 @@ class QzoneReplyPlanService(QzoneMethodSet):
                     t2_tid=payload_t2_tid,
                     t2_uin=payload_t2_uin,
                 )
-            url = self.COMMENT_URL
+            url = self.owner.COMMENT_URL
             headers = None
         return {
             "transport": transport,

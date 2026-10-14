@@ -229,9 +229,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
 
             conn = sqlite3.connect(first.db_path)
             try:
-                self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 0
-                )
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 0)
                 self.assertIsNotNone(
                     conn.execute(
                         "SELECT value FROM plugin_state WHERE domain = 'share' AND key = 'global'"

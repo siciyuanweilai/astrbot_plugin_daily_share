@@ -312,7 +312,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
             ("group-target", True),
         ):
             for stype, marker in (
-                (config_module.ShareType.GREETING, "文案开头必须"),
+                (config_module.ShareType.GREETING, "开头和收尾由语意决定"),
                 (config_module.ShareType.MOOD, "直接输出这次想分享的话"),
                 (config_module.ShareType.NEWS, "用【】标注热搜标题"),
                 (config_module.ShareType.KNOWLEDGE, "用【】将核心关键词"),

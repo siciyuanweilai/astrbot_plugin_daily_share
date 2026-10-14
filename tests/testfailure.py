@@ -607,7 +607,7 @@ def _new_manager(mod, plugin):
 
 def _manager(mod):
     manager = _new_manager(mod, _Plugin())
-    manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+    manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
     return manager
 
 
@@ -1179,11 +1179,11 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
     def test_news_image_filename_uses_source_key_and_long_random_suffix(self):
         mod = _load_tasks_module()
-        delivery_mod = sys.modules[f"{TASKS_MODULE_NAME}.taskdelivery"]
+        assets_mod = sys.modules[f"{TASKS_MODULE_NAME}.cachemedia"]
         manager = _new_manager(mod, _Plugin())
 
-        old_getrandbits = delivery_mod.random.getrandbits
-        delivery_mod.random.getrandbits = lambda bits: 0x8005CE727817
+        old_getrandbits = assets_mod.random.getrandbits
+        assets_mod.random.getrandbits = lambda bits: 0x8005CE727817
         try:
             url = "https://api.nycnm.cn/api/v2/wb?format=image&apikey=test"
             self.assertEqual(
@@ -1213,7 +1213,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(ai_name, "ai_8005ce727817.png")
         finally:
-            delivery_mod.random.getrandbits = old_getrandbits
+            assets_mod.random.getrandbits = old_getrandbits
 
     def test_news_source_image_cleanup_keeps_latest_managed_files_only(self):
         mod = _load_tasks_module()
@@ -2023,7 +2023,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
 
-        loaded, news_data = await manager.share._load_execute_share_news(
+        loaded, news_data = await manager.share.news.load_news(
             uid="aiocqhttp:GroupMessage:123",
             stype=mod.ShareType.NEWS,
             news_source="yicai",
@@ -2464,7 +2464,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
 
-        await manager.executor_helpers.record_share_history(
+        await manager.executor_helpers.records.record_share_history(
             target_id=GROUP_TARGET_1,
             share_type=mod.ShareType.MOOD,
             content="已发送内容",
@@ -3013,8 +3013,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             )
             return True
 
-        manager.share._maybe_attach_hot_news_image = attach_news_image
-        manager.share._generate_execute_share_media = generate_media
+        manager.share.news.hot_news_image_url = attach_news_image
+        manager.share.media.generate_media = generate_media
         manager.delivery.send = send
 
         result = await manager.share._send_execute_share_content(
@@ -3067,7 +3067,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.publish_qzone = safe_publish_qzone
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
         sent = []
 
         async def send(
@@ -3239,7 +3239,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.publish_qzone = safe_publish_qzone
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
 
         async def prepare_qzone_image(image_ref):
             return b"image-bytes"
@@ -3280,7 +3280,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.publish_qzone = safe_publish_qzone
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
 
         async def prepare_qzone_image(image_ref):
             return b"image-bytes"
@@ -3304,6 +3304,193 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("media_type", history_kwargs)
         self.assertNotIn("media_path", history_kwargs)
 
+    async def test_composed_delivery_reads_hot_config_without_rebuilding_components(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        delivery = manager.delivery
+        components = (delivery.status, delivery.delay, delivery.chains, delivery.media)
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+
+        delivery.chains.send_message_chain = send_chain
+        manager.update_configs(
+            image={"separate_text_and_image": False, "separate_send_delay": "0"},
+            tts={"prefer_audio_only": False},
+        )
+        result = {}
+        self.assertTrue(
+            await delivery.send(USER_TARGET_1, "正文", "image.png", media_result=result)
+        )
+        self.assertEqual(sent, [["正文", ("file_image", "image.png")]])
+        self.assertTrue(result["text_sent"])
+        self.assertTrue(result["image_sent"])
+
+        sent.clear()
+        manager.update_configs(
+            image={"separate_text_and_image": True, "separate_send_delay": "0"},
+            tts={"prefer_audio_only": True},
+        )
+        self.assertTrue(
+            await delivery.send(
+                USER_TARGET_1,
+                "正文",
+                "image.png",
+                audio_path="audio.wav",
+                media_result=result,
+            )
+        )
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0][0].file, "audio.wav")
+        self.assertEqual(sent[1], [("file_image", "image.png")])
+        self.assertFalse(result["text_sent"])
+        self.assertTrue(result["audio_sent"])
+        self.assertTrue(result["image_sent"])
+        self.assertIs(manager.delivery, delivery)
+        self.assertEqual(
+            components,
+            (delivery.status, delivery.delay, delivery.chains, delivery.media),
+        )
+        self.assertEqual(delivery.delay._separate_send_delay_seconds(), 0)
+        manager.update_configs(image={"separate_send_delay": "0.25"})
+        self.assertEqual(delivery.delay._separate_send_delay_seconds(), 0.25)
+
+    async def test_composed_delivery_partial_failure_does_not_resend_text(self):
+        mod = _load_tasks_module()
+        for visual in ("image", "video"):
+            with self.subTest(visual=visual):
+                plugin = _Plugin()
+                manager = _new_manager(mod, plugin)
+                manager.update_configs(image={"separate_send_delay": "0"})
+                sent, receipts = [], []
+
+                async def send_chain(uid, chain, event=None):
+                    sent.append(list(chain.items))
+                    if len(sent) == 2:
+                        raise RuntimeError("media rejected")
+
+                async def record_delivery(uid, sent_at, *, media_kinds):
+                    receipts.append((uid, sent_at, media_kinds))
+
+                plugin.daily_life_bridge = types.SimpleNamespace(
+                    record_delivery=record_delivery
+                )
+                manager.delivery.chains.send_message_chain = send_chain
+                result = {}
+                self.assertTrue(
+                    await manager.delivery.send(
+                        USER_TARGET_1,
+                        "已发送正文",
+                        "image.png" if visual == "image" else None,
+                        video_url="video.mp4" if visual == "video" else None,
+                        media_result=result,
+                    )
+                )
+                self.assertEqual(len(sent), 2)
+                self.assertEqual(sent[0], ["已发送正文"])
+                self.assertTrue(result["text_sent"])
+                self.assertFalse(result[f"{visual}_sent"])
+                self.assertEqual(result["partial_errors"][0]["stage"], visual)
+                self.assertEqual(
+                    receipts, [(USER_TARGET_1, result["text_sent_at"], ())]
+                )
+
+    async def test_composed_delivery_probable_image_timeout_does_not_retry_or_record_receipt(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        sent, retries, receipts = [], [], []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            raise RuntimeError("sendmsg timeout retcode=1200")
+
+        async def prepare_image(uid, path):
+            return path
+
+        async def retry_image(path):
+            retries.append(path)
+            return "small.jpg"
+
+        async def record_delivery(*args, **kwargs):
+            receipts.append((args, kwargs))
+
+        plugin.daily_life_bridge = types.SimpleNamespace(
+            record_delivery=record_delivery
+        )
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.weixin_delivery.prepare_image_for_target = prepare_image
+        manager.weixin_delivery.prepare_weixin_retry_image = retry_image
+        result = {}
+        self.assertTrue(
+            await manager.delivery.send(
+                "weixin_oc:FriendMessage:test@im.wechat",
+                "",
+                "large.jpg",
+                media_result=result,
+            )
+        )
+        self.assertEqual(sent, [[("file_image", "large.jpg")]])
+        self.assertEqual(retries, [])
+        self.assertEqual(receipts, [])
+        self.assertTrue(result["image_sent"])
+        self.assertTrue(result["image_probable_sent"])
+        self.assertNotIn("image_sent_at", result)
+
+    async def test_composed_delivery_first_stage_failure_returns_false(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            raise RuntimeError("text rejected")
+
+        manager.delivery.chains.send_message_chain = send_chain
+        result = {}
+        self.assertFalse(
+            await manager.delivery.send(
+                USER_TARGET_1, "正文", "image.png", media_result=result
+            )
+        )
+        self.assertEqual(sent, [["正文"]])
+        self.assertFalse(result["text_sent"])
+        self.assertFalse(result["image_sent"])
+        self.assertEqual(result["partial_errors"][0]["stage"], "text")
+
+    async def test_composed_delivery_weixin_retry_only_clears_recovered_error(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+        prior_error = {"stage": "audio", "message": "earlier error"}
+        result = {"partial_errors": [prior_error]}
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            if len(sent) == 1:
+                raise RuntimeError("upload media to cdn failed: 500")
+
+        async def prepare_retry(path):
+            return "small.jpg"
+
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
+        await manager.delivery.media.send_image_chain_with_retry(
+            "weixin_oc:FriendMessage:test@im.wechat", "large.jpg", media_result=result
+        )
+        self.assertEqual(
+            sent, [[("file_image", "large.jpg")], [("file_image", "small.jpg")]]
+        )
+        self.assertEqual(result["partial_errors"], [prior_error])
+        self.assertTrue(result["image_sent"])
+        self.assertGreater(result["image_sent_at"], 0)
+
     async def test_weixin_image_send_retries_with_smaller_copy(self):
         mod = _load_tasks_module()
         manager = _new_manager(mod, _Plugin())
@@ -3317,10 +3504,10 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         async def prepare_retry(img_path):
             return "small.jpg"
 
-        manager.delivery._send_image_chain = send_image
+        manager.delivery.media.send_image_chain = send_image
         manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
 
-        await manager.delivery._send_image_chain_with_retry(
+        await manager.delivery.media.send_image_chain_with_retry(
             "weixin_oc:FriendMessage:o9test@im.wechat",
             "large.jpg",
         )
@@ -3347,7 +3534,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         async def prepare_retry(img_path):
             return "retry.jpg"
 
-        manager.delivery.send_message_chain = send_chain
+        manager.delivery.chains.send_message_chain = send_chain
         manager.weixin_delivery.prepare_image_for_target = prepare_image
         manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
         manager.delivery.random_sleep = lambda: asyncio.sleep(0)
@@ -3390,7 +3577,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
         manager.delivery_assets.download_image_to_local = download_image
         manager.weixin_delivery.prepare_image_for_target = prepare_image
-        manager.delivery.send_message_chain = send_chain
+        manager.delivery.chains.send_message_chain = send_chain
         manager.delivery.random_sleep = lambda: asyncio.sleep(0)
 
         media_result = {}
@@ -3544,6 +3731,216 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[-1][3:], (False, False, False, "", ""))
         self.assertEqual(event.sent, [])
 
+    async def test_chat_share_components_follow_hot_updated_configs(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.news_service.get_hot_news_image_url = lambda source: (
+            "https://example.com/news.png",
+            source,
+        )
+        manager = _new_manager(mod, plugin)
+        components = (
+            manager.share.targets,
+            manager.share.news,
+            manager.share.media,
+            manager.share.sender,
+        )
+        media_args = {
+            "progress_id": "",
+            "content": "今天的心情",
+            "stype": mod.ShareType.MOOD,
+            "life_ctx": "当前生活状态",
+            "target_umo": USER_TARGET_1,
+            "period": mod.TimePeriod.NIGHT,
+        }
+        self.assertEqual(
+            await manager.share.media.generate_media(**media_args),
+            (None, None, None, None, ""),
+        )
+        self.assertEqual(manager.share.resolve_execute_share_targets(), [])
+        self.assertEqual(
+            await manager.share.news.hot_news_image_url(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.NEWS,
+                news_data=([{"title": "新闻"}], "weibo"),
+            ),
+            "https://example.com/news.png",
+        )
+
+        manager.update_configs(
+            basic={"share_type": "知识"},
+            receiver={"users": [USER_TARGET_1], "groups": []},
+            image={
+                "enable_ai_image": True,
+                "image_enabled_types": ["心情"],
+                "attach_hot_news_image": False,
+            },
+        )
+        self.assertEqual(manager.share.resolve_execute_share_targets(), [USER_TARGET_1])
+        self.assertEqual(
+            manager.share.targets.share_type_config(USER_TARGET_1, False, {}, {}),
+            "知识",
+        )
+        self.assertIsNone(
+            await manager.share.news.hot_news_image_url(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.NEWS,
+                news_data=([{"title": "新闻"}], "weibo"),
+            )
+        )
+        media = await manager.share.media.generate_media(**media_args)
+        self.assertEqual(media[0], "generated.png")
+        self.assertEqual(len(plugin.image_service.generated), 1)
+        self.assertEqual(
+            components,
+            (
+                manager.share.targets,
+                manager.share.news,
+                manager.share.media,
+                manager.share.sender,
+            ),
+        )
+
+    async def test_helper_context_hot_update_keeps_history_target_scoped(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        queries = []
+
+        async def recent_history(target_id, limit=3):
+            queries.append((target_id, limit))
+            return [{"content": f"{target_id}原文{index}"} for index in range(limit)]
+
+        plugin.db.get_recent_history_by_target = recent_history
+        context = manager.executor_helpers.context
+        manager.update_configs(context={"reference_history_count": 1})
+        result = await context.prepare_content_context(
+            target_umo=USER_TARGET_1,
+            share_type=mod.ShareType.MOOD,
+            life_ctx="当前生活",
+            is_group=False,
+        )
+        self.assertEqual(result["recent_post_contents"], [f"{USER_TARGET_1}原文0"])
+        self.assertEqual(result["recent_dynamics"], "")
+
+        manager.update_configs(context={"reference_history_count": 0})
+        self.assertEqual(await context.get_recent_post_contents(USER_TARGET_1), [])
+        manager.update_configs(context={"reference_history_count": 2})
+        self.assertEqual(
+            await context.get_recent_post_contents(GROUP_TARGET_1),
+            [f"{GROUP_TARGET_1}原文0", f"{GROUP_TARGET_1}原文1"],
+        )
+        self.assertEqual(queries, [(USER_TARGET_1, 1), (GROUP_TARGET_1, 2)])
+        self.assertIs(manager.executor_helpers.context, context)
+
+    async def test_helper_locks_preserve_target_isolation(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        locks = manager.executor_helpers.locks
+        user_lock = locks.get_command_share_lock(USER_TARGET_1)
+        group_lock = locks.get_command_share_lock(GROUP_TARGET_1)
+        self.assertIs(user_lock, plugin.get_share_lock(USER_TARGET_1))
+        self.assertIsNot(user_lock, group_lock)
+        self.assertIs(locks.get_command_share_lock(global_scope=True), plugin._lock)
+        async with user_lock:
+            self.assertTrue(locks.is_command_share_busy(USER_TARGET_1))
+            self.assertFalse(locks.is_command_share_busy(GROUP_TARGET_1))
+        self.assertFalse(locks.is_command_share_busy(USER_TARGET_1))
+        locks.release_command_share_lock(USER_TARGET_1)
+        self.assertIsNot(locks.get_command_share_lock(USER_TARGET_1), user_lock)
+        self.assertIs(locks.get_command_share_lock(GROUP_TARGET_1), group_lock)
+
+    async def test_composed_chat_share_resumes_original_media_once(self):
+        mod = _load_tasks_module()
+        from daily_share_tasks_testpkg.core.integrations.mediajob import (
+            ShareMediaPending,
+            current_share_job,
+        )
+        from daily_share_tasks_testpkg.core.tasks.continuation import (
+            ShareContinuationService,
+        )
+
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        plugin.task_manager = manager
+        plugin.runtime_service = types.SimpleNamespace(
+            is_share_busy=lambda target: False,
+            get_share_lock=plugin.get_share_lock,
+        )
+        continuations = ShareContinuationService(plugin)
+        plugin.share_continuations = continuations
+        submitted = []
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append((uid, list(chain.items), event))
+
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = str(Path(temp_dir) / "original.png")
+            Path(image_path).touch()
+
+            async def generate_image(*args, **kwargs):
+                job = current_share_job.get()
+                if job.get("image_path"):
+                    return job["image_path"]
+                submitted.append((job["id"], kwargs["target_umo"]))
+                job["pending_media"] = "image"
+                raise ShareMediaPending()
+
+            plugin.image_service.generate_image = generate_image
+            plugin.daily_life_bridge = types.SimpleNamespace(
+                get_image_task=lambda task_id: asyncio.sleep(
+                    0, result={"status": "ready", "path": image_path}
+                )
+            )
+            manager.update_configs(
+                image={
+                    "enable_ai_image": True,
+                    "image_enabled_types": ["心情"],
+                    "separate_send": True,
+                }
+            )
+            result = await manager.share.send_prepared_chat_share(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.MOOD,
+                content="保留原来的这句话",
+                news_data=None,
+                life_ctx="原生活快照",
+                period=mod.TimePeriod.NIGHT,
+                progress_id="",
+                history_source="command",
+                event=_Event(unified_msg_origin=USER_TARGET_1),
+            )
+
+            self.assertFalse(result)
+            self.assertEqual(sent, [])
+            self.assertEqual(plugin.db.history, [])
+            self.assertIsNone(current_share_job.get())
+            row = next(iter(plugin.db.state["share_media_continuations"].values()))
+            self.assertEqual(row["status"], "pending")
+            self.assertEqual(row["params"]["uid"], USER_TARGET_1)
+            self.assertNotIn("event", row["params"])
+
+            await continuations.recover_once()
+            await continuations.recover_once()
+
+            self.assertEqual(len(submitted), 1)
+            self.assertEqual(
+                sent,
+                [
+                    (USER_TARGET_1, ["保留原来的这句话"], None),
+                    (USER_TARGET_1, [("file_image", image_path)], None),
+                ],
+            )
+            self.assertEqual(len(plugin.db.history), 1)
+            self.assertTrue(plugin.db.history[0][1]["success"])
+            row = next(iter(plugin.db.state["share_media_continuations"].values()))
+            self.assertEqual(row["status"], "completed")
+            self.assertEqual(plugin.content_service.calls, [])
+
     async def test_execute_share_generates_visual_media_before_audio(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
@@ -3570,7 +3967,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin.ctx_service.text_to_speech = text_to_speech
         plugin.image_service.generate_image = generate_image
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
         manager.delivery.random_sleep = lambda: asyncio.sleep(0)
 
         await manager.share.execute_share(
@@ -3618,12 +4015,12 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin.image_service.generate_video_from_image = generate_video_from_image
         plugin.ctx_service.text_to_speech = text_to_speech
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
         manager.weixin_delivery.prepare_image_for_target = lambda _uid, path: (
             asyncio.sleep(0, result=path)
         )
         manager.delivery.random_sleep = lambda: asyncio.sleep(0)
-        manager.delivery.send_message_chain = send_chain
+        manager.delivery.chains.send_message_chain = send_chain
 
         await manager.share.execute_share(
             force_type=mod.ShareType.MOOD,
@@ -3645,7 +4042,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         plugin.image_conf = {"enable_ai_image": True, "enable_ai_video": False}
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
         sent = []
 
         async def send(
@@ -3723,7 +4120,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
 
         async def send(
             target,
@@ -3766,7 +4163,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_tasks_module()
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
-        manager.executor_helpers.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
         manager.delivery.send = lambda *args, **kwargs: asyncio.sleep(0, result=True)
         bot = _EmojiBot()
         event = _Event(bot=bot, message_id=321)

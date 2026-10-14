@@ -3,10 +3,16 @@ from __future__ import annotations
 from ...constants import TYPE_CN_MAP
 from ...schedule import QZONE_SCHEDULE
 from ..common import _PAGE_QZONE_SEQUENCE_DEFAULTS
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardApplyQzoneService(PanelComponent):
+    config = RuntimeField("config")
+    fields = RuntimeField("fields")
+    qzone_apply = RuntimeField("qzone_apply")
+    schedule_apply = RuntimeField("schedule_apply")
+    validation = RuntimeField("validation")
+
     def _page_apply_qzone_auto_fields(
         self,
         target: dict,

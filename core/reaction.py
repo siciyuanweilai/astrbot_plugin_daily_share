@@ -34,6 +34,8 @@ async def set_emoji(
     event: AstrMessageEvent,
     emoji_id: int,
     emoji_type: str = "1",
+    *,
+    enabled: bool = True,
 ) -> bool:
     message_id = await _get_message_id(event)
     if message_id is None:
@@ -51,7 +53,7 @@ async def set_emoji(
             message_id=message_id,
             emoji_id=emoji_id,
             emoji_type=emoji_type,
-            set=True,
+            set=enabled,
         )
         logger.debug(
             f"[日常分享][表情标记] 已标记消息，消息标识={message_id}, 表情标识={emoji_id}"
@@ -64,6 +66,10 @@ async def set_emoji(
 
 async def mark_processing(event: AstrMessageEvent) -> bool:
     return await set_emoji(event, EmojiID.PROCESSING)
+
+
+async def clear_processing(event: AstrMessageEvent) -> bool:
+    return await set_emoji(event, EmojiID.PROCESSING, enabled=False)
 
 
 async def mark_success(event: AstrMessageEvent) -> bool:

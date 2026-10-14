@@ -5,10 +5,16 @@ from ...schedule import BRIEFING_SCHEDULE, GLOBAL_SCHEDULE
 from ..common import (
     _PAGE_BASIC_SEQUENCE_DEFAULTS,
 )
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardApplyBasicService(PanelComponent):
+    config = RuntimeField("config")
+    contact_aliases = RuntimeField("contact_aliases")
+    fields = RuntimeField("fields")
+    schedule_apply = RuntimeField("schedule_apply")
+    validation = RuntimeField("validation")
+
     def _page_apply_target_section(self, sections: dict) -> None:
         target_body = self.runtime.fields._page_payload_section(sections, "target")
         if "contact_aliases" in target_body:

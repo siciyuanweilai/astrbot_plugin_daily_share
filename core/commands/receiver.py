@@ -1,9 +1,17 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
-from .basic import CommandBasicService
+if TYPE_CHECKING:
+    from . import CommandHandler
 
 
-class CommandTargetsService(CommandBasicService):
+class CommandTargetsService:
+    def __init__(self, owner: CommandHandler) -> None:
+        self.owner = owner
+
     def _get_sendable_current_target(
         self, event: AstrMessageEvent, target_uid: str
     ) -> str:
@@ -14,17 +22,19 @@ class CommandTargetsService(CommandBasicService):
         self, target_list: list, origin: str, real_id: str, candidates: list
     ) -> int:
         for idx, item in enumerate(target_list):
-            if self.plugin.target_entry_matches(item, origin, real_id, candidates):
+            if self.owner.plugin.target_entry_matches(
+                item, origin, real_id, candidates
+            ):
                 return idx
         return -1
 
     async def cmd_contact_alias(self, event: AstrMessageEvent, parts: list):
         """设置当前会话的本地昵称映射。"""
         target_uid = str(event.unified_msg_origin or "").strip()
-        sendable_target_uid = self._get_sendable_current_target(event, target_uid)
+        sendable_target_uid = self.owner._get_sendable_current_target(event, target_uid)
 
         if len(parts) <= 2 or parts[2] in {"查看", "show", "list"}:
-            alias = self.plugin.get_contact_alias(target_uid, event=event)
+            alias = self.owner.plugin.get_contact_alias(target_uid, event=event)
             if alias:
                 yield event.plain_result(
                     f"当前会话昵称映射：{sendable_target_uid} -> {alias}"
@@ -36,8 +46,8 @@ class CommandTargetsService(CommandBasicService):
             return
 
         if parts[2] in {"删除", "清除", "移除", "delete", "remove"}:
-            removed = await self.plugin.save_config_and_refresh_runtime(
-                mutation=lambda: self.plugin.remove_contact_alias(
+            removed = await self.owner.plugin.save_config_and_refresh_runtime(
+                mutation=lambda: self.owner.plugin.remove_contact_alias(
                     target_uid, event=event
                 ),
                 rebuild_scheduler=False,
@@ -53,8 +63,8 @@ class CommandTargetsService(CommandBasicService):
             yield event.plain_result("昵称不能为空。示例：/分享 昵称 测试昵称")
             return
 
-        save_key = await self.plugin.save_config_and_refresh_runtime(
-            mutation=lambda: self.plugin.set_contact_alias(
+        save_key = await self.owner.plugin.save_config_and_refresh_runtime(
+            mutation=lambda: self.owner.plugin.set_contact_alias(
                 sendable_target_uid, alias, event=event
             ),
             rebuild_scheduler=False,
@@ -72,11 +82,11 @@ class CommandTargetsService(CommandBasicService):
             yield event.plain_result("添加失败：无法获取当前会话标识。")
             return
 
-        sendable_target_uid = self._get_sendable_current_target(event, target_uid)
+        sendable_target_uid = self.owner._get_sendable_current_target(event, target_uid)
         mode = parts[2].strip().lower() if len(parts) > 2 else ""
         is_briefing_mode = mode in {"早报", "briefing", "brief", "60s", "ai"}
-        is_group = self.plugin.ctx_service.is_group_chat(target_uid)
-        if self.plugin.ctx_service.is_weixin_platform(target_uid):
+        is_group = self.owner.plugin.ctx_service.is_group_chat(target_uid)
+        if self.owner.plugin.ctx_service.is_weixin_platform(target_uid):
             is_group = False
 
         if is_briefing_mode:
@@ -85,20 +95,20 @@ class CommandTargetsService(CommandBasicService):
                     "早报接收对象不需要类型序列。示例：/分享 添加当前 早报"
                 )
                 return
-            msg = await self._add_current_briefing(
+            msg = await self.owner._add_current_briefing(
                 target_uid, sendable_target_uid, is_group
             )
             yield event.plain_result(msg)
             return
 
-        seq = self._current_share_sequence(parts)
+        seq = self.owner._current_share_sequence(parts)
         if seq is False:
             yield event.plain_result(
                 "类型序列格式不正确。示例：/分享 添加当前 心情,新闻\n添加早报示例：/分享 添加当前 早报"
             )
             return
 
-        msg = await self._add_current_receiver(
+        msg = await self.owner._add_current_receiver(
             target_uid, sendable_target_uid, is_group, seq
         )
         yield event.plain_result(msg)
@@ -107,7 +117,7 @@ class CommandTargetsService(CommandBasicService):
         if len(parts) <= 2:
             return None
         candidate = parts[2].strip().replace("，", ",")
-        targets = self.plugin.task_manager.targets
+        targets = self.owner.plugin.task_manager.targets
         if not targets.looks_like_share_sequence(candidate):
             return False
         return targets.normalize_share_sequence(candidate)
@@ -116,11 +126,11 @@ class CommandTargetsService(CommandBasicService):
         self, target_uid: str, sendable_target_uid: str, is_group: bool
     ) -> str:
         def add_target() -> str:
-            extra_conf = self.config.setdefault("extra_shares", {})
+            extra_conf = self.owner.config.setdefault("extra_shares", {})
             groups = extra_conf.setdefault("briefing_groups", [])
             users = extra_conf.setdefault("briefing_users", [])
             target_list = groups if is_group else users
-            return self._upsert_current_target(
+            return self.owner._upsert_current_target(
                 target_list,
                 target_uid,
                 sendable_target_uid,
@@ -128,22 +138,26 @@ class CommandTargetsService(CommandBasicService):
                 briefing=True,
             )
 
-        return await self.plugin.save_config_and_refresh_runtime(mutation=add_target)
+        return await self.owner.plugin.save_config_and_refresh_runtime(
+            mutation=add_target
+        )
 
     async def _add_current_receiver(
         self, target_uid: str, sendable_target_uid: str, is_group: bool, seq
     ) -> str:
         def add_target() -> str:
-            receiver_conf = self.config.setdefault("receiver", {})
+            receiver_conf = self.owner.config.setdefault("receiver", {})
             groups = receiver_conf.setdefault("groups", [])
             users = receiver_conf.setdefault("users", [])
             target_list = groups if is_group else users
             new_entry = f"{sendable_target_uid}:{seq}" if seq else sendable_target_uid
-            return self._upsert_current_target(
+            return self.owner._upsert_current_target(
                 target_list, target_uid, new_entry, is_group, seq=seq
             )
 
-        return await self.plugin.save_config_and_refresh_runtime(mutation=add_target)
+        return await self.owner.plugin.save_config_and_refresh_runtime(
+            mutation=add_target
+        )
 
     def _upsert_current_target(
         self,
@@ -155,10 +169,10 @@ class CommandTargetsService(CommandBasicService):
         seq=None,
         briefing: bool = False,
     ) -> str:
-        _, real_id = self.plugin.ctx_service.parse_umo(target_uid)
+        _, real_id = self.owner.plugin.ctx_service.parse_umo(target_uid)
         sendable_id = target_uid
-        _, sendable_real_id = self.plugin.ctx_service.parse_umo(sendable_id)
-        index = self._find_matching_target_index(
+        _, sendable_real_id = self.owner.plugin.ctx_service.parse_umo(sendable_id)
+        index = self.owner._find_matching_target_index(
             target_list, target_uid, real_id, [sendable_id, sendable_real_id]
         )
         label = "早报接收对象" if briefing else "接收对象"

@@ -4,7 +4,7 @@ from typing import Any
 
 from ..config import DEFAULT_KNOWLEDGE_CATS, DEFAULT_REC_CATS
 from .common import _PAGE_BASIC_SEQUENCE_DEFAULTS, _PAGE_QZONE_SEQUENCE_DEFAULTS
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 from .revision import settings_config_revision
 
 _FieldSpec = tuple[str, str, Any, bool]
@@ -136,6 +136,11 @@ _PAGE_NEWS_FIELDS: tuple[_FieldSpec, ...] = (
 
 class DashboardConfigPayloadService(PanelComponent):
     """设置页配置数据组装。"""
+
+    config = RuntimeField("config")
+    meta = RuntimeField("meta")
+    payload = RuntimeField("payload")
+    validation = RuntimeField("validation")
 
     def _page_field_default(
         self, config_key: str, field_key: str, fallback: Any

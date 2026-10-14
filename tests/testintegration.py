@@ -217,6 +217,86 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("语" * 500, prompt)
         self.assertNotIn("语" * 501, prompt)
 
+    def test_life_145_public_projection_preserves_resources_and_hides_private_kernel(
+        self,
+    ):
+        script = textwrap.dedent(
+            f"""
+            import importlib.util
+            import json
+            import sys
+            import types
+
+            sys.path.insert(0, {str(WORKSPACE / "astrbot_plugin_daily_life" / "tests")!r})
+            import support
+            sys.path.insert(0, {str(WORKSPACE)!r})
+            from astrbot_plugin_daily_life.core.runtime.mirror.export import SnapshotExportComponent
+            from astrbot_plugin_daily_life.core.runtime.mirror.sharing import project_continuity
+
+            spec = importlib.util.spec_from_file_location(
+                'share_continuity_contract',
+                {str(WORKSPACE / "astrbot_plugin_daily_share" / "core" / "context" / "daily" / "continuity.py")!r},
+            )
+            consumer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(consumer)
+            data = types.SimpleNamespace(date='2026-10-13', meta={{
+                'continuous_body': json.dumps({{
+                    'discomfort': 45, 'fatigue': 65, 'uncertain_minutes': 90,
+                    'private_evidence': 'PRIVATE_BODY_EVIDENCE',
+                }}),
+                'continuous_kernel': 'PRIVATE_KERNEL',
+            }})
+            facts = SnapshotExportComponent._share_current_facts(data)
+            assert facts['body']['discomfort'] == 45
+            assert facts['body']['uncertain_minutes'] == 90
+            assert 'PRIVATE_' not in json.dumps(facts)
+            data.meta['residence_context_stale'] = 'true'
+            assert SnapshotExportComponent._share_current_facts(data)['valid'] is False
+
+            scope = 'qzone_broadcast'
+            item = {{
+                'kind': 'object', 'scope': scope, 'title': '午餐', 'state': 'prepared',
+                'owner': 'shared', 'quantity': 0, 'unit': '份',
+                'available_at': '2026-10-13 12:00', 'artifact_version': 2,
+                'content': 'PRIVATE_CONTENT', 'location': 'PRIVATE_ADDRESS',
+                'resource': 'PRIVATE_RESOURCE', 'series_id': 'PRIVATE_SERIES',
+                'source_action_id': 'PRIVATE_ACTION',
+            }}
+            private = {{
+                'kind': 'object', 'scope': 'bot:FriendMessage:u1',
+                'title': 'PRIVATE_OBJECT', 'quantity': 3, 'unit': '件',
+            }}
+            projection = project_continuity([item, private], {{}}, scope)
+            assert len(projection['objects']) == 1
+            row = projection['objects'][0]
+            assert row['owner'] == 'shared' and row['quantity'] == 0
+            assert row['unit'] == '份' and row['artifact_version'] == 2
+            assert row['available_at'] == '2026-10-13 12:00'
+            prompt = consumer.continuity_prompt({{'continuity': projection}})
+            assert 'PRIVATE_' not in json.dumps(projection) + prompt
+            assert '不等于吃过' in prompt
+            assert '"quantity": 0' in prompt and '"owner": "shared"' in prompt
+            for invalid in (True, -1, '4', float('nan'), float('inf')):
+                row = project_continuity([dict(item, quantity=invalid)], {{}}, scope)['objects'][0]
+                assert 'quantity' not in row
+                assert 'quantity' not in json.loads(
+                    consumer.continuity_prompt({{'continuity': {{'version': 1, 'objects': [row]}}}}).splitlines()[-1]
+                )['已登记物品作品'][0]
+            invalid = project_continuity([dict(item, owner={{}}, artifact_version=True, unit='')], {{}}, scope)['objects'][0]
+            assert 'owner' not in invalid and 'artifact_version' not in invalid
+            assert 'quantity' not in invalid
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=WORKSPACE,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_bridge_calls_real_daily_life_plugin_entry_in_isolated_runtime(self):
         script = textwrap.dedent(
             f"""
@@ -233,7 +313,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             from astrbot_plugin_daily_life.main import DailyLifePlugin
             from astrbot_plugin_daily_life.core.config.options import ImageGenerationSettings
             from astrbot_plugin_daily_life.core.media import GeminiImageService
-            from astrbot_plugin_daily_life.core.runtime.mirror.export import SnapshotExportMixin
+            from astrbot_plugin_daily_life.core.runtime.mirror.export import SnapshotExportComponent
 
             package = types.ModuleType('daily_share_contract')
             package.__path__ = [{str(WORKSPACE / "astrbot_plugin_daily_share")!r}]
@@ -253,12 +333,20 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             spec.loader.exec_module(module)
             DailyLifeBridge = module.DailyLifeBridge
 
-            class Runtime(SnapshotExportMixin):
+            class Runtime:
                 image_models = []
                 config = types.SimpleNamespace(chat_style=types.SimpleNamespace(
                     enabled=True,
                     casual_short_prompt='自然接话，不刻意扩写。',
+                    casual_max_chars=20,
+                    private_casual_max_chars=10,
                 ))
+
+                def __init__(self):
+                    self.snapshot = SnapshotExportComponent(self)
+
+                def get_share_chat_style(self, *, scene=''):
+                    return self.snapshot.get_share_chat_style(scene=scene)
 
                 async def get_share_context(self, target_umo=''):
                     return {{
@@ -320,6 +408,13 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 assert '公开说说沿用上述语气与表达节奏' in post_style
                 assert '不固定字数、行数或标题模板' in post_style
                 assert '私聊记忆' not in post_style
+                for scene in ('qzone_comment', 'qzone_reply'):
+                    public_style = await bridge.get_share_chat_style_prompt(scene=scene)
+                    assert '约 20 字' in public_style
+                    assert '约 10 字' not in public_style
+                    assert '语气与节奏参考' in public_style
+                plugin.runtime.config.chat_style.casual_max_chars = 28
+                assert '约 28 字' in await bridge.get_share_chat_style_prompt(scene='qzone_reply')
                 assert plugin._external_users == 0
                 plugin.runtime.config.chat_style.enabled = False
                 assert await bridge.get_share_chat_style_prompt() == ''

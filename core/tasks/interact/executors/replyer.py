@@ -8,6 +8,7 @@ from ..scan import (
     _query_qzone_self_album_posts,
 )
 from ..task import (
+    QzoneStatePersistenceError,
     _qzone_abort_query_failure,
     _qzone_auto_config,
     _qzone_auto_result,
@@ -76,6 +77,8 @@ async def _execute_qzone_auto_reply_candidates(
                 else QZONE_ACTION_REPLIED,
                 dashboard_action="auto_reply",
                 log_label="已自动回评 QQ 空间评论",
+                state=state,
+                state_key=QZONE_AUTO_REPLY_STATE_KEY,
                 parent_comment_id=(
                     str(getattr(parent_comment, "tid", "") or "")
                     if is_thread_reply
@@ -83,6 +86,8 @@ async def _execute_qzone_auto_reply_candidates(
                 ),
                 parent_comment=parent_comment if is_thread_reply else None,
             )
+        except QzoneStatePersistenceError:
+            raise
         except QzoneAutoInteractionRateLimited as exc:
             paused = True
             result["skipped"] += 1

@@ -9,10 +9,17 @@ from ...database.keys import (
     SOURCE_COMMAND,
 )
 from ...toolkit import format_exception
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class ImageNewsShareService(SupportComponent):
+    db = RuntimeField("db")
+    jobs = RuntimeField("jobs")
+    news_outbox = RuntimeField("news_outbox")
+    news_service = RuntimeField("news_service")
+    qzone = RuntimeField("qzone")
+    task_manager = RuntimeField("task_manager")
+
     async def _run_news_image_share(
         self,
         event: AstrMessageEvent,
@@ -84,7 +91,9 @@ class ImageNewsShareService(SupportComponent):
                 False,
                 error_reason=str(exc),
                 source_type=SOURCE_COMMAND,
-                **self.task_manager.executor_helpers.image_history_kwargs(img_url),
+                **self.task_manager.executor_helpers.records.image_history_kwargs(
+                    img_url
+                ),
             )
             await self.jobs._send_manual_share_result(
                 event, event.plain_result(f"QQ空间分享失败: {exc}")
@@ -92,7 +101,7 @@ class ImageNewsShareService(SupportComponent):
             return
 
         try:
-            await self.task_manager.executor_helpers.record_share_history(
+            await self.task_manager.executor_helpers.records.record_share_history(
                 target_id=QZONE_TARGET_ID,
                 share_type=HISTORY_SHARE_NEWS,
                 content=f"【{src_name}】长图(手动)",
@@ -143,13 +152,13 @@ class ImageNewsShareService(SupportComponent):
                     False,
                     error_reason="新闻长图发送失败",
                     source_type=SOURCE_COMMAND,
-                    **self.task_manager.executor_helpers.image_history_kwargs(
+                    **self.task_manager.executor_helpers.records.image_history_kwargs(
                         local_path
                     ),
                 )
                 return
             try:
-                await self.task_manager.executor_helpers.record_share_history(
+                await self.task_manager.executor_helpers.records.record_share_history(
                     target_id=current_uid,
                     share_type=HISTORY_SHARE_NEWS,
                     content=f"【{src_name}】长图(手动)",
@@ -174,6 +183,6 @@ class ImageNewsShareService(SupportComponent):
             False,
             error_reason=message,
             source_type=SOURCE_COMMAND,
-            **self.task_manager.executor_helpers.image_history_kwargs(img_url),
+            **self.task_manager.executor_helpers.records.image_history_kwargs(img_url),
         )
         await self.jobs._send_manual_share_result(event, event.plain_result(message))

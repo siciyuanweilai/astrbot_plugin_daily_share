@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
@@ -10,82 +12,59 @@ from ...database.keys import SOURCE_SCHEDULED, SOURCE_SMART
 from ...toolkit import format_exception
 from ..continuation import preserve_share
 from ..taskbase import TaskServiceBase
+from .artwork import TaskExecutorMediaService
+from .newsitem import TaskExecutorNewsService
+from .send import TaskExecutorSendService
+from .targetplan import TaskExecutorTargetService
+
+if TYPE_CHECKING:
+    from ..components import TaskServices
+    from ..runtime import TaskRuntime
+    from ..taskbase import TaskConfigState, TaskSharedState
 
 
-class TaskExecutorFlowService(TaskServiceBase):
-    """分享主流程编排。"""
+class TaskExecutorService(TaskServiceBase):
+    """分享主流程编排。
 
-    if TYPE_CHECKING:
+    目标、新闻、媒体和发送分别由独立服务持有；恢复任务继续通过
+    resolve_execute_share_targets 和 send_prepared_chat_share 调用编排入口。
+    """
 
-        def _target_looks_group(self, uid: str) -> bool: ...
+    def __init__(
+        self,
+        runtime: TaskRuntime,
+        config: TaskConfigState,
+        state: TaskSharedState,
+    ) -> None:
+        super().__init__(runtime, config, state)
+        args = (runtime, config, state)
+        self.targets = TaskExecutorTargetService(*args)
+        self.news = TaskExecutorNewsService(*args)
+        self.media = TaskExecutorMediaService(*args)
+        self.sender = TaskExecutorSendService(*args)
 
-        def _target_share_type_config(
-            self, uid: str, is_group: bool, groups: dict, users: dict
-        ) -> Any: ...
+    def connect(self, services: TaskServices) -> None:
+        super().connect(services)
+        for component in (
+            self.targets,
+            self.news,
+            self.media,
+            self.sender,
+        ):
+            component.connect(services)
 
-        def resolve_execute_share_targets(
-            self,
-            specific_target: str | None,
-            target_scope: str,
-            *,
-            exclude_custom_cron: bool,
-        ) -> list[str]: ...
-
-        async def _load_execute_share_news(
-            self,
-            *,
-            uid: str,
-            stype: ShareType,
-            news_source: str | None,
-            event: AstrMessageEvent | None,
-            history_source: str,
-            progress_id: str,
-        ) -> tuple[bool, object]: ...
-
-        async def _maybe_attach_hot_news_image(
-            self, *, uid: str, stype: ShareType, news_data: Any | None = None
-        ) -> str | None: ...
-
-        async def _generate_execute_share_media(
-            self,
-            *,
-            progress_id: str,
-            content: str,
-            stype: ShareType,
-            life_ctx: str,
-            target_umo: str,
-            event: AstrMessageEvent | None,
-            period: TimePeriod,
-            initial_img_path: str | None,
-        ) -> tuple[str | None, str | None, str | None, str | None, str]: ...
-
-        async def _send_execute_share_result(
-            self,
-            *,
-            uid: str,
-            content: str,
-            send_img_path: str | None,
-            audio_path: str | None,
-            video_url: str | None,
-            event: AstrMessageEvent | None,
-            progress_id: str,
-        ) -> tuple[bool, dict]: ...
-
-        async def _record_execute_share_success(
-            self,
-            *,
-            uid: str,
-            stype: ShareType,
-            content: str,
-            history_source: str,
-            media_result: dict,
-            image_ref: str | None,
-            video_ref: str | None,
-            news_snapshot_data: dict | None,
-            news_image_url: str | None,
-            image_description: str,
-            degradation_reason: str,
-        ) -> None: ...
+    def resolve_execute_share_targets(
+        self,
+        specific_target: str | None = None,
+        target_scope: str = "all",
+        *,
+        exclude_custom_cron: bool = True,
+    ) -> list[str]:
+        return self.targets.resolve_execute_share_targets(
+            specific_target,
+            target_scope,
+            exclude_custom_cron=exclude_custom_cron,
+        )
 
     async def _prepare_execute_share_target(
         self,
@@ -100,9 +79,9 @@ class TaskExecutorFlowService(TaskServiceBase):
         r_groups: dict,
         r_users: dict,
     ) -> dict:
-        is_group = self._target_looks_group(uid)
+        is_group = self.targets.looks_group(uid)
         adapter_id, real_id = self.ctx_service.parse_umo(uid)
-        target_specific_type = self._target_share_type_config(
+        target_specific_type = self.targets.share_type_config(
             uid, is_group, r_groups, r_users
         )
         stype = force_type or await self.services.type_selector.decide_type_with_state(
@@ -157,13 +136,15 @@ class TaskExecutorFlowService(TaskServiceBase):
         self.services.progress.update_share_progress(
             progress_id, "content", message="文案生成中"
         )
-        content_context = await self.services.executor_helpers.prepare_content_context(
-            target_umo=uid,
-            share_type=stype,
-            life_ctx=post_context if post_context is not None else life_ctx,
-            is_group=is_group,
-            event=event,
-            nickname=nickname,
+        content_context = (
+            await self.services.executor_helpers.context.prepare_content_context(
+                target_umo=uid,
+                share_type=stype,
+                life_ctx=post_context if post_context is not None else life_ctx,
+                is_group=is_group,
+                event=event,
+                nickname=nickname,
+            )
         )
         if is_group and "group_info" in content_context["hist_data"]:
             if not specific_target and not self.ctx_service.check_group_strategy(
@@ -194,7 +175,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             return None, content
 
         logger.warning(f"[日常分享] 内容生成失败 {uid}")
-        await self.services.executor_helpers.record_share_failure(
+        await self.services.executor_helpers.records.record_share_failure(
             target_id=uid,
             share_type=stype.value,
             message="生成失败（大语言模型无响应）",
@@ -230,7 +211,7 @@ class TaskExecutorFlowService(TaskServiceBase):
         tool_event = (
             event if self.services.targets.event_matches_target(event, uid) else None
         )
-        hot_news_image_url = await self._maybe_attach_hot_news_image(
+        hot_news_image_url = await self.news.hot_news_image_url(
             uid=uid,
             stype=stype,
             news_data=news_data,
@@ -241,7 +222,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             video_url,
             audio_path,
             image_description,
-        ) = await self._generate_execute_share_media(
+        ) = await self.media.generate_media(
             progress_id=progress_id,
             content=content,
             stype=stype,
@@ -256,7 +237,7 @@ class TaskExecutorFlowService(TaskServiceBase):
         continuations = getattr(self.plugin, "share_continuations", None)
         if continuations is not None:
             await continuations.mark_submitting()
-        sent, media_result = await self._send_execute_share_result(
+        sent, media_result = await self.sender.send(
             uid=uid,
             content=content,
             send_img_path=send_img_path,
@@ -266,7 +247,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             progress_id=progress_id,
         )
         if not sent:
-            await self.services.executor_helpers.record_share_failure(
+            await self.services.executor_helpers.records.record_share_failure(
                 target_id=uid,
                 share_type=stype.value,
                 message="发送失败",
@@ -306,7 +287,7 @@ class TaskExecutorFlowService(TaskServiceBase):
                 or ""
             )
 
-        await self._record_execute_share_success(
+        await self.sender.record_success(
             uid=uid,
             stype=stype,
             content=content,
@@ -321,9 +302,11 @@ class TaskExecutorFlowService(TaskServiceBase):
                 progress_id
             ),
         )
-        self.services.executor_helpers.log_partial_send_errors(uid, media_result)
+        self.services.executor_helpers.records.log_partial_send_errors(
+            uid, media_result
+        )
         if event and tool_event:
-            await self.services.executor_helpers.notify_partial_send_errors(
+            await self.services.executor_helpers.records.notify_partial_send_errors(
                 event, media_result
             )
         self.services.progress.finish_share_progress(
@@ -365,7 +348,7 @@ class TaskExecutorFlowService(TaskServiceBase):
             stype = target["stype"]
             progress_id = target["progress_id"]
 
-            loaded_news, news_data = await self._load_execute_share_news(
+            loaded_news, news_data = await self.news.load_news(
                 uid=uid,
                 stype=stype,
                 news_source=news_source,
@@ -405,14 +388,14 @@ class TaskExecutorFlowService(TaskServiceBase):
                 event=event,
             )
         except Exception as e:
-            self.services.executor_helpers.log_exception(
+            self.services.executor_helpers.records.log_exception(
                 f"[日常分享] 处理 {uid} 时出错", e
             )
             if event:
                 await self.send_event(
                     event, event.plain_result(f"分享出错: {format_exception(e)}")
                 )
-            await self.services.executor_helpers.record_share_failure(
+            await self.services.executor_helpers.records.record_share_failure(
                 target_id=uid,
                 share_type=stype.value
                 if isinstance(stype, ShareType)
@@ -464,7 +447,7 @@ class TaskExecutorFlowService(TaskServiceBase):
                 )
             return False
 
-        period = self.services.executor_helpers.get_curr_period()
+        period = self.services.executor_helpers.period.get_curr_period()
         abort_on_target_failure = bool(specific_target)
         r_groups = self.services.targets.parse_targets_config(
             self.receiver_conf.get("groups", []), expected_group=True

@@ -1,23 +1,32 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ..constants import TYPE_CN_MAP, period_label
 from ..database.keys import target_state_key
-from .sequence import CommandSequenceService
+
+if TYPE_CHECKING:
+    from . import CommandHandler
 
 
-class CommandBasicService(CommandSequenceService):
+class CommandBasicService:
+    def __init__(self, owner: CommandHandler) -> None:
+        self.owner = owner
+
     async def cmd_enable(self, event: AstrMessageEvent):
         """启用插件"""
-        await self.plugin.save_config_and_refresh_runtime(
-            mutation=lambda: self.config.__setitem__("enable_auto_share", True)
+        await self.owner.plugin.save_config_and_refresh_runtime(
+            mutation=lambda: self.owner.config.__setitem__("enable_auto_share", True)
         )
         yield event.plain_result("自动分享已启用")
 
     async def cmd_disable(self, event: AstrMessageEvent):
         """禁用插件"""
-        await self.plugin.save_config_and_refresh_runtime(
+        await self.owner.plugin.save_config_and_refresh_runtime(
             clear_pending_when_disabled=True,
-            mutation=lambda: self.config.__setitem__("enable_auto_share", False),
+            mutation=lambda: self.owner.config.__setitem__("enable_auto_share", False),
         )
         yield event.plain_result("自动分享已禁用")
 
@@ -25,20 +34,26 @@ class CommandBasicService(CommandSequenceService):
         """查看详细状态"""
         target_uid = event.unified_msg_origin
         state_key = target_state_key(target_uid)
-        state = await self.db.get_share_state(state_key, {})
+        state = await self.owner.db.get_share_state(state_key, {})
 
-        enabled = self.config.get("enable_auto_share", False)
-        cron = self.basic_conf.get("share_cron")
+        enabled = self.owner.config.get("enable_auto_share", False)
+        cron = self.owner.basic_conf.get("share_cron")
 
         last_type_raw = state.get("last_type", "无")
         last_type_cn = TYPE_CN_MAP.get(last_type_raw, last_type_raw)
 
-        period = self.plugin.task_manager.executor_helpers.get_curr_period()
-        time_range = self.plugin.task_manager.executor_helpers.get_period_range_str(
-            period
+        period = (
+            self.owner.plugin.task_manager.executor_helpers.period.get_curr_period()
+        )
+        time_range = (
+            self.owner.plugin.task_manager.executor_helpers.period.get_period_range_str(
+                period
+            )
         )
 
-        recent_history = await self.db.get_recent_history_by_target(target_uid, limit=5)
+        recent_history = await self.owner.db.get_recent_history_by_target(
+            target_uid, limit=5
+        )
         hist_txt = "无记录"
         if recent_history:
             lines = []
@@ -51,19 +66,19 @@ class CommandBasicService(CommandSequenceService):
             hist_txt = "\n".join(lines)
 
         # 解析独立配置，识别出当前会话是否脱离了全局控制
-        adapter_id, real_id = self.plugin.ctx_service.parse_umo(target_uid)
-        is_group = self.plugin.ctx_service.is_group_chat(target_uid)
+        adapter_id, real_id = self.owner.plugin.ctx_service.parse_umo(target_uid)
+        is_group = self.owner.plugin.ctx_service.is_group_chat(target_uid)
 
-        r_groups = self.plugin.task_manager.targets.parse_targets_config(
-            self.plugin.receiver_conf.get("groups", []), expected_group=True
+        r_groups = self.owner.plugin.task_manager.targets.parse_targets_config(
+            self.owner.plugin.receiver_conf.get("groups", []), expected_group=True
         )
-        r_users = self.plugin.task_manager.targets.parse_targets_config(
-            self.plugin.receiver_conf.get("users", []), expected_group=False
+        r_users = self.owner.plugin.task_manager.targets.parse_targets_config(
+            self.owner.plugin.receiver_conf.get("users", []), expected_group=False
         )
 
         custom_cron = "无"
         target_specific_type = "自动"
-        conf = self.plugin.task_manager.targets.get_target_conf(
+        conf = self.owner.plugin.task_manager.targets.get_target_conf(
             target_uid, is_group, r_groups, r_users
         )
         if isinstance(conf, dict):
@@ -81,7 +96,7 @@ class CommandBasicService(CommandSequenceService):
         msg = f"""每日分享状态
 ================
 运行状态: {"启用" if enabled else "禁用"}
-全局触发: {self.basic_conf.get("trigger_mode", "cron")} ({cron})
+全局触发: {self.owner.basic_conf.get("trigger_mode", "cron")} ({cron})
 
 【当前会话独立配置】
 独立定时: {custom_cron}
@@ -102,8 +117,8 @@ class CommandBasicService(CommandSequenceService):
         """开启/关闭分享早报到 QQ 空间。"""
         if len(parts) > 2 and parts[2] in ["开启", "关闭"]:
             enable = parts[2] == "开启"
-            await self.plugin.save_config_and_refresh_runtime(
-                mutation=lambda: self.extra_shares_conf.__setitem__(
+            await self.owner.plugin.save_config_and_refresh_runtime(
+                mutation=lambda: self.owner.extra_shares_conf.__setitem__(
                     "sync_briefing_to_qzone", enable
                 ),
                 rebuild_scheduler=False,
@@ -114,7 +129,7 @@ class CommandBasicService(CommandSequenceService):
         else:
             status = (
                 "开启"
-                if self.extra_shares_conf.get("sync_briefing_to_qzone", False)
+                if self.owner.extra_shares_conf.get("sync_briefing_to_qzone", False)
                 else "关闭"
             )
             yield event.plain_result(

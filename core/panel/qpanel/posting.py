@@ -6,10 +6,17 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
 )
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzonePublishService(PanelComponent):
+    db = RuntimeField("db")
+    events = RuntimeField("events")
+    qzone_publish = RuntimeField("qzone_publish")
+    qzone_service = RuntimeField("qzone_service")
+    qzone_tools = RuntimeField("qzone_tools")
+    server = RuntimeField("server")
+
     async def page_qzone_publish(self):
         async def handler():
             body = await self.server._page_json_body()

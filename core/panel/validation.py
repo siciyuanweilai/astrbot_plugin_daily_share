@@ -12,11 +12,14 @@ from .common import (
     _PAGE_RANDOM_PERIOD_RE,
     _PAGE_SHARE_TYPE_OPTIONS,
 )
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardConfigValidationService(PanelComponent):
     """仪表盘配置输入校验。"""
+
+    task_manager = RuntimeField("task_manager")
+    validation = RuntimeField("validation")
 
     def _page_share_type(self, value):
         raw = str(value or "自动").strip()

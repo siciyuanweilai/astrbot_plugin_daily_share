@@ -38,6 +38,26 @@ class _Database:
 
 
 class ShareLinkTests(unittest.IsolatedAsyncioTestCase):
+    async def test_persistent_jobs_never_fall_back_to_sync_media(self):
+        for kind in ("image", "video"):
+            with self.subTest(kind=kind):
+                sync = AsyncMock(return_value="unexpected-new-media")
+                life = types.SimpleNamespace(**{f"generate_share_{kind}": sync})
+                bridge = DailyLifeBridge(
+                    types.SimpleNamespace(get_all_stars=lambda: [_metadata(life)])
+                )
+                job = {
+                    "id": "original-job",
+                    "service": types.SimpleNamespace(save=AsyncMock()),
+                }
+                token = current_share_job.set(job)
+                try:
+                    method = getattr(bridge, f"generate_{kind}")
+                    self.assertEqual(await method(None, "original prompt"), "")
+                finally:
+                    current_share_job.reset(token)
+                sync.assert_not_awaited()
+
     async def test_public_receipt_outbox_survives_reload_and_flushes(self):
         db = _Database()
         context = types.SimpleNamespace(get_all_stars=lambda: [])

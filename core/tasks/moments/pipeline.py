@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
@@ -11,61 +13,16 @@ from ...database.keys import (
     SOURCE_SCHEDULED,
 )
 from ...toolkit import format_exception, log_exception
-from ..continuation import preserve_share
-from ..taskbase import TaskServiceBase
+
+if TYPE_CHECKING:
+    from . import TaskQzoneService
 
 
-class TaskQzoneFlowService(TaskServiceBase):
+class TaskQzoneFlowService:
     """QQ 空间分享主流程编排。"""
 
-    if TYPE_CHECKING:
-
-        async def _load_qzone_news_data(
-            self,
-            *,
-            news_source: str | None,
-            event: AstrMessageEvent | None,
-            history_source: str,
-            progress_id: str,
-        ) -> tuple[bool, tuple[list, str] | None]: ...
-
-        async def _generate_qzone_content(
-            self,
-            *,
-            stype: ShareType,
-            period: TimePeriod,
-            post_ctx: str,
-            news_data: Any,
-            progress_id: str,
-            event: AstrMessageEvent | None,
-        ) -> str: ...
-
-        async def _generate_qzone_image(
-            self,
-            *,
-            stype: ShareType,
-            content: str,
-            life_ctx: Any,
-            news_data: Any,
-            progress_id: str,
-            event: AstrMessageEvent | None,
-        ) -> str | None: ...
-
-        async def _prepare_qzone_publish_media(
-            self, *, target_local_img: str | None
-        ) -> list: ...
-
-        async def _publish_and_record_qzone_share(
-            self,
-            *,
-            progress_id: str,
-            stype: ShareType,
-            content: str,
-            qzone_images: list,
-            target_local_img: str | None,
-            history_source: str,
-            news_snapshot_data: dict | None,
-        ) -> str: ...
+    def __init__(self, owner: TaskQzoneService) -> None:
+        self.owner = owner
 
     async def _start_qzone_share_progress(
         self,
@@ -73,18 +30,18 @@ class TaskQzoneFlowService(TaskServiceBase):
         force_type: ShareType | None = None,
         history_source: str,
     ) -> tuple[TimePeriod, ShareType, str]:
-        period = self.services.executor_helpers.get_curr_period()
+        period = self.owner.services.executor_helpers.period.get_curr_period()
         stype = (
             force_type
             if force_type
-            else await self.services.type_selector.decide_type_with_state(
+            else await self.owner.services.type_selector.decide_type_with_state(
                 period, is_qzone=True
             )
         )
         logger.info(
             f"[日常分享] QQ 空间时段: {period_label(period)}, 类型: {share_type_label(stype)}"
         )
-        progress_id = self.services.progress.start_share_progress(
+        progress_id = self.owner.services.progress.start_share_progress(
             source_type=history_source,
             target_id=QZONE_TARGET_ID,
             share_type=stype,
@@ -106,7 +63,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             "[日常分享] 生成并分享到 QQ 空间失败", error, with_traceback=False
         )
         try:
-            await self.services.executor_helpers.record_share_failure(
+            await self.owner.services.executor_helpers.records.record_share_failure(
                 target_id=QZONE_TARGET_ID,
                 share_type=stype,
                 message=f"生成并分享到QQ空间失败: {format_exception(error)}",
@@ -122,7 +79,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             )
         if event:
             try:
-                await self.send_event(
+                await self.owner.send_event(
                     event,
                     event.plain_result(
                         f"生成并分享到QQ空间失败: {format_exception(error)}"
@@ -135,7 +92,7 @@ class TaskQzoneFlowService(TaskServiceBase):
                     level="debug",
                     with_traceback=False,
                 )
-        self.services.progress.finish_share_progress(
+        self.owner.services.progress.finish_share_progress(
             progress_id, success=False, message="QQ 空间分享失败"
         )
 
@@ -148,12 +105,12 @@ class TaskQzoneFlowService(TaskServiceBase):
         need_video: bool = False,
     ) -> bool:
         """完全独立的 QQ 空间分享主流程。"""
-        if self.plugin._is_terminated:
+        if self.owner.plugin._is_terminated:
             return False
         history_source = str(
             source_type or (SOURCE_COMMAND if event else SOURCE_SCHEDULED)
         ).strip()
-        continuations = getattr(self.plugin, "share_continuations", None)
+        continuations = getattr(self.owner.plugin, "share_continuations", None)
         if (
             history_source in {"scheduled", "smart"}
             and continuations is not None
@@ -165,17 +122,17 @@ class TaskQzoneFlowService(TaskServiceBase):
         stype = ShareType.GREETING
 
         try:
-            period, stype, progress_id = await self._start_qzone_share_progress(
+            period, stype, progress_id = await self.owner._start_qzone_share_progress(
                 force_type=force_type,
                 history_source=history_source,
             )
 
-            share_context = await self.ctx_service.get_qzone_share_context()
+            share_context = await self.owner.ctx_service.get_qzone_share_context()
             life_ctx = share_context["life_context"]
             post_ctx = share_context["post_context"]
             news_data = None
             if stype == ShareType.NEWS:
-                loaded_news, news_data = await self._load_qzone_news_data(
+                loaded_news, news_data = await self.owner._load_qzone_news_data(
                     news_source=news_source,
                     event=event,
                     history_source=history_source,
@@ -184,7 +141,7 @@ class TaskQzoneFlowService(TaskServiceBase):
                 if not loaded_news:
                     return False
 
-            clean_qzone_content = await self._generate_qzone_content(
+            clean_qzone_content = await self.owner._generate_qzone_content(
                 stype=stype,
                 period=period,
                 post_ctx=post_ctx,
@@ -195,7 +152,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             if not clean_qzone_content:
                 return False
 
-            return await self.send_prepared_qzone_share(
+            return await self.owner.send_prepared_qzone_share(
                 stype=stype,
                 content=clean_qzone_content,
                 life_ctx=life_ctx,
@@ -206,7 +163,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             )
 
         except Exception as e:
-            await self._record_qzone_share_exception(
+            await self.owner._record_qzone_share_exception(
                 error=e,
                 stype=stype,
                 history_source=history_source,
@@ -215,7 +172,6 @@ class TaskQzoneFlowService(TaskServiceBase):
             )
             return False
 
-    @preserve_share("qzone")
     async def send_prepared_qzone_share(
         self,
         *,
@@ -227,7 +183,7 @@ class TaskQzoneFlowService(TaskServiceBase):
         history_source: str,
         event: AstrMessageEvent | None = None,
     ) -> bool:
-        target_local_img = await self._generate_qzone_image(
+        target_local_img = await self.owner._generate_qzone_image(
             stype=stype,
             content=content,
             life_ctx=life_ctx,
@@ -235,13 +191,13 @@ class TaskQzoneFlowService(TaskServiceBase):
             progress_id=progress_id,
             event=event,
         )
-        qzone_images = await self._prepare_qzone_publish_media(
+        qzone_images = await self.owner._prepare_qzone_publish_media(
             target_local_img=target_local_img,
         )
-        continuations = getattr(self.plugin, "share_continuations", None)
+        continuations = getattr(self.owner.plugin, "share_continuations", None)
         if continuations is not None:
             await continuations.mark_submitting()
-        await self._publish_and_record_qzone_share(
+        await self.owner._publish_and_record_qzone_share(
             progress_id=progress_id,
             stype=stype,
             content=content,
@@ -249,7 +205,7 @@ class TaskQzoneFlowService(TaskServiceBase):
             target_local_img=target_local_img,
             history_source=history_source,
             news_snapshot_data=(
-                self.services.snapshots.news_snapshot_payload(
+                self.owner.services.snapshots.news_snapshot_payload(
                     news_data[0], news_data[1]
                 )
                 if (
@@ -263,7 +219,7 @@ class TaskQzoneFlowService(TaskServiceBase):
 
         if event:
             try:
-                await self.services.executor_helpers.sync_qzone_result_to_event(
+                await self.owner.services.executor_helpers.sync.sync_qzone_result_to_event(
                     event,
                     content,
                     target_local_img,
@@ -274,7 +230,7 @@ class TaskQzoneFlowService(TaskServiceBase):
                     "[日常分享] 同步发送内容到会话失败", e, with_traceback=False
                 )
 
-        self.services.progress.finish_share_progress(
+        self.owner.services.progress.finish_share_progress(
             progress_id, success=True, message="QQ 空间分享完成"
         )
         return True

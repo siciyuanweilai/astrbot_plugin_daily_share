@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from astrbot.api import logger
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzoneRelationService(PanelComponent):
+    qzone_service = RuntimeField("qzone_service")
+    qzone_tools = RuntimeField("qzone_tools")
+    server = RuntimeField("server")
+
     async def page_qzone_relation(self):
         async def handler():
             params = await self.server._page_query_params()

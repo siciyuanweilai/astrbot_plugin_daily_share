@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from astrbot.api.event import AstrMessageEvent
 
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class ImageStaticShareService(SupportComponent):
+    delivery_outbox = RuntimeField("delivery_outbox")
+    jobs = RuntimeField("jobs")
+    news_service = RuntimeField("news_service")
+    static_outbox = RuntimeField("static_outbox")
+
     async def _run_static_news_image_share(
         self, event: AstrMessageEvent, **kwargs
     ) -> None:

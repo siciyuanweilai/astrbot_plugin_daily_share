@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzoneEntryService(PanelComponent):
+    qzone_entry = RuntimeField("qzone_entry")
+    qzone_service = RuntimeField("qzone_service")
+    qzone_tools = RuntimeField("qzone_tools")
+    server = RuntimeField("server")
+
     async def page_qzone_entry(self):
         async def handler():
             params = await self.server._page_query_params()

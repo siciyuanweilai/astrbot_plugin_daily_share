@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
 from .mediajob import current_share_job
+
+if TYPE_CHECKING:
+    from .dailylife import DailyLifeBridge
 
 
 async def record_confirmed_share(
@@ -36,6 +40,9 @@ async def record_confirmed_share(
 
 
 class ShareDeliveryBridge:
+    def __init__(self, owner: DailyLifeBridge) -> None:
+        self.owner = owner
+
     @staticmethod
     def share_target(job: dict) -> str:
         if job.get("kind") == "qzone":
@@ -48,7 +55,7 @@ class ShareDeliveryBridge:
     ) -> bool:
         job = current_share_job.get()
         tasks = {}
-        if job and self.share_target(job) == str(target_umo):
+        if job and self.owner.share_target(job) == str(target_umo):
             for kind in media_kinds:
                 if kind in {"image", "video"}:
                     tasks[kind] = f"{job['id']}:{kind}"
@@ -58,18 +65,20 @@ class ShareDeliveryBridge:
             "media_tasks": tasks,
         }
         key = hashlib.sha256(json.dumps(receipt, sort_keys=True).encode()).hexdigest()
-        async with self._receipt_lock:
-            if self.db is not None:
-                await self.db.update_context_state(
+        async with self.owner._receipt_lock:
+            if self.owner.db is not None:
+                await self.owner.db.update_context_state(
                     "share_delivery_outbox", {key: receipt}
                 )
-            sent = await self._send_delivery_receipt(receipt)
-            if sent and self.db is not None:
-                await self.db.update_context_state("share_delivery_outbox", {key: None})
+            sent = await self.owner._send_delivery_receipt(receipt)
+            if sent and self.owner.db is not None:
+                await self.owner.db.update_context_state(
+                    "share_delivery_outbox", {key: None}
+                )
             return sent
 
     async def _send_delivery_receipt(self, receipt: dict) -> bool:
-        method = getattr(self._plugin(), "record_share_delivery", None)
+        method = getattr(self.owner._plugin(), "record_share_delivery", None)
         if not callable(method):
             return False
         try:
@@ -81,15 +90,19 @@ class ShareDeliveryBridge:
             return False
 
     async def flush_delivery_receipts(self) -> None:
-        if self.db is None:
+        if self.owner.db is None:
             return
-        async with self._receipt_lock:
-            receipts = await self.db.get_context_state("share_delivery_outbox", {})
+        async with self.owner._receipt_lock:
+            receipts = await self.owner.db.get_context_state(
+                "share_delivery_outbox", {}
+            )
             remaining = {}
             for key, receipt in (receipts or {}).items():
-                if isinstance(receipt, dict) and not await self._send_delivery_receipt(
-                    receipt
-                ):
+                if isinstance(
+                    receipt, dict
+                ) and not await self.owner._send_delivery_receipt(receipt):
                     remaining[key] = receipt
             if receipts:
-                await self.db.set_context_state("share_delivery_outbox", remaining)
+                await self.owner.db.set_context_state(
+                    "share_delivery_outbox", remaining
+                )

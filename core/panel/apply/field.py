@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 from ..revision import is_target_config_field
 
 
 class DashboardApplyFieldService(PanelComponent):
+    config = RuntimeField("config")
+    contact_aliases = RuntimeField("contact_aliases")
+    fields = RuntimeField("fields")
+    meta = RuntimeField("meta")
+    validation = RuntimeField("validation")
+
     def _page_payload_section(self, sections: dict, name: str) -> dict:
         """读取设置页分区，保持组件调用的实例方法契约。"""
         section = sections.get(name) if isinstance(sections, dict) else {}

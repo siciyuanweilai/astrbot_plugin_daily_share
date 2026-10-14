@@ -4,8 +4,11 @@ import copy
 import sys
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+
+from .testqzonecomment import _interaction_args
 
 from .testqzone import _load_qzone_service, _new_qzone_service, _parser
 from .testqzonecomment import FakeDb, _load_auto_comment_module
@@ -47,20 +50,25 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         self.service._remember_posts([self.post])
         self.task_module, _ = _load_auto_comment_module()
         service = self.service
+        task_module = self.task_module
 
         class Manager(self.task_module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(task_module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                     "qzone_auto_interaction_active_hours": 0,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=service,
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=service,
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.generated_for = []
 
@@ -171,7 +179,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         entry = state["20002:photo:album-1:pic-1!!:41_r_1790997849_20002"]
         self.assertEqual(entry["verification_status"], "confirmed")
         self.assertEqual(entry["verified_reply_to_uin"], 20002)
-        self.manager.db = FakeDb()
+        self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
         self.assertEqual((await self.run_task())["commented"], 0)
         self.assertEqual(len(self.manager.generated_for), 1)
         self.assertEqual(
@@ -241,7 +249,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             self.manager.generated_for, [("41", "41_r_1790997908_20002", 20002)]
         )
-        self.manager.db = FakeDb()
+        self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
         self.assertEqual((await self.run_task())["commented"], 0)
         self.assertEqual(
             sum(
@@ -297,7 +305,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         entry = state["10001:photo:album-1:pic-1!!:41_r_1790997849_20002"]
         self.assertEqual(entry["verification_status"], "confirmed")
         self.assertEqual(entry["verified_reply_to_uin"], 20002)
-        self.manager.db = FakeDb()
+        self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
         with patch("asyncio.sleep", new=AsyncMock()):
             result = await self.manager.execute_qzone_auto_reply()
         self.assertEqual(result["replied"], 0)
@@ -450,7 +458,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entry["verified_reply_to_uin"], 20002)
         self.assertEqual(entry["submitted_reply_id"], "1790958140")
         # 模拟重启后的空本地状态，仍可从查看器数据中识别机器人已有回复。
-        self.manager.db = FakeDb()
+        self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
         self.post.tid = "changed-feed-key"
         self.service._remember_posts([self.post])
         result = await self.run_task()
@@ -629,7 +637,7 @@ class PhotoThreadTests(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_target_or_unavailable_readback_never_reposts_or_deletes(self):
         for failure in ("wrong_target", "detail_failed"):
             with self.subTest(failure=failure):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.post.comments = []
                 self.service._post_detail_cache_at.clear()
                 submitted = False

@@ -349,7 +349,10 @@ class DashboardRunTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(dashboard._page_action_runs["retry-1"]["status"], "error")
-        self.assertEqual(dashboard._page_action_runs["retry-1"]["message"], "该发布目标已移除，无法重试")
+        self.assertEqual(
+            dashboard._page_action_runs["retry-1"]["message"],
+            "该发布目标已移除，无法重试",
+        )
         self.assertEqual(manager.execute_calls, [])
 
 

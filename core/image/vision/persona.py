@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 from ...identity import build_persona_figure_prompt
-from .judge import ImageVisualJudgeService
+from ...persona import selected_share_persona
+
+if TYPE_CHECKING:
+    from .. import ImageService
 
 
-class ImageVisualPersonaService(ImageVisualJudgeService):
+class ImageVisualPersonaService:
     """提取图片生成所需的人设外观信息。"""
+
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     async def _get_appearance_keywords(self, target_umo: str | None = None) -> str:
         """获取人设外貌。"""
         try:
-            p_obj = await self.context.persona_manager.get_default_persona_v3()
+            p_obj = await selected_share_persona(self.owner.context, target_umo)
             p_text = p_obj.get("prompt", "") if p_obj else ""
             if not p_text:
                 return ""
@@ -26,15 +34,15 @@ class ImageVisualPersonaService(ImageVisualJudgeService):
 人设描述：
 {p_text}
 请输出："""
-            res = await self._call_llm(prompt, timeout=20, target_umo=target_umo)
+            res = await self.owner._call_llm(prompt, timeout=20, target_umo=target_umo)
             return res.strip() if res else ""
         except Exception as e:
             logger.debug(f"[图像服务] 提取人设外貌失败: {e}")
             return ""
 
-    async def _get_persona_figure_keywords(self) -> str:
+    async def _get_persona_figure_keywords(self, target_umo: str | None = None) -> str:
         try:
-            p_obj = await self.context.persona_manager.get_default_persona_v3()
+            p_obj = await selected_share_persona(self.owner.context, target_umo)
             p_text = p_obj.get("prompt", "") if p_obj else ""
             return build_persona_figure_prompt(p_text)
         except Exception as e:

@@ -20,10 +20,6 @@ from .taskdelivery import TaskDeliveryService
 from .weixin import TaskDeliveryWeixinService
 
 
-class QzoneInteractionService(TaskServiceBase, TaskQzoneAutoCommentService):
-    """将 QQ 空间互动策略绑定到共享任务运行时。"""
-
-
 @dataclass(frozen=True, slots=True)
 class TaskServices:
     """任务编排使用的具名服务容器。"""
@@ -32,7 +28,7 @@ class TaskServices:
     targets: TaskTargetService
     schedule: TaskSchedulerService
     progress: TaskProgressService
-    qzone_interaction: QzoneInteractionService
+    qzone_interaction: TaskQzoneAutoCommentService
     executor_helpers: TaskExecutorHelperService
     type_selector: TaskTypeSelectorService
     briefing: TaskBriefingService
@@ -56,7 +52,7 @@ class TaskServices:
             targets=TaskTargetService(*args),
             schedule=TaskSchedulerService(*args),
             progress=TaskProgressService(*args),
-            qzone_interaction=QzoneInteractionService(*args),
+            qzone_interaction=TaskQzoneAutoCommentService(*args),
             executor_helpers=TaskExecutorHelperService(*args),
             type_selector=TaskTypeSelectorService(*args),
             briefing=TaskBriefingService(*args),

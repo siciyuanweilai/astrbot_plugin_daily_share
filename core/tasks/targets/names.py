@@ -1,14 +1,22 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from ..taskbase import TaskServiceBase
+if TYPE_CHECKING:
+    from . import TaskTargetService
 
 
-class TaskTargetIdentityService(TaskServiceBase):
+class TaskTargetIdentityService:
+    def __init__(self, owner: TaskTargetService) -> None:
+        self.owner = owner
+
     def get_contact_alias(
         self, target_uid: str, event: AstrMessageEvent | None = None
     ) -> str:
-        return self.plugin.get_contact_alias(target_uid, event=event)
+        return self.owner.plugin.get_contact_alias(target_uid, event=event)
 
     def clean_nickname_candidate(
         self, nickname: str, target_uid: str, event: AstrMessageEvent | None = None
@@ -20,14 +28,14 @@ class TaskTargetIdentityService(TaskServiceBase):
         target_s = str(target_uid or "").strip()
         if target_s:
             keys.add(target_s)
-            _, real_id = self.ctx_service.parse_umo(target_s)
+            _, real_id = self.owner.ctx_service.parse_umo(target_s)
             if real_id:
                 keys.add(real_id)
         if event:
             origin = str(event.unified_msg_origin or "").strip()
             if origin:
                 keys.add(origin)
-                _, real_id = self.ctx_service.parse_umo(origin)
+                _, real_id = self.owner.ctx_service.parse_umo(origin)
                 if real_id:
                     keys.add(real_id)
             try:
@@ -48,23 +56,23 @@ class TaskTargetIdentityService(TaskServiceBase):
     ) -> str:
         """获取任务进度里展示用的目标名称。"""
         target_s = str(target_uid or "").strip()
-        label = self.get_contact_alias(target_s, event=event)
+        label = self.owner.get_contact_alias(target_s, event=event)
         if label:
             return label
 
         if is_group is None:
-            is_group = self.ctx_service.is_group_chat(target_s)
+            is_group = self.owner.ctx_service.is_group_chat(target_s)
 
         if is_group:
-            return await self._get_onebot_group_name(target_s, event=event)
+            return await self.owner._get_onebot_group_name(target_s, event=event)
 
-        label = await self.get_onebot_nickname(target_s, event=event)
+        label = await self.owner.get_onebot_nickname(target_s, event=event)
         if label:
             return label
 
         if event:
             try:
-                return self.clean_nickname_candidate(
+                return self.owner.clean_nickname_candidate(
                     event.get_sender_name(), target_s, event=event
                 )
             except Exception as e:
@@ -75,23 +83,23 @@ class TaskTargetIdentityService(TaskServiceBase):
         self, target_uid: str, event: AstrMessageEvent | None = None
     ) -> str:
         target_s = str(target_uid or "").strip()
-        adapter_id, real_id = self.ctx_service.parse_umo(target_s)
+        adapter_id, real_id = self.owner.ctx_service.parse_umo(target_s)
         probe_id = real_id or target_s
         if not str(probe_id).isdigit():
             return ""
 
-        bot = self.ctx_service.get_onebot_bot(
+        bot = self.owner.ctx_service.get_onebot_bot(
             target_s, event=event, adapter_id=adapter_id
         )
         if not bot:
-            if event and self.ctx_service.is_onebot_event(event):
-                return self.clean_nickname_candidate(
+            if event and self.owner.ctx_service.is_onebot_event(event):
+                return self.owner.clean_nickname_candidate(
                     event.get_sender_name(), target_s, event=event
                 )
             return ""
 
         try:
-            ret = await self.ctx_service.call_onebot_action(
+            ret = await self.owner.ctx_service.call_onebot_action(
                 bot, "get_stranger_info", user_id=int(probe_id)
             )
             if isinstance(ret, dict) and isinstance(ret.get("data"), dict):
@@ -108,8 +116,8 @@ class TaskTargetIdentityService(TaskServiceBase):
         except Exception as e:
             logger.warning(f"[日常分享] 获取 QQ 昵称失败: {e}")
 
-        if event and self.ctx_service.is_onebot_event(event):
-            return self.clean_nickname_candidate(
+        if event and self.owner.ctx_service.is_onebot_event(event):
+            return self.owner.clean_nickname_candidate(
                 event.get_sender_name(), target_s, event=event
             )
         return ""
@@ -118,19 +126,19 @@ class TaskTargetIdentityService(TaskServiceBase):
         self, target_uid: str, event: AstrMessageEvent | None = None
     ) -> str:
         target_s = str(target_uid or "").strip()
-        adapter_id, real_id = self.ctx_service.parse_umo(target_s)
+        adapter_id, real_id = self.owner.ctx_service.parse_umo(target_s)
         probe_id = real_id or target_s
         if not str(probe_id).isdigit():
             return ""
 
-        bot = self.ctx_service.get_onebot_bot(
+        bot = self.owner.ctx_service.get_onebot_bot(
             target_s, event=event, adapter_id=adapter_id
         )
         if not bot:
             return ""
 
         try:
-            ret = await self.ctx_service.call_onebot_action(
+            ret = await self.owner.ctx_service.call_onebot_action(
                 bot, "get_group_info", group_id=int(probe_id)
             )
             if isinstance(ret, dict) and isinstance(ret.get("data"), dict):

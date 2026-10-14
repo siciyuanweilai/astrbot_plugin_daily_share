@@ -5,7 +5,7 @@ import base64
 import os
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from astrbot.api import logger
 
@@ -153,34 +153,64 @@ class QzoneService:
         return QzoneReplyIdentityService._comment_id_aliases(comment)
 
     @staticmethod
-    def _reply_submit_targets(*args, **kwargs):
-        return QzoneReplyTargetService._reply_submit_targets(*args, **kwargs)
-
-    @classmethod
-    def _filter_thread_reply_targets(cls, *args, **kwargs):
-        return QzoneReplyTargetService._filter_thread_reply_targets(*args, **kwargs)
-
-    @classmethod
-    def unsafe_thread_reply_target_reason(cls, *args, **kwargs):
-        return QzoneReplyTargetService.unsafe_thread_reply_target_reason(
-            *args, **kwargs
+    def _reply_submit_targets(post, comment, *, parent_comment=None):
+        return QzoneReplyTargetService._reply_submit_targets(
+            post, comment, parent_comment=parent_comment
         )
 
     @classmethod
-    def _thread_reply_payload_variants(cls, *args, **kwargs):
-        return QzoneReplyPlanService._thread_reply_payload_variants(*args, **kwargs)
+    def _filter_thread_reply_targets(cls, post, comment, *, parent_comment, targets):
+        return QzoneReplyTargetService._filter_thread_reply_targets(
+            post, comment, parent_comment=parent_comment, targets=targets
+        )
 
     @classmethod
-    def _reply_verification_target_ids(cls, *args, **kwargs):
-        return QzoneReplyVerifyService._reply_verification_target_ids(*args, **kwargs)
+    def unsafe_thread_reply_target_reason(cls, comment, *, parent_comment):
+        return QzoneReplyTargetService.unsafe_thread_reply_target_reason(
+            comment, parent_comment=parent_comment
+        )
 
     @classmethod
-    def _verify_thread_reply_in_post(cls, *args, **kwargs):
-        return QzoneReplyVerifyService._verify_thread_reply_in_post(*args, **kwargs)
+    def _thread_reply_payload_variants(
+        cls, post, comment, parent_comment, reply_targets
+    ):
+        return QzoneReplyPlanService._thread_reply_payload_variants(
+            post, comment, parent_comment, reply_targets
+        )
 
-    def has_thread_reply_submit_plan(self, *args, **kwargs):
-        return QzoneReplyTargetService.has_thread_reply_submit_plan(
-            self, *args, **kwargs
+    @classmethod
+    def _reply_verification_target_ids(cls, comment, *, parent_comment):
+        return QzoneReplyVerifyService._reply_verification_target_ids(
+            comment, parent_comment=parent_comment
+        )
+
+    @classmethod
+    def _verify_thread_reply_in_post(
+        cls,
+        post,
+        comment,
+        content,
+        *,
+        self_uin,
+        target_ids,
+        parent_ids,
+        before_ids,
+        submitted_at,
+    ):
+        return QzoneReplyVerifyService._verify_thread_reply_in_post(
+            post,
+            comment,
+            content,
+            self_uin=self_uin,
+            target_ids=target_ids,
+            parent_ids=parent_ids,
+            before_ids=before_ids,
+            submitted_at=submitted_at,
+        )
+
+    def has_thread_reply_submit_plan(self, post, comment, *, parent_comment):
+        return self.reply_targets.has_thread_reply_submit_plan(
+            post, comment, parent_comment=parent_comment
         )
 
     def __init__(self, plugin):
@@ -206,233 +236,57 @@ class QzoneService:
             tuple, tuple[float, list[QzonePost], dict[str, Any]]
         ] = {}
         self._last_friend_feeds_meta: dict[str, Any] = {}
+        self.gateway = QzoneClientGateway(self)
+        self.native = QzoneH5NativeService(self)
+        self.headers = QzoneHeaderService(self)
+        self.cookies = QzoneH5CookieService(self)
+        self.timeline = QzoneFeedQueryService(self)
+        self.errors = QzoneH5ErrorService(self)
+        self.packets = QzoneH5BaseService(self)
+        self.requests = QzoneH5RequestService(self)
+        self.replies = QzoneCommentReplyService(self)
+        self.comment_tools = QzoneCommentUtilService(self)
+        self.comments = QzoneCommentPostService(self)
+        self.deletion = QzoneCommentDeleteService(self)
+        self.details = QzoneFeedDetailService(self)
+        self.extra = QzoneFeedExtraService(self)
+        self.posts = QzoneFeedPostsService(self)
+        self.home = QzoneFeedHomeService(self)
+        self.recent = QzoneFeedRecentService(self)
+        self.merge = QzoneFeedMergeService(self)
+        self.reply_targets = QzoneReplyTargetService(self)
+        self.reply_payloads = QzoneReplyPayloadService(self)
+        self.reply_verification = QzoneReplyVerifyService(self)
+        self.reply_plans = QzoneReplyPlanService(self)
+        self.reply_identity = QzoneReplyIdentityService(self)
+        self.photos = QzonePhotoService(self)
 
-    _addreply_ugc_comment_data: Any = (
-        QzoneReplyPayloadService._addreply_ugc_comment_data
-    )
-    _annotate_h5_response = staticmethod(QzoneH5BaseService._annotate_h5_response)
-    _api_timeout_seconds: Any = QzoneClientGateway._api_timeout_seconds
-    _attach_reply_failure_debug: Any = classmethod(
-        cast(Any, QzoneReplyVerifyService._attach_reply_failure_debug).__func__
-    )
-    _bot_nickname: Any = QzoneClientGateway._bot_nickname
-    _ensure_bot_cache_scope: Any = QzoneClientGateway._ensure_bot_cache_scope
-    _ensure_request_bot: Any = QzoneClientGateway._ensure_request_bot
-    _can_try_addreply_ugc_thread_variant: Any = classmethod(
-        cast(Any, QzoneReplyTargetService._can_try_addreply_ugc_thread_variant).__func__
-    )
-    _cleanup_failed_thread_reply: Any = (
-        QzoneReplyVerifyService._cleanup_failed_thread_reply
-    )
-    _close_h5_native_h2_writer = staticmethod(
-        QzoneH5NativeService._close_h5_native_h2_writer
-    )
-    _comment_alias_map: Any = classmethod(
-        cast(Any, QzoneReplyVerifyService._comment_alias_map).__func__
-    )
-    _comment_h5_headers: Any = QzoneHeaderService._comment_h5_headers
-    _comment_sns_headers: Any = QzoneHeaderService._comment_sns_headers
-    _comment_submit_ok: Any = QzoneCommentUtilService._comment_submit_ok
-    _comment_submit_tid_rank = staticmethod(
-        QzoneFeedMergeService._comment_submit_tid_rank
-    )
-    _comments_equivalent = staticmethod(QzoneFeedMergeService._comments_equivalent)
-    _context_from_cookie: Any = QzoneClientGateway._context_from_cookie
-    _cookie_header_from_values = staticmethod(
-        QzoneHeaderService._cookie_header_from_values
-    )
-    _cookie_values_from_header = staticmethod(
-        QzoneHeaderService._cookie_values_from_header
-    )
-    _decode_h5_body = staticmethod(QzoneH5BaseService._decode_h5_body)
-    _decode_mojibake = staticmethod(QzoneCommentUtilService._decode_mojibake)
-    _delete_comment_via_pc: Any = QzoneCommentDeleteService._delete_comment_via_pc
-    _delete_comment_via_sns: Any = QzoneCommentDeleteService._delete_comment_via_sns
-    _ensure_h5_native_h2_alpn = staticmethod(
-        QzoneH5NativeService._ensure_h5_native_h2_alpn
-    )
-    _ensure_reply_plans: Any = QzoneCommentReplyService._ensure_reply_plans
-    _feeds3_headers: Any = QzoneHeaderService._feeds3_headers
-    _fetch_bot_cookie: Any = QzoneClientGateway._fetch_bot_cookie
-    _friend_feeds_has_more = staticmethod(QzoneFeedQueryService._friend_feeds_has_more)
-    _friend_feeds_next_cursor = staticmethod(
-        QzoneFeedQueryService._friend_feeds_next_cursor
-    )
-    _friend_feeds_params: Any = QzoneFeedQueryService._friend_feeds_params
-    _friend_feeds_payload_meta = staticmethod(
-        QzoneFeedQueryService._friend_feeds_payload_meta
-    )
-    _get_bot: Any = QzoneClientGateway._get_bot
-    _h2_http: Any = QzoneClientGateway._h2_http
-    _h5_aiohttp_headers: Any = QzoneH5CookieService._h5_aiohttp_headers
-    _h5_comment_data: Any = QzoneReplyPayloadService._h5_comment_data
-    _h5_cookie_header: Any = QzoneH5CookieService._h5_cookie_header
-    _h5_cookie_uin = staticmethod(QzoneH5CookieService._h5_cookie_uin)
-    _h5_cookie_variants: Any = QzoneH5CookieService._h5_cookie_variants
-    _h5_error_message: Any = QzoneH5ErrorService._h5_error_message
-    _h5_headers: Any = QzoneH5CookieService._h5_headers
-    _h5_json_body = staticmethod(QzoneH5BaseService._h5_json_body)
-    _h5_login_expired: Any = classmethod(
-        cast(Any, QzoneH5ErrorService._h5_login_expired).__func__
-    )
-    _h5_login_expired_message = staticmethod(
-        QzoneH5ErrorService._h5_login_expired_message
-    )
-    _h5_minimal_cookie_header: Any = QzoneH5CookieService._h5_minimal_cookie_header
-    _h5_minimal_headers: Any = QzoneH5CookieService._h5_minimal_headers
-    _h5_native_h2_header_items: Any = QzoneH5NativeService._h5_native_h2_header_items
-    _h5_native_request_path = staticmethod(QzoneH5NativeService._h5_native_request_path)
-    _h5_ok = staticmethod(QzoneH5BaseService._h5_ok)
-    _h5_post_body: Any = QzoneH5RequestService._h5_post_body
-    _h5_post_body_once: Any = QzoneH5RequestService._h5_post_body_once
-    _h5_post_bytes: Any = QzoneH5RequestService._h5_post_bytes
-    _h5_post_json: Any = QzoneH5RequestService._h5_post_json
-    _h5_post_json_native_h2: Any = QzoneH5NativeService._h5_post_json_native_h2
-    _h5_reply_target_id: Any = classmethod(
-        cast(Any, QzoneReplyPayloadService._h5_reply_target_id).__func__
-    )
-    _h5_should_retry_http11 = staticmethod(QzoneH5ErrorService._h5_should_retry_http11)
-    _h5_should_retry_same_transport = staticmethod(
-        QzoneH5ErrorService._h5_should_retry_same_transport
-    )
-    _h5_thread_parent_comment_data: Any = (
-        QzoneReplyPayloadService._h5_thread_parent_comment_data
-    )
-    _h5_transient_or_unstructured_failure: Any = classmethod(
-        cast(Any, QzoneH5ErrorService._h5_transient_or_unstructured_failure).__func__
-    )
-    _h5_transient_or_unstructured_message = staticmethod(
-        QzoneH5ErrorService._h5_transient_or_unstructured_message
-    )
-    _h5_transport_error: Any = QzoneH5ErrorService._h5_transport_error
-    _handle_h5_native_h2_event: Any = QzoneH5NativeService._handle_h5_native_h2_event
-    _has_cookie_header = staticmethod(QzoneHeaderService._has_cookie_header)
-    _headers: Any = QzoneHeaderService._headers
-    _http: Any = QzoneClientGateway._http
-    _is_short_numeric_comment_id = staticmethod(
-        QzoneReplyTargetService._is_short_numeric_comment_id
-    )
-    _match_detail_comment: Any = classmethod(
-        cast(Any, QzoneFeedMergeService._match_detail_comment).__func__
-    )
-    _merge_comment: Any = classmethod(
-        cast(Any, QzoneFeedMergeService._merge_comment).__func__
-    )
-    _merge_comments: Any = classmethod(
-        cast(Any, QzoneFeedMergeService._merge_comments).__func__
-    )
-    _merge_post_detail: Any = classmethod(
-        cast(Any, QzoneFeedMergeService._merge_post_detail).__func__
-    )
-    _mood_v6_referrer: Any = QzoneReplyPayloadService._mood_v6_referrer
-    _normalize_reply_verification_text = staticmethod(
-        QzoneReplyVerifyService._normalize_reply_verification_text
-    )
-    _ok = staticmethod(QzoneClientGateway._ok)
-    _open_h5_native_h2_connection: Any = (
-        QzoneH5NativeService._open_h5_native_h2_connection
-    )
-    _parse_detail_post = staticmethod(QzoneFeedDetailService._parse_detail_post)
-    _payload_message = staticmethod(QzoneCommentUtilService._payload_message)
-    _pc_form_headers: Any = QzoneHeaderService._pc_form_headers
-    _prefer_h5_reply = staticmethod(QzoneReplyTargetService._prefer_h5_reply)
-    _prefer_submit_tid: Any = classmethod(
-        cast(Any, QzoneFeedMergeService._prefer_submit_tid).__func__
-    )
-    _query_recent_post_details: Any = QzoneFeedRecentService._query_recent_post_details
-    _read_h5_native_h2_response: Any = QzoneH5NativeService._read_h5_native_h2_response
-    _recent_posts_params: Any = QzoneFeedQueryService._recent_posts_params
-    _reply_attempt_debug: Any = QzoneCommentReplyService._reply_attempt_debug
-    _reply_attempt_key = staticmethod(QzoneCommentReplyService._reply_attempt_key)
-    _reply_content = staticmethod(QzoneCommentUtilService._reply_content)
-    _reply_submit_plan: Any = QzoneReplyPlanService._reply_submit_plan
-    _reply_submit_plans: Any = QzoneReplyPlanService._reply_submit_plans
-    _reply_target_unavailable = staticmethod(
-        QzoneCommentUtilService._reply_target_unavailable
-    )
-    _reply_verification_candidate_debug = staticmethod(
-        QzoneReplyVerifyService._reply_verification_candidate_debug
-    )
-    _reply_verification_debug_fields = staticmethod(
-        QzoneReplyVerifyService._reply_verification_debug_fields
-    )
-    _reply_verification_error_message = staticmethod(
-        QzoneReplyVerifyService._reply_verification_error_message
-    )
-    _reply_verification_existing_self_ids: Any = classmethod(
-        cast(
-            Any, QzoneReplyVerifyService._reply_verification_existing_self_ids
-        ).__func__
-    )
-    _reply_verification_is_new_self_comment: Any = classmethod(
-        cast(
-            Any, QzoneReplyVerifyService._reply_verification_is_new_self_comment
-        ).__func__
-    )
-    _reply_verification_target_status: Any = classmethod(
-        cast(Any, QzoneReplyVerifyService._reply_verification_target_status).__func__
-    )
-    _reply_verification_text_matches: Any = classmethod(
-        cast(Any, QzoneReplyVerifyService._reply_verification_text_matches).__func__
-    )
-    _reply_verification_text_variants: Any = classmethod(
-        cast(Any, QzoneReplyVerifyService._reply_verification_text_variants).__func__
-    )
-    _request: Any = QzoneClientGateway._request
-    _request_text: Any = QzoneClientGateway._request_text
-    _refresh_request_credentials: Any = QzoneClientGateway._refresh_request_credentials
-    _safe_post_detail: Any = QzoneFeedDetailService._safe_post_detail
-    _self_reply_thread_state: Any = classmethod(
-        cast(Any, QzoneReplyTargetService._self_reply_thread_state).__func__
-    )
-    _send_h5_native_h2_request = staticmethod(
-        QzoneH5NativeService._send_h5_native_h2_request
-    )
-    _sns_comment_data: Any = QzoneReplyPayloadService._sns_comment_data
-    _thread_reply_re_feeds_payload_variants = staticmethod(
-        QzoneReplyPlanService._thread_reply_re_feeds_payload_variants
-    )
-    _unsafe_thread_reply_target_reason: Any = classmethod(
-        cast(Any, QzoneReplyTargetService._unsafe_thread_reply_target_reason).__func__
-    )
-    _verified_reply_result: Any = QzoneCommentReplyService._verified_reply_result
-    _verify_thread_reply_submission: Any = (
-        QzoneReplyVerifyService._verify_thread_reply_submission
-    )
-    _with_h5_phase: Any = QzoneH5ErrorService._with_h5_phase
+    async def close(self):
+        return await self.gateway.close()
 
-    async def close(self) -> None:
-        await QzoneClientGateway.close(self)
+    def invalidate(self):
+        return self.gateway.invalidate()
 
-    def invalidate(self) -> None:
-        QzoneClientGateway.invalidate(self)
+    def configured(self):
+        return self.gateway.configured()
 
-    def configured(self) -> bool:
-        return QzoneClientGateway.configured(self)
+    async def status(self):
+        return await self.gateway.status()
 
-    async def status(self) -> dict:
-        return await QzoneClientGateway.status(self)
+    async def context(self):
+        return await self.gateway.context()
 
-    async def context(self) -> QzoneContext:
-        return await QzoneClientGateway.context(self)
+    async def comment(self, post_id, content):
+        return await self.comments.comment(post_id, content)
 
-    async def comment(self, post_id: str, content: str) -> None:
-        await QzoneCommentPostService.comment(self, post_id, content)
-
-    async def query_photo_posts(self, post_id: str) -> list[QzonePost]:
-        return await QzonePhotoService.query_photo_posts(self, post_id)
+    async def query_photo_posts(self, post_id):
+        """读取动态中明确标识的照片，分别建立可安全提交的目标。"""
+        return await self.photos.query_photo_posts(post_id)
 
     async def query_photo(
-        self,
-        *,
-        owner_uin: int | str,
-        album_id: str,
-        pic_key: str,
-        photo_t: str = "",
-        comment_count: int = 10,
+        self, *, owner_uin, album_id, pic_key, photo_t="", comment_count=10
     ):
-        return await QzonePhotoService.query_photo(
-            self,
+        return await self.photos.query_photo(
             owner_uin=owner_uin,
             album_id=album_id,
             pic_key=pic_key,
@@ -441,16 +295,9 @@ class QzoneService:
         )
 
     async def comment_photo(
-        self,
-        *,
-        owner_uin: int | str,
-        album_id: str,
-        pic_key: str,
-        content: str,
-        feed_topic_id: str = "",
+        self, *, owner_uin, album_id, pic_key, content, feed_topic_id=""
     ):
-        return await QzonePhotoService.comment_photo(
-            self,
+        return await self.photos.comment_photo(
             owner_uin=owner_uin,
             album_id=album_id,
             pic_key=pic_key,
@@ -461,16 +308,16 @@ class QzoneService:
     async def reply_photo_comment(
         self,
         *,
-        owner_uin: int | str,
-        album_id: str,
-        pic_key: str,
-        comment: QzoneComment,
-        content: str,
-        feed_topic_id: str = "",
-        parent_comment: QzoneComment | None = None,
-    ) -> dict[str, Any]:
-        return await QzonePhotoService.reply_photo_comment(
-            self,
+        owner_uin,
+        album_id,
+        pic_key,
+        comment,
+        content,
+        feed_topic_id="",
+        parent_comment=None,
+    ):
+        """在原照片评论楼层内回评，并 @ 当前被回复者。"""
+        return await self.photos.reply_photo_comment(
             owner_uin=owner_uin,
             album_id=album_id,
             pic_key=pic_key,
@@ -480,133 +327,62 @@ class QzoneService:
             parent_comment=parent_comment,
         )
 
-    async def delete_comment(
-        self,
-        post: QzonePost | str,
-        comment_id: str,
-        *,
-        comment_uin: int = 0,
-        ctx: QzoneContext | None = None,
-    ) -> dict:
-        return await QzoneCommentDeleteService.delete_comment(
-            self,
-            post,
-            comment_id,
-            comment_uin=comment_uin,
-            ctx=ctx,
+    async def delete_comment(self, post, comment_id, *, comment_uin=0, ctx=None):
+        return await self.deletion.delete_comment(
+            post, comment_id, comment_uin=comment_uin, ctx=ctx
         )
 
-    async def reply_comment(
-        self,
-        post_id: str,
-        comment: QzoneComment,
-        content: str,
-        *,
-        parent_comment: QzoneComment | None = None,
-    ) -> dict[str, Any]:
-        return await QzoneCommentReplyService.reply_comment(
-            self,
-            post_id,
-            comment,
-            content,
-            parent_comment=parent_comment,
+    async def reply_comment(self, post_id, comment, content, *, parent_comment=None):
+        return await self.replies.reply_comment(
+            post_id, comment, content, parent_comment=parent_comment
         )
 
-    async def detail(self, post_id: str) -> QzonePost:
-        return await QzoneFeedDetailService.detail(self, post_id)
+    async def detail(self, post_id):
+        return await self.details.detail(post_id)
 
     @property
-    def last_friend_feeds_meta(self) -> dict[str, Any]:
-        return QzoneFeedQueryService.last_friend_feeds_meta.fget(self)
+    def last_friend_feeds_meta(self):
+        return self.timeline.last_friend_feeds_meta
 
-    async def query_posts(
-        self,
-        *,
-        target_id: str = "",
-        pos: int = 0,
-        num: int = 5,
-        with_detail: bool = False,
-    ) -> list[QzonePost]:
-        return await QzoneFeedPostsService.query_posts(
-            self,
-            target_id=target_id,
-            pos=pos,
-            num=num,
-            with_detail=with_detail,
+    async def query_posts(self, *, target_id="", pos=0, num=5, with_detail=False):
+        return await self.posts.query_posts(
+            target_id=target_id, pos=pos, num=num, with_detail=with_detail
         )
 
-    async def query_home_posts(self, *, pos: int = 0, num: int = 5) -> list[QzonePost]:
-        return await QzoneFeedHomeService.query_home_posts(self, pos=pos, num=num)
+    async def query_home_posts(self, *, pos=0, num=5):
+        return await self.home.query_home_posts(pos=pos, num=num)
 
-    async def query_recent_posts(
-        self,
-        *,
-        pos: int = 0,
-        num: int = 5,
-        with_detail: bool = False,
-        cursor: str = "",
-    ) -> list[QzonePost]:
-        return await QzoneFeedRecentService.query_recent_posts(
-            self,
-            pos=pos,
-            num=num,
-            with_detail=with_detail,
-            cursor=cursor,
+    async def query_recent_posts(self, *, pos=0, num=5, with_detail=False, cursor=""):
+        return await self.recent.query_recent_posts(
+            pos=pos, num=num, with_detail=with_detail, cursor=cursor
         )
 
-    async def query_about_me(
-        self, *, offset: int = 0, count: int = 10
-    ) -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_about_me(
-            self, offset=offset, count=count
+    async def query_about_me(self, *, offset=0, count=10):
+        return await self.extra.query_about_me(offset=offset, count=count)
+
+    async def query_mention_posts(self, *, offset=0, count=10, with_detail=True):
+        return await self.extra.query_mention_posts(
+            offset=offset, count=count, with_detail=with_detail
         )
 
-    async def query_mention_posts(
-        self,
-        *,
-        offset: int = 0,
-        count: int = 10,
-        with_detail: bool = True,
-    ) -> list[QzonePost]:
-        return await QzoneFeedExtraService.query_mention_posts(
-            self,
-            offset=offset,
-            count=count,
-            with_detail=with_detail,
+    async def query_last_year(self, *, year=None, count=10):
+        return await self.extra.query_last_year(year=year, count=count)
+
+    async def query_favorites(self, *, start=0, num=10, favorite_type=0):
+        return await self.extra.query_favorites(
+            start=start, num=num, favorite_type=favorite_type
         )
 
-    async def query_last_year(
-        self, *, year: int | None = None, count: int = 10
-    ) -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_last_year(self, year=year, count=count)
-
-    async def query_favorites(
-        self, *, start: int = 0, num: int = 10, favorite_type: int = 0
-    ) -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_favorites(
-            self,
-            start=start,
-            num=num,
-            favorite_type=favorite_type,
+    async def query_message_board(self, *, target_id="", start=0, num=10):
+        return await self.extra.query_message_board(
+            target_id=target_id, start=start, num=num
         )
 
-    async def query_message_board(
-        self, *, target_id: str = "", start: int = 0, num: int = 10
-    ) -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_message_board(
-            self,
-            target_id=target_id,
-            start=start,
-            num=num,
-        )
+    async def query_relations(self, *, relation_type="care"):
+        return await self.extra.query_relations(relation_type=relation_type)
 
-    async def query_relations(self, *, relation_type: str = "care") -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_relations(
-            self, relation_type=relation_type
-        )
-
-    async def query_visit_stats(self) -> dict[str, Any]:
-        return await QzoneFeedExtraService.query_visit_stats(self)
+    async def query_visit_stats(self):
+        return await self.extra.query_visit_stats()
 
     @staticmethod
     def _base64_ascii(image_data: bytes) -> str:
@@ -812,29 +588,51 @@ class QzoneService:
 
     async def like(self, post_id: str) -> None:
         post = self._require_post(post_id)
+        if post.like_target_error:
+            raise RuntimeError(post.like_target_error)
+        if post.liked:
+            return
+        unikey, curkey = post.like_keys
         ctx = await self.context()
+        referer = f"{self.BASE_URL}/{post.uin}/main"
         payload = await self._request(
             "POST",
             self.LIKE_URL,
             params={"g_tk": ctx.gtk},
             data={
-                "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",
+                "qzreferrer": referer,
                 "opuin": ctx.uin,
-                "unikey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
-                "curkey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
-                "appid": 311,
-                "from": 1,
-                "typeid": 0,
-                "abstime": int(time.time()),
-                "fid": post.tid,
-                "active": 0,
-                "format": "json",
+                "unikey": unikey,
+                "curkey": curkey,
+                "from": -100,
                 "fupdate": 1,
+                "face": 0,
             },
+            headers=self._headers(
+                ctx,
+                Referer=referer,
+                Accept="*/*",
+                **{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+            ),
+            retry_parse_error=False,
         )
-        if not self._ok(payload):
-            raise RuntimeError(str(payload.get("message") or "QQ 空间点赞失败"))
+        try:
+            success = (
+                int(payload["code"]) == 0
+                and all(int(payload.get(key) or 0) == 0 for key in ("subcode", "ret"))
+                and 200 <= int(payload.get("_http_status", 200)) < 300
+            )
+        except (KeyError, TypeError, ValueError):
+            success = False
+        if not success:
+            message = self._payload_message(payload) or "QQ 空间点赞失败"
+            raise RuntimeError(
+                f"{message}（transport=pc_like, appid={post.appid}, "
+                f"code={payload.get('code')}, subcode={payload.get('subcode')}, "
+                f"ret={payload.get('ret')}, http={payload.get('_http_status')}）"
+            )
         post.liked = True
+        self._invalidate_qzone_cache(post_id=post.key, target_id=str(post.uin))
 
     async def delete_post(self, post_id: str) -> None:
         post = self._require_post(post_id)
@@ -1026,3 +824,635 @@ class QzoneService:
                 self._post_cache[key] = post
                 return post
         raise RuntimeError("说说引用已失效，请先刷新 QQ 空间动态")
+
+    def _refresh_request_credentials(
+        self, old_ctx, new_ctx, *, params=None, data=None, headers=None
+    ):
+        return self.gateway._refresh_request_credentials(
+            old_ctx, new_ctx, params=params, data=data, headers=headers
+        )
+
+    def _ensure_bot_cache_scope(self):
+        """登录态、列表和详情缓存属于同一个机器人实例。"""
+        return self.gateway._ensure_bot_cache_scope()
+
+    def _ensure_request_bot(self, bot, method):
+        return self.gateway._ensure_request_bot(bot, method)
+
+    def _get_bot(self):
+        return self.gateway._get_bot()
+
+    async def _fetch_bot_cookie(self, *, bot=None):
+        return await self.gateway._fetch_bot_cookie(bot=bot)
+
+    async def _context_from_cookie(self, cookie, *, bot=None):
+        return await self.gateway._context_from_cookie(cookie, bot=bot)
+
+    async def _bot_nickname(self, fallback, *, bot=None):
+        return await self.gateway._bot_nickname(fallback, bot=bot)
+
+    async def _http(self):
+        return await self.gateway._http()
+
+    async def _h2_http(self):
+        return await self.gateway._h2_http()
+
+    def _api_timeout_seconds(self):
+        return self.gateway._api_timeout_seconds()
+
+    async def _request(
+        self,
+        method,
+        url,
+        *,
+        params=None,
+        data=None,
+        headers=None,
+        retry=True,
+        retry_parse_error=True,
+    ):
+        return await self.gateway._request(
+            method,
+            url,
+            params=params,
+            data=data,
+            headers=headers,
+            retry=retry,
+            retry_parse_error=retry_parse_error,
+        )
+
+    async def _request_text(
+        self, method, url, *, params=None, data=None, headers=None, retry=True
+    ):
+        return await self.gateway._request_text(
+            method, url, params=params, data=data, headers=headers, retry=retry
+        )
+
+    @staticmethod
+    def _ok(payload, *, code_key="code"):
+        return QzoneClientGateway._ok(payload, code_key=code_key)
+
+    @staticmethod
+    def _h5_native_request_path(url, params=None):
+        return QzoneH5NativeService._h5_native_request_path(url, params)
+
+    async def _open_h5_native_h2_connection(self, parsed_url):
+        return await self.native._open_h5_native_h2_connection(parsed_url)
+
+    @staticmethod
+    def _ensure_h5_native_h2_alpn(writer):
+        return QzoneH5NativeService._ensure_h5_native_h2_alpn(writer)
+
+    def _h5_native_h2_header_items(self, ctx, parsed_url, path, headers=None):
+        return self.native._h5_native_h2_header_items(ctx, parsed_url, path, headers)
+
+    @staticmethod
+    def _send_h5_native_h2_request(writer, conn, header_items, body):
+        return QzoneH5NativeService._send_h5_native_h2_request(
+            writer, conn, header_items, body
+        )
+
+    def _handle_h5_native_h2_event(self, conn, event, response):
+        return self.native._handle_h5_native_h2_event(conn, event, response)
+
+    async def _read_h5_native_h2_response(self, reader, writer, conn):
+        return await self.native._read_h5_native_h2_response(reader, writer, conn)
+
+    @staticmethod
+    def _close_h5_native_h2_writer(writer):
+        return QzoneH5NativeService._close_h5_native_h2_writer(writer)
+
+    async def _h5_post_json_native_h2(
+        self, ctx, url, payload, *, params=None, headers=None
+    ):
+        return await self.native._h5_post_json_native_h2(
+            ctx, url, payload, params=params, headers=headers
+        )
+
+    @staticmethod
+    def _cookie_values_from_header(cookie):
+        return QzoneHeaderService._cookie_values_from_header(cookie)
+
+    @staticmethod
+    def _cookie_header_from_values(values):
+        return QzoneHeaderService._cookie_header_from_values(values)
+
+    def _headers(self, ctx, **extra):
+        return self.headers._headers(ctx, **extra)
+
+    def _pc_form_headers(self, ctx, *, referer=""):
+        return self.headers._pc_form_headers(ctx, referer=referer)
+
+    def _comment_h5_headers(self, ctx, *, referer=""):
+        return self.headers._comment_h5_headers(ctx, referer=referer)
+
+    def _comment_sns_headers(self, ctx, *, referer=""):
+        return self.headers._comment_sns_headers(ctx, referer=referer)
+
+    def _feeds3_headers(self, ctx):
+        return self.headers._feeds3_headers(ctx)
+
+    @staticmethod
+    def _has_cookie_header(headers):
+        return QzoneHeaderService._has_cookie_header(headers)
+
+    @staticmethod
+    def _h5_cookie_uin(ctx):
+        return QzoneH5CookieService._h5_cookie_uin(ctx)
+
+    def _h5_minimal_cookie_header(self, ctx, *, o_prefix=False):
+        return self.cookies._h5_minimal_cookie_header(ctx, o_prefix=o_prefix)
+
+    def _h5_cookie_header(self, ctx, *, o_prefix=False):
+        return self.cookies._h5_cookie_header(ctx, o_prefix=o_prefix)
+
+    def _h5_headers(self, ctx):
+        return self.cookies._h5_headers(ctx)
+
+    def _h5_minimal_headers(self, ctx, *, o_prefix=False):
+        return self.cookies._h5_minimal_headers(ctx, o_prefix=o_prefix)
+
+    def _h5_cookie_variants(self, ctx):
+        return self.cookies._h5_cookie_variants(ctx)
+
+    def _h5_aiohttp_headers(self, ctx):
+        return self.cookies._h5_aiohttp_headers(ctx)
+
+    def _recent_posts_params(self, ctx, *, count, cursor=""):
+        return self.timeline._recent_posts_params(ctx, count=count, cursor=cursor)
+
+    def _friend_feeds_params(self, ctx, *, count, cursor=""):
+        return self.timeline._friend_feeds_params(ctx, count=count, cursor=cursor)
+
+    @staticmethod
+    def _friend_feeds_next_cursor(payload):
+        return QzoneFeedQueryService._friend_feeds_next_cursor(payload)
+
+    @staticmethod
+    def _friend_feeds_has_more(payload, posts):
+        return QzoneFeedQueryService._friend_feeds_has_more(payload, posts)
+
+    @staticmethod
+    def _friend_feeds_payload_meta(payload):
+        return QzoneFeedQueryService._friend_feeds_payload_meta(payload)
+
+    def _h5_error_message(self, payload, fallback):
+        return self.errors._h5_error_message(payload, fallback)
+
+    @classmethod
+    def _h5_transient_or_unstructured_failure(cls, payload):
+        return QzoneH5ErrorService._h5_transient_or_unstructured_failure(payload)
+
+    @staticmethod
+    def _h5_transient_or_unstructured_message(message):
+        return QzoneH5ErrorService._h5_transient_or_unstructured_message(message)
+
+    @staticmethod
+    def _h5_login_expired_message(message):
+        return QzoneH5ErrorService._h5_login_expired_message(message)
+
+    @classmethod
+    def _h5_login_expired(cls, payload):
+        return QzoneH5ErrorService._h5_login_expired(payload)
+
+    def _with_h5_phase(self, message, phase):
+        return self.errors._with_h5_phase(message, phase)
+
+    @staticmethod
+    def _h5_should_retry_http11(status, transport):
+        return QzoneH5ErrorService._h5_should_retry_http11(status, transport)
+
+    @staticmethod
+    def _h5_should_retry_same_transport(status):
+        return QzoneH5ErrorService._h5_should_retry_same_transport(status)
+
+    def _h5_transport_error(self, exc, *, phase):
+        return self.errors._h5_transport_error(exc, phase=phase)
+
+    @staticmethod
+    def _h5_json_body(payload):
+        return QzoneH5BaseService._h5_json_body(payload)
+
+    @staticmethod
+    def _decode_h5_body(raw, encoding=""):
+        return QzoneH5BaseService._decode_h5_body(raw, encoding)
+
+    @staticmethod
+    def _annotate_h5_response(payload, *, status, text, label, transport):
+        return QzoneH5BaseService._annotate_h5_response(
+            payload, status=status, text=text, label=label, transport=transport
+        )
+
+    @staticmethod
+    def _h5_ok(payload):
+        return QzoneH5BaseService._h5_ok(payload)
+
+    async def _h5_post_json(
+        self,
+        ctx,
+        url,
+        payload,
+        *,
+        params=None,
+        label="",
+        prefer_native_h2=False,
+        headers=None,
+    ):
+        return await self.requests._h5_post_json(
+            ctx,
+            url,
+            payload,
+            params=params,
+            label=label,
+            prefer_native_h2=prefer_native_h2,
+            headers=headers,
+        )
+
+    async def _h5_post_bytes(
+        self, ctx, url, body, content_type, *, params=None, label="", headers=None
+    ):
+        return await self.requests._h5_post_bytes(
+            ctx, url, body, content_type, params=params, label=label, headers=headers
+        )
+
+    async def _h5_post_body_once(self, ctx, url, body, *, params, headers, use_h2):
+        return await self.requests._h5_post_body_once(
+            ctx, url, body, params=params, headers=headers, use_h2=use_h2
+        )
+
+    async def _h5_post_body(
+        self, ctx, url, body, *, params=None, label="", headers, use_h2=True
+    ):
+        return await self.requests._h5_post_body(
+            ctx, url, body, params=params, label=label, headers=headers, use_h2=use_h2
+        )
+
+    def _ensure_reply_plans(
+        self, plans, *, thread_reply, post, comment, parent_comment, reply_targets
+    ):
+        return self.replies._ensure_reply_plans(
+            plans,
+            thread_reply=thread_reply,
+            post=post,
+            comment=comment,
+            parent_comment=parent_comment,
+            reply_targets=reply_targets,
+        )
+
+    @staticmethod
+    def _reply_attempt_key(plan, data):
+        return QzoneCommentReplyService._reply_attempt_key(plan, data)
+
+    def _reply_attempt_debug(self, plan, data, payload):
+        return self.replies._reply_attempt_debug(plan, data, payload)
+
+    async def _verified_reply_result(
+        self,
+        post,
+        comment,
+        content,
+        *,
+        parent_comment,
+        ctx,
+        submitted_at,
+        thread_reply,
+        plan,
+        attempt,
+        attempts,
+        reply_targets,
+    ):
+        return await self.replies._verified_reply_result(
+            post,
+            comment,
+            content,
+            parent_comment=parent_comment,
+            ctx=ctx,
+            submitted_at=submitted_at,
+            thread_reply=thread_reply,
+            plan=plan,
+            attempt=attempt,
+            attempts=attempts,
+            reply_targets=reply_targets,
+        )
+
+    @staticmethod
+    def _payload_message(payload):
+        return QzoneCommentUtilService._payload_message(payload)
+
+    @staticmethod
+    def _decode_mojibake(value):
+        return QzoneCommentUtilService._decode_mojibake(value)
+
+    @staticmethod
+    def _reply_target_unavailable(payload):
+        return QzoneCommentUtilService._reply_target_unavailable(payload)
+
+    @staticmethod
+    def _reply_content(content, comment):
+        return QzoneCommentUtilService._reply_content(content, comment)
+
+    def _comment_submit_ok(self, payload):
+        return self.comment_tools._comment_submit_ok(payload)
+
+    async def _delete_comment_via_sns(self, ctx, post, *, comment_id, comment_uin):
+        return await self.deletion._delete_comment_via_sns(
+            ctx, post, comment_id=comment_id, comment_uin=comment_uin
+        )
+
+    async def _delete_comment_via_pc(self, ctx, post, *, comment_id):
+        return await self.deletion._delete_comment_via_pc(
+            ctx, post, comment_id=comment_id
+        )
+
+    @staticmethod
+    def _parse_detail_post(payload):
+        return QzoneFeedDetailService._parse_detail_post(payload)
+
+    async def _safe_post_detail(self, post):
+        return await self.details._safe_post_detail(post)
+
+    async def _query_recent_post_details(self, posts):
+        return await self.recent._query_recent_post_details(posts)
+
+    @classmethod
+    def _merge_post_detail(cls, base, detail):
+        return QzoneFeedMergeService._merge_post_detail(base, detail)
+
+    @classmethod
+    def _merge_comments(cls, base_comments, detail_comments):
+        return QzoneFeedMergeService._merge_comments(base_comments, detail_comments)
+
+    @classmethod
+    def _match_detail_comment(
+        cls,
+        base_comment,
+        detail_comments,
+        *,
+        detail_by_tid,
+        detail_by_submit_tid,
+        used_detail,
+    ):
+        return QzoneFeedMergeService._match_detail_comment(
+            base_comment,
+            detail_comments,
+            detail_by_tid=detail_by_tid,
+            detail_by_submit_tid=detail_by_submit_tid,
+            used_detail=used_detail,
+        )
+
+    @staticmethod
+    def _comments_equivalent(left, right):
+        return QzoneFeedMergeService._comments_equivalent(left, right)
+
+    @staticmethod
+    def _comment_submit_tid_rank(value):
+        return QzoneFeedMergeService._comment_submit_tid_rank(value)
+
+    @classmethod
+    def _prefer_submit_tid(cls, *values):
+        return QzoneFeedMergeService._prefer_submit_tid(*values)
+
+    @classmethod
+    def _merge_comment(cls, base_comment, detail_comment):
+        return QzoneFeedMergeService._merge_comment(base_comment, detail_comment)
+
+    @staticmethod
+    def _prefer_h5_reply(comment, *, parent_comment=None):
+        return QzoneReplyTargetService._prefer_h5_reply(
+            comment, parent_comment=parent_comment
+        )
+
+    @classmethod
+    def _can_try_addreply_ugc_thread_variant(
+        cls, post, comment, *, parent_comment, child_seq
+    ):
+        return QzoneReplyTargetService._can_try_addreply_ugc_thread_variant(
+            post, comment, parent_comment=parent_comment, child_seq=child_seq
+        )
+
+    @classmethod
+    def _self_reply_thread_state(cls, post, *, self_uin, parent_tid, reply_to_tid):
+        return QzoneReplyTargetService._self_reply_thread_state(
+            post, self_uin=self_uin, parent_tid=parent_tid, reply_to_tid=reply_to_tid
+        )
+
+    @classmethod
+    def _unsafe_thread_reply_target_reason(cls, comment, *, parent_comment):
+        return QzoneReplyTargetService._unsafe_thread_reply_target_reason(
+            comment, parent_comment=parent_comment
+        )
+
+    @staticmethod
+    def _is_short_numeric_comment_id(value):
+        return QzoneReplyTargetService._is_short_numeric_comment_id(value)
+
+    @classmethod
+    def _h5_reply_target_id(cls, comment_id, comment):
+        return QzoneReplyPayloadService._h5_reply_target_id(comment_id, comment)
+
+    def _mood_v6_referrer(self, post):
+        return self.reply_payloads._mood_v6_referrer(post)
+
+    def _h5_comment_data(
+        self,
+        ctx,
+        post,
+        *,
+        content,
+        comment_id="",
+        comment_uin=0,
+        comment=None,
+        payload_comment_id="",
+        payload_t2_tid="",
+        payload_t2_uin=0,
+        reply_uin=0,
+        topic_id="",
+    ):
+        return self.reply_payloads._h5_comment_data(
+            ctx,
+            post,
+            content=content,
+            comment_id=comment_id,
+            comment_uin=comment_uin,
+            comment=comment,
+            payload_comment_id=payload_comment_id,
+            payload_t2_tid=payload_t2_tid,
+            payload_t2_uin=payload_t2_uin,
+            reply_uin=reply_uin,
+            topic_id=topic_id,
+        )
+
+    def _h5_thread_parent_comment_data(
+        self, ctx, post, *, content, comment_id, comment_uin, topic_id="", qzreferrer=""
+    ):
+        return self.reply_payloads._h5_thread_parent_comment_data(
+            ctx,
+            post,
+            content=content,
+            comment_id=comment_id,
+            comment_uin=comment_uin,
+            topic_id=topic_id,
+            qzreferrer=qzreferrer,
+        )
+
+    def _addreply_ugc_comment_data(
+        self,
+        ctx,
+        post,
+        *,
+        content,
+        comment_id,
+        comment_uin,
+        payload_comment_id="",
+        topic_id="",
+    ):
+        return self.reply_payloads._addreply_ugc_comment_data(
+            ctx,
+            post,
+            content=content,
+            comment_id=comment_id,
+            comment_uin=comment_uin,
+            payload_comment_id=payload_comment_id,
+            topic_id=topic_id,
+        )
+
+    def _sns_comment_data(
+        self,
+        ctx,
+        post,
+        *,
+        content,
+        comment_id,
+        comment_uin,
+        comment=None,
+        payload_comment_id="",
+        payload_t2_tid="",
+        payload_t2_uin=0,
+        reply_uin=0,
+        topic_id="",
+    ):
+        return self.reply_payloads._sns_comment_data(
+            ctx,
+            post,
+            content=content,
+            comment_id=comment_id,
+            comment_uin=comment_uin,
+            comment=comment,
+            payload_comment_id=payload_comment_id,
+            payload_t2_tid=payload_t2_tid,
+            payload_t2_uin=payload_t2_uin,
+            reply_uin=reply_uin,
+            topic_id=topic_id,
+        )
+
+    async def _verify_thread_reply_submission(
+        self, post, comment, content, *, parent_comment, ctx, submitted_at
+    ):
+        return await self.reply_verification._verify_thread_reply_submission(
+            post,
+            comment,
+            content,
+            parent_comment=parent_comment,
+            ctx=ctx,
+            submitted_at=submitted_at,
+        )
+
+    async def _cleanup_failed_thread_reply(self, post, verification, *, ctx):
+        return await self.reply_verification._cleanup_failed_thread_reply(
+            post, verification, ctx=ctx
+        )
+
+    @classmethod
+    def _reply_verification_existing_self_ids(cls, post, self_uin):
+        return QzoneReplyVerifyService._reply_verification_existing_self_ids(
+            post, self_uin
+        )
+
+    @classmethod
+    def _comment_alias_map(cls, comments):
+        return QzoneReplyVerifyService._comment_alias_map(comments)
+
+    @classmethod
+    def _reply_verification_target_status(
+        cls, item, *, aliases, target_ids, parent_ids, target_uin
+    ):
+        return QzoneReplyVerifyService._reply_verification_target_status(
+            item,
+            aliases=aliases,
+            target_ids=target_ids,
+            parent_ids=parent_ids,
+            target_uin=target_uin,
+        )
+
+    @classmethod
+    def _reply_verification_text_variants(cls, content):
+        return QzoneReplyVerifyService._reply_verification_text_variants(content)
+
+    @staticmethod
+    def _normalize_reply_verification_text(content):
+        return QzoneReplyVerifyService._normalize_reply_verification_text(content)
+
+    @classmethod
+    def _reply_verification_text_matches(cls, item, expected_texts):
+        return QzoneReplyVerifyService._reply_verification_text_matches(
+            item, expected_texts
+        )
+
+    @classmethod
+    def _reply_verification_is_new_self_comment(cls, item, *, before_ids, submitted_at):
+        return QzoneReplyVerifyService._reply_verification_is_new_self_comment(
+            item, before_ids=before_ids, submitted_at=submitted_at
+        )
+
+    @staticmethod
+    def _reply_verification_candidate_debug(
+        item, *, text_matches, is_new, target_status
+    ):
+        return QzoneReplyVerifyService._reply_verification_candidate_debug(
+            item, text_matches=text_matches, is_new=is_new, target_status=target_status
+        )
+
+    @staticmethod
+    def _reply_verification_debug_fields(verification):
+        return QzoneReplyVerifyService._reply_verification_debug_fields(verification)
+
+    @staticmethod
+    def _reply_verification_error_message(verification):
+        return QzoneReplyVerifyService._reply_verification_error_message(verification)
+
+    @classmethod
+    def _attach_reply_failure_debug(
+        cls, exc, *, attempts, attempted_targets, verification=None
+    ):
+        return QzoneReplyVerifyService._attach_reply_failure_debug(
+            exc,
+            attempts=attempts,
+            attempted_targets=attempted_targets,
+            verification=verification,
+        )
+
+    def _reply_submit_plans(
+        self, ctx, post, comment, *, content, parent_comment, reply_targets, prefer_h5
+    ):
+        return self.reply_plans._reply_submit_plans(
+            ctx,
+            post,
+            comment,
+            content=content,
+            parent_comment=parent_comment,
+            reply_targets=reply_targets,
+            prefer_h5=prefer_h5,
+        )
+
+    @staticmethod
+    def _thread_reply_re_feeds_payload_variants(
+        post, comment, parent_comment, reply_targets
+    ):
+        return QzoneReplyPlanService._thread_reply_re_feeds_payload_variants(
+            post, comment, parent_comment, reply_targets
+        )
+
+    def _reply_submit_plan(self, ctx, post, comment, *, content, transport, variant):
+        return self.reply_plans._reply_submit_plan(
+            ctx, post, comment, content=content, transport=transport, variant=variant
+        )

@@ -20,6 +20,26 @@ _QZONE_INTERACTION_REPORT_KEYS = (
 )
 
 
+def qzone_interaction_outcome(result) -> str:
+    if not isinstance(result, dict):
+        return "failed"
+    succeeded = any(
+        int(result.get(key, 0) or 0) > 0 for key in ("liked", "commented", "replied")
+    )
+    failed = bool(
+        result.get("failed")
+        or result.get("generation_failed")
+        or result.get("rate_limited")
+        or any(
+            isinstance(section := result.get(key), dict) and section.get("rate_limited")
+            for key in ("like", "comment", "reply")
+        )
+    )
+    if succeeded:
+        return "partial" if failed else "success"
+    return "failed" if failed else "idle"
+
+
 def _qzone_empty_interaction_result() -> dict:
     return {
         "enabled": False,

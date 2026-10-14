@@ -69,22 +69,23 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertRegex(metadata, r"(?m)^version: 1\.1\.7$")
-        self.assertIn("version-1.1.7", readme)
-        self.assertIn('alt="版本 1.1.7"', readme)
-        self.assertIn("v1.1.7 版本更新", readme)
-        self.assertIn("daily_life v1.4.4", readme)
+        self.assertRegex(metadata, r"(?m)^version: 1\.1\.8$")
+        self.assertIn("version-1.1.8", readme)
+        self.assertIn('alt="版本 1.1.8"', readme)
+        self.assertIn("v1.1.8 版本更新", readme)
+        self.assertIn("daily_life v1.4.5", readme)
         self.assertIn("移除小红书功能", changelog)
         self.assertIn("v1.0.9 · 2026-08-15", changelog)
         self.assertIn("v1.0.8 · 2026-08-15", changelog)
         release_headers = re.findall(
             r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
         )
-        self.assertEqual(release_headers[0], ("1.1.7", "2026-10-11"))
+        self.assertEqual(release_headers[0], ("1.1.8", "2026-10-14"))
         pending_headers = re.findall(r"(?m)^## 未发布$", changelog)
         self.assertLessEqual(len(pending_headers), 1)
         if pending_headers:
-            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.7"))
+            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.8"))
+        self.assertLess(changelog.index("## v1.1.8"), changelog.index("## v1.1.7"))
         self.assertLess(changelog.index("## v1.1.7"), changelog.index("## v1.1.6"))
         self.assertLess(changelog.index("## v1.1.6"), changelog.index("## v1.1.5"))
         self.assertLess(changelog.index("v1.1.5"), changelog.index("## 🌐 v1.1.4"))
@@ -94,6 +95,27 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
         self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
         self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
+        current_release = changelog.split("## v1.1.8", 1)[1].split("## v1.1.7", 1)[0]
+        for feature in (
+            "组件结构与内部契约",
+            "Mixin",
+            "daily_life v1.4.5",
+            "QQ 空间点赞、相册与面板",
+            "文案",
+            "防重",
+            "model_usage",
+            "数据库结构保持 v2",
+            "不包含 daily_life 端改动",
+        ):
+            self.assertIn(feature, current_release)
+        release_notes = (ROOT / "docs" / "release-v1.1.8.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("v1.1.8 · 2026-10-14", release_notes)
+        self.assertIn("v1.1.7 标签", release_notes)
+        self.assertIn("不包含 daily_life 端改动", release_notes)
+        self.assertIn("target_umo", release_notes)
+        self.assertIn("数据库结构保持 v2", release_notes)
         current_release = changelog.split("## v1.1.7", 1)[1].split("## v1.1.6", 1)[0]
         for feature in (
             "普通分享表达与标点清洗",
@@ -205,7 +227,7 @@ class TaskArchitectureTests(unittest.TestCase):
             path.stem
             for source_root in source_roots
             for path in source_root.rglob("*.py")
-            if path.name != "__init__.py"
+            if path.name not in {"__init__.py", "__main__.py"}
         }
 
         invalid_directories = sorted(name for name in directories if not name.isalpha())
@@ -267,7 +289,7 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertIs(plugin.image_service.daily_life_bridge, plugin.daily_life_bridge)
         self.assertIs(plugin.services.daily_life_bridge, plugin.daily_life_bridge)
         self.assertEqual(
-            plugin.task_manager.executor_helpers._media_failure_message(
+            plugin.task_manager.executor_helpers.media._media_failure_message(
                 "image", "配图生成失败"
             ),
             "生活插件未安装、未启用或正在重载，无法使用配图能力，继续发送文案",
@@ -282,7 +304,7 @@ class TaskArchitectureTests(unittest.TestCase):
             )
         ]
         self.assertEqual(
-            plugin.task_manager.executor_helpers._media_failure_message(
+            plugin.task_manager.executor_helpers.media._media_failure_message(
                 "image", "配图生成失败"
             ),
             "配图生成失败",
@@ -294,7 +316,7 @@ class TaskArchitectureTests(unittest.TestCase):
             "生活插件正在初始化、重载或停止",
         )
         self.assertEqual(
-            plugin.task_manager.executor_helpers._media_failure_message(
+            plugin.task_manager.executor_helpers.media._media_failure_message(
                 "image", "配图生成失败"
             ),
             "生活插件正在初始化、重载或停止，继续发送文案",
@@ -786,6 +808,340 @@ class TaskArchitectureTests(unittest.TestCase):
             if "__dict__[" in path.read_text(encoding="utf-8"):
                 violations.append(str(path.relative_to(ROOT)))
         self.assertEqual(violations, [])
+
+    def test_runtime_has_zero_mixins_and_no_business_inheritance(self):
+        dependencies = {
+            "CommandServiceBase",
+            "ContentComponent",
+            "ContextComponent",
+            "DatabaseRepository",
+            "PanelComponent",
+            "SchedulerComponent",
+            "SupportComponent",
+            "TaskServiceBase",
+        }
+        classes = []
+        for path in (ROOT / "main.py", *(ROOT / "core").rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            self.assertNotRegex(source, r"(?i)\bmixin\w*|\w+mixin\b|\bQzoneMethodSet\b")
+            tree = ast.parse(source, filename=str(path))
+            classes.extend(
+                (path, node)
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ClassDef)
+            )
+        local_classes = {node.name for _, node in classes}
+        violations = []
+        for path, node in classes:
+            if len(node.bases) > 1:
+                violations.append(
+                    f"{path.relative_to(ROOT)}:{node.name}:multiple bases"
+                )
+            for base in node.bases:
+                name = ast.unparse(base)
+                if name in local_classes and name not in dependencies:
+                    violations.append(f"{path.relative_to(ROOT)}:{node.name}:{name}")
+            for method in node.body:
+                if isinstance(
+                    method, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and method.name in {"__getattr__", "__getattribute__"}:
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{node.name}:{method.name}"
+                    )
+        self.assertEqual(violations, [])
+        self.assertFalse((ROOT / "core/space/methodset.py").exists())
+        self.assertFalse((ROOT / "core/tasks/command/local.py").exists())
+
+    def test_runtime_does_not_graft_other_classes_methods(self):
+        classes = [
+            (path, node)
+            for path in (ROOT / "main.py", *(ROOT / "core").rglob("*.py"))
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.ClassDef)
+        ]
+        methods = {
+            node.name: {
+                item.name
+                for item in node.body
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            for _, node in classes
+        }
+        violations = []
+        for path, node in classes:
+            for assignment in node.body:
+                if (
+                    not isinstance(assignment, (ast.Assign, ast.AnnAssign))
+                    or assignment.value is None
+                ):
+                    continue
+                for value in ast.walk(assignment.value):
+                    if not isinstance(value, ast.Attribute) or not isinstance(
+                        value.value, ast.Name
+                    ):
+                        continue
+                    if value.attr in methods.get(value.value.id, set()):
+                        violations.append(
+                            f"{path.relative_to(ROOT)}:{node.name}:{value.value.id}.{value.attr}"
+                        )
+        self.assertEqual(violations, [])
+
+    def test_all_runtime_methods_keep_explicit_binding_semantics(self):
+        violations = []
+        for path in (ROOT / "main.py", *(ROOT / "core").rglob("*.py")):
+            for cls in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if not isinstance(cls, ast.ClassDef):
+                    continue
+                for method in cls.body:
+                    if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    decorators = {ast.unparse(item) for item in method.decorator_list}
+                    arguments = method.args.posonlyargs + method.args.args
+                    first = arguments[0].arg if arguments else ""
+                    expected = "cls" if "classmethod" in decorators else "self"
+                    if "staticmethod" in decorators:
+                        valid = first not in {"self", "cls"}
+                    else:
+                        valid = first == expected
+                    if not valid:
+                        violations.append(
+                            f"{path.relative_to(ROOT)}:{cls.name}:{method.name}"
+                        )
+        self.assertEqual(violations, [])
+
+    def test_remaining_domains_initialize_independent_components(self):
+        mod = _load_main_module()
+        plugin = mod.DailySharePlugin(mod.Context(), {})
+        other = mod.DailySharePlugin(mod.Context(), {})
+        groups = {
+            "command_handler": ("basic", "targets", "sequence"),
+            "task_manager.snapshot_store": (
+                "normalize",
+                "store",
+                "focus",
+                "formatter",
+                "lookup",
+            ),
+            "task_manager.targets": ("identity", "platform", "rules"),
+            "task_manager.command_share": (
+                "runner",
+                "local",
+                "records",
+                "media",
+                "news",
+                "resolver",
+                "images",
+            ),
+            "task_manager.qzone_share": (
+                "news",
+                "content",
+                "media",
+                "publisher",
+                "flow",
+            ),
+            "task_manager.qzone_interaction": ("policy", "dialogue"),
+            "image_service": (
+                "prompts",
+                "persona",
+                "judge",
+                "extract",
+                "frame",
+                "video",
+            ),
+            "news_service": ("sources", "parser", "api"),
+            "daily_life_bridge": ("delivery",),
+            "qzone_service": (
+                "gateway",
+                "native",
+                "headers",
+                "cookies",
+                "timeline",
+                "errors",
+                "packets",
+                "requests",
+                "replies",
+                "comment_tools",
+                "comments",
+                "deletion",
+                "details",
+                "extra",
+                "posts",
+                "home",
+                "recent",
+                "merge",
+                "reply_targets",
+                "reply_payloads",
+                "reply_verification",
+                "reply_plans",
+                "reply_identity",
+                "photos",
+            ),
+        }
+        for route, names in groups.items():
+            owner, other_owner = plugin, other
+            for part in route.split("."):
+                owner, other_owner = getattr(owner, part), getattr(other_owner, part)
+            for name in names:
+                with self.subTest(domain=route, component=name):
+                    component = getattr(owner, name)
+                    self.assertEqual(type(component).__bases__, (object,))
+                    self.assertIs(component.owner, owner)
+                    self.assertIsNot(component, getattr(other_owner, name))
+                    self.assertNotIn("__getattr__", type(component).__dict__)
+        self.assertIsNot(
+            plugin.qzone_service._post_cache, other.qzone_service._post_cache
+        )
+        self.assertIsNot(
+            plugin.qzone_service._ctx_fetch_lock, other.qzone_service._ctx_fetch_lock
+        )
+        self.assertIsNot(
+            plugin.daily_life_bridge._receipt_lock,
+            other.daily_life_bridge._receipt_lock,
+        )
+
+    def test_composed_components_follow_replaced_configuration(self):
+        mod = _load_main_module()
+        plugin = mod.DailySharePlugin(mod.Context(), {})
+        manager = plugin.task_manager
+        components = (
+            plugin.command_handler.basic,
+            manager.snapshot_store.lookup,
+            manager.targets.rules,
+            manager.command_share.local,
+            manager.qzone_share.publisher,
+            manager.qzone_interaction.policy,
+            plugin.image_service.frame,
+            plugin.news_service.sources,
+            plugin.qzone_service.gateway,
+        )
+        plugin.config.update(
+            {
+                "basic_conf": {"llm_timeout": 77},
+                "qzone_conf": {"enable_qzone": True},
+                "image_conf": {"enable_ai_image": True},
+                "news_conf": {"news_random_mode": "all"},
+            }
+        )
+        plugin.dashboard_service.operations.refresh._refresh_config_refs()
+
+        self.assertIs(components[0].owner.basic_conf, plugin.basic_conf)
+        for component in components[1:6]:
+            self.assertIs(component.owner.config, manager.config)
+            self.assertIs(component.owner.config.basic, plugin.basic_conf)
+            self.assertIs(component.owner.config.qzone, plugin.qzone_conf)
+        self.assertIs(components[6].owner.img_conf, plugin.image_conf)
+        self.assertIs(components[7].owner.conf, plugin.news_conf)
+        self.assertIs(components[8].owner._qzone_config(), plugin.qzone_conf)
+        self.assertIs(manager.command_share.local, components[3])
+        self.assertIs(plugin.qzone_service.gateway, components[8])
+
+    def test_composed_facades_preserve_workflow_and_request_parameters(self):
+        mod = _load_main_module()
+        plugin = mod.DailySharePlugin(mod.Context(), {})
+        for owner, component, name in (
+            (plugin.command_handler, plugin.command_handler.basic, "cmd_enable"),
+            (plugin.qzone_service, plugin.qzone_service.photos, "reply_photo_comment"),
+            (
+                plugin.task_manager.command_share,
+                plugin.task_manager.command_share.local,
+                "send_prepared_command_share",
+            ),
+            (
+                plugin.task_manager.qzone_share,
+                plugin.task_manager.qzone_share.flow,
+                "send_prepared_qzone_share",
+            ),
+        ):
+            with self.subTest(method=name):
+                facade = getattr(owner, name)
+                implementation = getattr(component, name)
+                self.assertEqual(
+                    tuple(inspect.signature(facade).parameters),
+                    tuple(inspect.signature(implementation).parameters),
+                )
+                self.assertEqual(
+                    inspect.isasyncgenfunction(facade),
+                    inspect.isasyncgenfunction(implementation),
+                )
+                self.assertEqual(
+                    inspect.iscoroutinefunction(facade),
+                    inspect.iscoroutinefunction(implementation),
+                )
+
+    def test_chat_share_components_have_no_business_inheritance(self):
+        mod = _load_tasks_module()
+        manager = mod.TaskManager(_ArchitecturePlugin())
+        other = mod.TaskManager(_ArchitecturePlugin())
+        from daily_share_tasks_testpkg.core.tasks.taskbase import TaskServiceBase
+
+        self.assertEqual(type(manager.share).__bases__, (TaskServiceBase,))
+        for name in ("targets", "news", "media", "sender"):
+            component = getattr(manager.share, name)
+            with self.subTest(component=name):
+                self.assertEqual(type(component).__bases__, (TaskServiceBase,))
+                self.assertIs(component.runtime, manager.runtime)
+                self.assertIs(component.config, manager.config)
+                self.assertIs(component.state, manager.state)
+                self.assertIs(component.services, manager.services)
+                self.assertIsNot(component, getattr(other.share, name))
+                self.assertFalse(hasattr(component, "execute_share"))
+
+        self.assertIs(manager.share.sender.services.delivery, manager.delivery)
+        self.assertIs(manager.share.media.services.progress, manager.progress)
+
+    def test_share_helpers_have_independent_named_components(self):
+        mod = _load_tasks_module()
+        manager = mod.TaskManager(_ArchitecturePlugin())
+        other = mod.TaskManager(_ArchitecturePlugin())
+        from daily_share_tasks_testpkg.core.tasks.taskbase import TaskServiceBase
+
+        helpers = manager.executor_helpers
+        self.assertEqual(type(helpers).__bases__, (TaskServiceBase,))
+        for name in (
+            "arguments",
+            "context",
+            "media",
+            "locks",
+            "records",
+            "period",
+            "sync",
+        ):
+            component = getattr(helpers, name)
+            with self.subTest(component=name):
+                self.assertEqual(type(component).__bases__, (TaskServiceBase,))
+                self.assertIs(component.runtime, manager.runtime)
+                self.assertIs(component.config, manager.config)
+                self.assertIs(component.state, manager.state)
+                self.assertIs(component.services, manager.services)
+                self.assertIsNot(component, getattr(other.executor_helpers, name))
+        self.assertFalse(hasattr(helpers, "record_share_history"))
+        self.assertFalse(hasattr(helpers.context, "generate_share_image_step"))
+        self.assertFalse(hasattr(helpers.media, "get_command_share_lock"))
+        self.assertFalse(hasattr(helpers.records, "map_share_type_arg"))
+
+    def test_delivery_components_have_no_business_inheritance(self):
+        mod = _load_tasks_module()
+        manager = mod.TaskManager(_ArchitecturePlugin())
+        other = mod.TaskManager(_ArchitecturePlugin())
+        from daily_share_tasks_testpkg.core.tasks.taskbase import TaskServiceBase
+
+        delivery = manager.delivery
+        self.assertEqual(type(delivery).__bases__, (TaskServiceBase,))
+        for name in ("status", "delay", "chains", "media"):
+            component = getattr(delivery, name)
+            with self.subTest(component=name):
+                self.assertEqual(type(component).__bases__, (TaskServiceBase,))
+                self.assertIs(component.runtime, manager.runtime)
+                self.assertIs(component.config, manager.config)
+                self.assertIs(component.state, manager.state)
+                self.assertIs(component.services, manager.services)
+                self.assertIsNot(component, getattr(other.delivery, name))
+                self.assertFalse(hasattr(component, "send"))
+        self.assertIs(delivery.chains.status, delivery.status)
+        self.assertIs(delivery.media.chains, delivery.chains)
+        self.assertFalse(hasattr(delivery.delay, "mark_send_stage_success"))
+        self.assertFalse(hasattr(delivery.media, "random_sleep"))
+        self.assertFalse(hasattr(delivery.chains, "build_image_chain"))
 
     def test_components_require_explicit_runtime_without_dual_mode_fallbacks(self):
         for relative_path in (

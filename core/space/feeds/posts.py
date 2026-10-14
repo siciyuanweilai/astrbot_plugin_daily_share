@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
+from typing import TYPE_CHECKING
+
 from ..models import QzonePost
 from ..parse import parse_feed_list
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneFeedPostsService(QzoneMethodSet):
+
+class QzoneFeedPostsService:
     """自己的说说列表。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     async def query_posts(
         self,
@@ -16,24 +23,24 @@ class QzoneFeedPostsService(QzoneMethodSet):
         num: int = 5,
         with_detail: bool = False,
     ) -> list[QzonePost]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         target = str(target_id or ctx.uin).strip()
         offset = max(0, int(pos or 0))
         limit = max(1, min(int(num or 5), 20))
-        cache_key = self._query_cache_key(
+        cache_key = self.owner._query_cache_key(
             "posts",
             target=target,
             pos=offset,
             num=limit,
             with_detail=int(bool(with_detail)),
         )
-        cached_posts = self._cached_query_posts(cache_key)
+        cached_posts = self.owner._cached_query_posts(cache_key)
         if cached_posts is not None:
             return cached_posts
 
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.LIST_URL,
+            self.owner.LIST_URL,
             params={
                 "g_tk": ctx.gtk,
                 "uin": target,
@@ -49,14 +56,16 @@ class QzoneFeedPostsService(QzoneMethodSet):
                 "need_private_comment": 1,
             },
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(str(payload.get("message") or "获取 QQ 空间说说失败"))
         posts = parse_feed_list(payload.get("msglist") or [])
         if with_detail:
             posts = [
-                self._merge_post_detail(post, await self._safe_post_detail(post))
+                self.owner._merge_post_detail(
+                    post, await self.owner._safe_post_detail(post)
+                )
                 for post in posts
             ]
-        self._remember_posts(posts, detailed=with_detail)
-        self._store_query_posts(cache_key, posts)
+        self.owner._remember_posts(posts, detailed=with_detail)
+        self.owner._store_query_posts(cache_key, posts)
         return posts

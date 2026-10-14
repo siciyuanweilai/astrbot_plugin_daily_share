@@ -3,10 +3,15 @@ from __future__ import annotations
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import NEWS_SOURCE_MAP, ShareType
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginShareStartRouteService(SupportComponent):
+    jobs = RuntimeField("jobs")
+    news_outbox = RuntimeField("news_outbox")
+    news_service = RuntimeField("news_service")
+    task_manager = RuntimeField("task_manager")
+
     async def _start_news_image_task(
         self,
         event: AstrMessageEvent,

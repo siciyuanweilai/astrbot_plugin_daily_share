@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzonePost
 from .commentid import QzoneReplyIdentityService
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneReplyTargetService(QzoneMethodSet):
+
+class QzoneReplyTargetService:
     """提交前构建并校验 QQ 空间回评目标。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     @staticmethod
     def _prefer_h5_reply(
@@ -31,8 +36,10 @@ class QzoneReplyTargetService(QzoneMethodSet):
         parent_comment: QzoneComment,
         child_seq: str,
     ) -> bool:
+        from ..qzone import QzoneService
+
         child_seq = str(child_seq or "").strip()
-        if not cls._is_short_numeric_comment_id(child_seq):
+        if not QzoneService._is_short_numeric_comment_id(child_seq):
             return False
         try:
             if int(child_seq) <= 0:
@@ -63,8 +70,13 @@ class QzoneReplyTargetService(QzoneMethodSet):
             ).strip()
         if parent_uin == self_uin and (not reply_to_tid or reply_to_tid in parent_ids):
             return True
-        saw_self_reply_under_parent, matched_target = cls._self_reply_thread_state(
-            post, self_uin=self_uin, parent_tid=parent_tid, reply_to_tid=reply_to_tid
+        saw_self_reply_under_parent, matched_target = (
+            QzoneService._self_reply_thread_state(
+                post,
+                self_uin=self_uin,
+                parent_tid=parent_tid,
+                reply_to_tid=reply_to_tid,
+            )
         )
         if matched_target:
             return True
@@ -76,6 +88,7 @@ class QzoneReplyTargetService(QzoneMethodSet):
     def _self_reply_thread_state(
         cls, post: QzonePost, *, self_uin: int, parent_tid: str, reply_to_tid: str
     ) -> tuple[bool, bool]:
+
         saw_self_reply = False
         for item in getattr(post, "comments", []) or []:
             if int(getattr(item, "uin", 0) or 0) != self_uin:
@@ -142,6 +155,8 @@ class QzoneReplyTargetService(QzoneMethodSet):
         parent_comment: QzoneComment | None,
         targets: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        from ..qzone import QzoneService
+
         comment_ids = {
             str(getattr(comment, "tid", "") or "").strip(),
             str(getattr(comment, "submit_tid", "") or "").strip(),
@@ -160,7 +175,7 @@ class QzoneReplyTargetService(QzoneMethodSet):
             comment_id = str((target or {}).get("comment_id") or "").strip()
             if not comment_id or comment_id in blocked_ids:
                 continue
-            if parent_comment is not None and cls._is_short_numeric_comment_id(
+            if parent_comment is not None and QzoneService._is_short_numeric_comment_id(
                 comment_id
             ):
                 continue
@@ -182,7 +197,9 @@ class QzoneReplyTargetService(QzoneMethodSet):
         *,
         parent_comment: QzoneComment | None,
     ) -> str:
-        return cls._unsafe_thread_reply_target_reason(
+        from ..qzone import QzoneService
+
+        return QzoneService._unsafe_thread_reply_target_reason(
             comment, parent_comment=parent_comment
         )
 
@@ -196,17 +213,17 @@ class QzoneReplyTargetService(QzoneMethodSet):
         if parent_comment is None:
             return False
         try:
-            targets = self._reply_submit_targets(
+            targets = self.owner._reply_submit_targets(
                 post, comment, parent_comment=parent_comment
             )
-            targets = self._filter_thread_reply_targets(
+            targets = self.owner._filter_thread_reply_targets(
                 post,
                 comment,
                 parent_comment=parent_comment,
                 targets=targets,
             )
             return bool(
-                self._thread_reply_payload_variants(
+                self.owner._thread_reply_payload_variants(
                     post, comment, parent_comment, targets
                 )
             )
@@ -220,6 +237,8 @@ class QzoneReplyTargetService(QzoneMethodSet):
         *,
         parent_comment: QzoneComment | None,
     ) -> str:
+        from ..qzone import QzoneService
+
         if parent_comment is None:
             return ""
         comment_tid = str(getattr(comment, "tid", "") or "").strip()
@@ -234,13 +253,13 @@ class QzoneReplyTargetService(QzoneMethodSet):
             comment_tid.startswith(f"{parent_id}_r_") for parent_id in parent_ids
         ):
             return ""
-        if not cls._is_short_numeric_comment_id(submit_tid or raw_tid):
+        if not QzoneService._is_short_numeric_comment_id(submit_tid or raw_tid):
             return ""
         if (
             submit_tid
             and submit_tid != raw_tid
             and raw_tid
-            and not cls._is_short_numeric_comment_id(raw_tid)
+            and not QzoneService._is_short_numeric_comment_id(raw_tid)
         ):
             return ""
         return "synthetic_thread_tid_without_real_submit_id"

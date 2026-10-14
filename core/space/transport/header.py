@@ -3,13 +3,15 @@ from __future__ import annotations
 from http.cookies import SimpleCookie
 from typing import TYPE_CHECKING
 
-from ..methodset import QzoneMethodSet
-
 if TYPE_CHECKING:
     from ..models import QzoneContext
+    from ..qzone import QzoneService
 
 
-class QzoneHeaderService(QzoneMethodSet):
+class QzoneHeaderService:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     @staticmethod
     def _cookie_values_from_header(cookie: str) -> dict[str, str]:
         text = str(cookie or "").strip()
@@ -50,8 +52,8 @@ class QzoneHeaderService(QzoneMethodSet):
     def _headers(self, ctx: QzoneContext, **extra) -> dict[str, str]:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-            "Referer": f"{self.BASE_URL}/{ctx.uin}",
-            "Origin": self.BASE_URL,
+            "Referer": f"{self.owner.BASE_URL}/{ctx.uin}",
+            "Origin": self.owner.BASE_URL,
         }
         for key, value in extra.items():
             if not value:
@@ -66,10 +68,10 @@ class QzoneHeaderService(QzoneMethodSet):
     def _pc_form_headers(
         self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
-        return self._headers(
+        return self.owner._headers(
             ctx,
-            Referer=referer or f"{self.BASE_URL}/{ctx.uin}/main",
-            Origin=self.BASE_URL,
+            Referer=referer or f"{self.owner.BASE_URL}/{ctx.uin}/main",
+            Origin=self.owner.BASE_URL,
             Accept="text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             **{
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -83,10 +85,10 @@ class QzoneHeaderService(QzoneMethodSet):
     def _comment_h5_headers(
         self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
-        return self._headers(
+        return self.owner._headers(
             ctx,
-            Referer=referer or f"{self.H5_ORIGIN}/{ctx.uin}",
-            Origin=self.H5_ORIGIN,
+            Referer=referer or f"{self.owner.H5_ORIGIN}/{ctx.uin}",
+            Origin=self.owner.H5_ORIGIN,
             Accept="application/json, text/plain, */*",
             **{
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -100,9 +102,9 @@ class QzoneHeaderService(QzoneMethodSet):
     def _comment_sns_headers(
         self, ctx: QzoneContext, *, referer: str = ""
     ) -> dict[str, str]:
-        return self._headers(
+        return self.owner._headers(
             ctx,
-            Referer=referer or f"{self.BASE_URL}/{ctx.uin}/main",
+            Referer=referer or f"{self.owner.BASE_URL}/{ctx.uin}/main",
             Accept="text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             **{
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -114,9 +116,9 @@ class QzoneHeaderService(QzoneMethodSet):
         )
 
     def _feeds3_headers(self, ctx: QzoneContext) -> dict[str, str]:
-        return self._headers(
+        return self.owner._headers(
             ctx,
-            Referer=f"{self.BASE_URL}/{ctx.uin}/main",
+            Referer=f"{self.owner.BASE_URL}/{ctx.uin}/main",
             Accept="application/json, text/javascript, */*; q=0.01",
             **{
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",

@@ -1,6 +1,6 @@
 import re
 
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 CALENDAR_DELAYED_SOURCE_JOB_IDS = {
     "delayed_auto_share": "auto_share",
@@ -12,6 +12,10 @@ CALENDAR_DELAYED_SOURCE_JOB_IDS = {
 
 class DashboardJobsService(PanelComponent):
     """仪表盘任务和日历数据。"""
+
+    jobs = RuntimeField("jobs")
+    labels = RuntimeField("labels")
+    scheduler = RuntimeField("scheduler")
 
     def _page_job_display_name(
         self,

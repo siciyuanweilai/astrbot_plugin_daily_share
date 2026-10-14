@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import html
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .client import NewsApiService
+if TYPE_CHECKING:
+    from . import NewsService
 
 
-class NewsParserService(NewsApiService):
+class NewsParserService:
     """新闻接口响应解析。"""
+
+    def __init__(self, owner: NewsService) -> None:
+        self.owner = owner
 
     conf: dict
 
@@ -78,7 +84,7 @@ class NewsParserService(NewsApiService):
             raise direct_error
 
         for _, _, data in candidates:
-            if self._has_parseable_news_items(data):
+            if self.owner._has_parseable_news_items(data):
                 return data
 
         return candidates[0][2]
@@ -87,8 +93,8 @@ class NewsParserService(NewsApiService):
         self, text: str, limit: int | None = None
     ) -> tuple[Any, list[dict] | None]:
         """在线程中解析并规范化一次新闻响应。"""
-        data = self._loads_json_payload(text)
-        return data, self._parse_response(data, limit=limit)
+        data = self.owner._loads_json_payload(text)
+        return data, self.owner._parse_response(data, limit=limit)
 
     @staticmethod
     def _is_tencent_style_dict(value: dict) -> bool:
@@ -96,8 +102,9 @@ class NewsParserService(NewsApiService):
 
     def _has_parseable_news_items(self, data: Any) -> bool:
         return any(
-            isinstance(item, dict) and self._first_non_empty(item, self.TITLE_KEYS)
-            for item in self._extract_news_items(data)
+            isinstance(item, dict)
+            and self.owner._first_non_empty(item, self.owner.TITLE_KEYS)
+            for item in self.owner._extract_news_items(data)
         )
 
     def _extract_news_items(self, data: Any) -> list[dict]:
@@ -106,17 +113,17 @@ class NewsParserService(NewsApiService):
         if not isinstance(data, dict):
             return []
 
-        if self._is_tencent_style_dict(data):
+        if self.owner._is_tencent_style_dict(data):
             return list(data.values())
 
-        for key in self.ITEM_CONTAINER_KEYS:
+        for key in self.owner.ITEM_CONTAINER_KEYS:
             value = data.get(key)
             if isinstance(value, list):
                 return value
             if isinstance(value, dict):
-                if self._is_tencent_style_dict(value):
+                if self.owner._is_tencent_style_dict(value):
                     return list(value.values())
-                for nested_key in self.NESTED_ITEM_CONTAINER_KEYS:
+                for nested_key in self.owner.NESTED_ITEM_CONTAINER_KEYS:
                     nested_value = value.get(nested_key)
                     if isinstance(nested_value, list):
                         return nested_value
@@ -137,24 +144,26 @@ class NewsParserService(NewsApiService):
         支持多层级结构化数据和多种上游字段名。
         支持腾讯新闻这种字典结构的列表 {"Top_1": {...}, "Top_2": {...}}
         """
-        items = self._extract_news_items(data)
+        items = self.owner._extract_news_items(data)
 
         if not items:
             return None
 
-        limit = self._news_item_limit(limit)
+        limit = self.owner._news_item_limit(limit)
         res: list[dict] = []
         for item in items:
             if len(res) >= limit:
                 break
-            parsed_item = self._parse_news_item(item)
+            parsed_item = self.owner._parse_news_item(item)
             if parsed_item:
                 res.append(parsed_item)
 
         return res if res else None
 
     def _news_item_limit(self, limit: int | None) -> int:
-        raw_limit = self.conf.get("news_items_count", 5) if limit is None else limit
+        raw_limit = (
+            self.owner.conf.get("news_items_count", 5) if limit is None else limit
+        )
         try:
             return max(1, int(raw_limit))
         except (TypeError, ValueError):
@@ -174,18 +183,18 @@ class NewsParserService(NewsApiService):
     def _parse_news_item(self, item: Any) -> dict | None:
         if not isinstance(item, dict):
             return None
-        title = self._first_non_empty(item, self.TITLE_KEYS)
+        title = self.owner._first_non_empty(item, self.owner.TITLE_KEYS)
         if not title:
             return None
-        hot = self._first_non_empty(item, self.HOT_KEYS)
-        url_link = self._first_non_empty(item, self.URL_KEYS)
+        hot = self.owner._first_non_empty(item, self.owner.HOT_KEYS)
+        url_link = self.owner._first_non_empty(item, self.owner.URL_KEYS)
         parsed_item = {
             "title": str(title).strip(),
             "hot": str(hot).strip() if hot else "",
             "url": str(url_link).strip() if url_link else "",
         }
-        description = self._first_non_empty(item, self.DESCRIPTION_KEYS)
-        clean_description = self._clean_news_text(description)
+        description = self.owner._first_non_empty(item, self.owner.DESCRIPTION_KEYS)
+        clean_description = self.owner._clean_news_text(description)
         if clean_description and clean_description != parsed_item["title"]:
             parsed_item["description"] = clean_description
         for key in ("author", "cover", "created", "created_at", "source"):

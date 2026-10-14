@@ -1,8 +1,10 @@
 import asyncio
+import importlib
 import importlib.util
 import sys
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -184,6 +186,34 @@ class FakeDb:
         for item_key in list(cache)[: max(0, len(cache) - max_items)]:
             cache.pop(item_key, None)
         return current
+
+
+def _interaction_args(module):
+    """Initialize the actual interaction service with isolated test dependencies."""
+    runtime_module = importlib.import_module(f"{module.__package__}.runtime")
+    base_module = importlib.import_module(f"{module.__package__}.taskbase")
+    runtime = runtime_module.TaskRuntime(
+        plugin=types.SimpleNamespace(_is_terminated=False),
+        scheduler=None,
+        db=FakeDb(),
+        ctx_service=None,
+        news_service=None,
+        image_service=None,
+        content_service=None,
+        lock=asyncio.Lock(),
+        basic_conf={},
+        extra_shares_conf={},
+        qzone_conf={},
+        image_conf={},
+        tts_conf={},
+        context_conf={},
+        receiver_conf={},
+    )
+    return (
+        runtime,
+        base_module.TaskConfigState.from_runtime(runtime),
+        base_module.TaskSharedState(asyncio.Lock(), asyncio.Lock()),
+    )
 
 
 class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
@@ -466,6 +496,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Manager(module.TaskQzoneAutoCommentService):
+            def __init__(self):
+                super().__init__(*_interaction_args(module))
+
             pass
 
         post = models.QzonePost(
@@ -513,6 +546,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Manager(module.TaskQzoneAutoCommentService):
+            def __init__(self):
+                super().__init__(*_interaction_args(module))
+
             pass
 
         post = models.QzonePost(
@@ -580,6 +616,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Manager(module.TaskQzoneAutoCommentService):
+            def __init__(self):
+                super().__init__(*_interaction_args(module))
+
             pass
 
         manager = Manager()
@@ -621,11 +660,15 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
                 self.prompts = []
                 self.system_prompts = []
-                self.plugin = types.SimpleNamespace(
-                    content_service=ContentService(),
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        content_service=ContentService(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -651,7 +694,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(persona_prompt, system_prompt)
             self.assertIn("【QQ 空间互动规则】", system_prompt)
         self.assertIn("真实好友的语气", manager.system_prompts[0])
-        self.assertIn("真实 QQ 空间主人身份", manager.system_prompts[1])
+        self.assertIn("以空间主人的身份", manager.system_prompts[1])
         self.assertIn("当前本地时间：", manager.prompts[0])
         self.assertIn("发布时间：", manager.prompts[0])
         self.assertIn("当前本地时间：", manager.prompts[1])
@@ -674,10 +717,13 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
-                self.ctx_service = CtxService()
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
+                self.runtime = replace(self.runtime, ctx_service=CtxService())
                 self.prompts = []
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 self.prompts.append(kwargs.get("prompt", ""))
@@ -717,10 +763,13 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
                 self.prompts = []
                 self.system_prompts = []
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 self.prompts.append(kwargs.get("prompt", ""))
@@ -752,13 +801,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "qzone_auto_comment_prompt": "像熟人随口一句，别太正式。",
                     "qzone_auto_reply_prompt": "回得俏皮一点，但不要阴阳怪气。",
                 }
                 self.prompts = []
                 self.systems = []
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 self.prompts.append(kwargs.get("prompt", ""))
@@ -826,6 +878,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             return "自然回复"
 
         class Manager(module.TaskQzoneAutoCommentService):
+            def __init__(self):
+                super().__init__(*_interaction_args(module))
+
             pass
 
         manager = Manager()
@@ -834,15 +889,18 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             "qzone_auto_comment_prompt": "原评论语气。",
             "qzone_auto_reply_prompt": "原回评语气。",
         }
-        manager.qzone_conf = dict(original)
+        manager.config.qzone = dict(original)
         content_service = content_module.ContentService(
             {"qzone_conf": manager.qzone_conf},
             llm,
             types.SimpleNamespace(get_all_stars=lambda: [metadata]),
             types.SimpleNamespace(),
         )
-        manager.plugin = types.SimpleNamespace(
-            basic_conf={}, call_llm=llm, content_service=content_service
+        manager.runtime = replace(
+            manager.runtime,
+            plugin=types.SimpleNamespace(
+                basic_conf={}, call_llm=llm, content_service=content_service
+            ),
         )
         friend = models.QzonePost(uin=2, tid="friend", name="Alice", text="书店")
         own = models.QzonePost(uin=1, tid="self", name="Me", text="日常")
@@ -889,9 +947,11 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             for system in systems[-3:]:
                 self.assertEqual("【daily_life 聊天表达参考】" in system, active)
                 self.assertEqual("统一表达偏好，不刻意追问。" in system, active)
-                self.assertIn("只输出一句自然", system)
+                self.assertIn("自然", system)
+                self.assertIn("问到的要点说完整", systems[-1])
+                self.assertIn("问到的要点说完整", systems[-2])
                 self.assertIn("公开互动边界", system)
-                self.assertIn("不要冒充动态作者或同楼其他人", systems[-1])
+                self.assertIn("区分各人经历", systems[-1])
             self.assertEqual(
                 {key: manager.qzone_conf[key] for key in original}, original
             )
@@ -901,9 +961,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
                 self.system_prompts = []
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 self.system_prompts.append(kwargs.get("system_prompt", ""))
@@ -936,10 +999,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs)
@@ -949,12 +1014,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={"llm_provider_id": "ignored-provider"},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={"llm_provider_id": "ignored-provider"},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -992,10 +1061,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs)
@@ -1005,12 +1076,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1050,10 +1125,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs)
@@ -1061,12 +1138,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1104,10 +1185,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs)
@@ -1117,15 +1200,19 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_limit": 2,
                 }
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1167,20 +1254,26 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Context:
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 return types.SimpleNamespace(completion_text="画面里有人站在阳光下")
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=Context(),
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=Context(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1215,10 +1308,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1226,12 +1321,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1263,10 +1362,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1274,12 +1375,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1320,10 +1425,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1331,12 +1438,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1378,10 +1489,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1391,12 +1504,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1444,10 +1561,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1455,12 +1574,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1506,10 +1629,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["image_urls"][0])
@@ -1517,12 +1642,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1565,21 +1694,27 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Context:
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 return types.SimpleNamespace(completion_text="画面里有一杯咖啡")
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=Context(),
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=Context(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1605,28 +1740,37 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         module, models = _load_auto_comment_module()
 
         class Context:
-            def get_using_provider(self):
-                return types.SimpleNamespace(
-                    meta=lambda: types.SimpleNamespace(id="default-provider")
-                )
+            def get_all_providers(self):
+                return [
+                    types.SimpleNamespace(
+                        meta=lambda: types.SimpleNamespace(id="default-provider")
+                    )
+                ]
 
             async def llm_generate(self, **kwargs):
                 return types.SimpleNamespace(completion_text="画面里有一束花")
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_COMMENT_STATE_KEY: {
-                            "processed": {"old": {"action": "commented"}},
-                            "last_result": {"commented": 1},
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_COMMENT_STATE_KEY: {
+                                "processed": {"old": {"action": "commented"}},
+                                "last_result": {"commented": 1},
+                            }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=Context(),
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=Context(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1663,14 +1807,18 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_provider": "qzone-vision-provider",
                 }
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={"llm_provider_id": "normal-provider"},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={"llm_provider_id": "normal-provider"},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1703,11 +1851,11 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             async def get_current_chat_provider_id(self, _umo):
                 return "session-provider"
 
-            def get_config(self):
+            def get_config(self, umo=None):
                 return {}
 
-            def get_using_provider(self):
-                return None
+            def get_all_providers(self):
+                return [None]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs["chat_provider_id"])
@@ -1737,7 +1885,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "")
         self.assertEqual(context.calls, ["qzone-vision-provider"])
 
-    async def test_auto_comment_image_vision_falls_back_from_configured_to_session_provider_per_request(
+    async def test_auto_comment_image_vision_falls_back_to_ai_config_per_request(
         self,
     ):
         module, models = _load_auto_comment_module()
@@ -1748,6 +1896,14 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
             async def get_current_chat_provider_id(self, umo):
                 return "session-provider" if umo == "session-1" else ""
+
+            def get_config(self, umo=None):
+                return {
+                    "agent_runner": {
+                        "runner_type": "local",
+                        "config": {"model": {"provider_id": "ai-config-provider"}},
+                    }
+                }
 
             async def llm_generate(self, **kwargs):
                 provider_id = kwargs["chat_provider_id"]
@@ -1760,15 +1916,19 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_provider": "qzone-vision-provider",
                 }
                 self.llm_calls = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1803,9 +1963,9 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             manager.context.calls,
             [
                 "qzone-vision-provider",
-                "session-provider",
+                "ai-config-provider",
                 "qzone-vision-provider",
-                "session-provider",
+                "ai-config-provider",
             ],
         )
         self.assertEqual(manager.llm_calls[0]["umo"], "session-1")
@@ -1822,7 +1982,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             async def get_current_chat_provider_id(self, umo):
                 return "session-provider"
 
-            def get_config(self):
+            def get_config(self, umo=None):
                 return {
                     "provider_settings": {"default_provider_id": "default-provider"},
                     "provider": [],
@@ -1837,12 +1997,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1877,8 +2041,8 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = []
 
-            def get_using_provider(self):
-                return None
+            def get_all_providers(self):
+                return [None]
 
             async def llm_generate(self, **kwargs):
                 self.calls.append(kwargs)
@@ -1886,12 +2050,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {"qzone_enable_auto_comment_image_vision": True}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {"qzone_enable_auto_comment_image_vision": True}
                 self.prompts = []
                 self.context = Context()
-                self.plugin = types.SimpleNamespace(
-                    basic_conf={"llm_provider_id": "ignored-provider"},
-                    context=self.context,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        basic_conf={"llm_provider_id": "ignored-provider"},
+                        context=self.context,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -1919,9 +2087,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
                 self.prompts = []
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 self.prompts.append(kwargs.get("prompt", ""))
@@ -1998,7 +2169,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("早就到家瘫着了", prompt)
         self.assertIn("那请我喝奶茶", prompt)
         self.assertIn("新的二级回复：别装没看见", prompt)
-        self.assertIn("只对最后列出的“新的二级回复”", prompt)
+        self.assertIn("回复对象：最后列出的“新的二级回复”", prompt)
         self.assertNotIn("@{", prompt)
         self.assertNotIn("内部格式", prompt)
         self.assertNotIn("这是之后才出现的内容", prompt)
@@ -2009,8 +2180,11 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {}
-                self.plugin = types.SimpleNamespace(basic_conf={})
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {}
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(basic_conf={})
+                )
 
             async def llm(self, **kwargs):
                 return "@{uin:100000002,nick:测试用户甲,who:1,auto:1} 既然是真的，那今晚的疯狂星期四就靠你表现了。"
@@ -2049,14 +2223,18 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.plugin = types.SimpleNamespace(
-                    qzone_service=Service(),
-                    daily_life_bridge=types.SimpleNamespace(
-                        clean_expression_punctuation=AsyncMock(
-                            return_value="既然是真的 那今晚的疯狂星期四就靠你表现了"
-                        )
+                super().__init__(*_interaction_args(module))
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        qzone_service=Service(),
+                        daily_life_bridge=types.SimpleNamespace(
+                            clean_expression_punctuation=AsyncMock(
+                                return_value="既然是真的 那今晚的疯狂星期四就靠你表现了"
+                            )
+                        ),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
                     ),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
                 )
 
         manager = Manager()
@@ -2076,6 +2254,8 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             processed,
             result,
             item_key="1:self:r1",
+            state={},
+            state_key=module.QZONE_AUTO_REPLY_STATE_KEY,
             reply="既然是真的，那今晚的疯狂星期四就靠你表现了。",
             processed_action="thread_replied",
             dashboard_action="auto_reply",
@@ -2106,8 +2286,12 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.plugin = types.SimpleNamespace(
-                    content_service=ContentService(),
+                super().__init__(*_interaction_args(module))
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        content_service=ContentService(),
+                    ),
                 )
 
         manager = Manager()
@@ -2155,21 +2339,25 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    daily_life_bridge=types.SimpleNamespace(
-                        clean_expression_punctuation=AsyncMock(
-                            return_value="这家书店听起来好舒服"
-                        )
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        daily_life_bridge=types.SimpleNamespace(
+                            clean_expression_punctuation=AsyncMock(
+                                return_value="这家书店听起来好舒服"
+                            )
+                        ),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
                     ),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
                 )
 
             async def llm(self, **kwargs):
@@ -2232,17 +2420,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                     "qzone_auto_interaction_active_hours": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2309,16 +2501,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2371,16 +2567,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2445,19 +2645,23 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                     "qzone_enable_auto_comment_image_vision": True,
                 }
-                self.db = FakeDb()
+                self.runtime = replace(self.runtime, db=FakeDb())
                 self.prompts = []
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
-                    context=types.SimpleNamespace(),
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                        context=types.SimpleNamespace(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2509,16 +2713,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2559,16 +2767,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2614,17 +2826,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
+                super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
-                self.qzone_conf = {
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -2684,17 +2900,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
                     "qzone_auto_interaction_active_hours": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -2753,16 +2973,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -2811,16 +3035,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -2874,16 +3102,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -2931,17 +3163,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                     "qzone_auto_interaction_active_hours": 0,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -2987,17 +3223,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
+                super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
-                self.qzone_conf = {
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3046,17 +3286,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
+                super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
-                self.qzone_conf = {
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3102,16 +3346,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3166,16 +3414,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
         manager = Manager()
@@ -3250,16 +3502,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3330,17 +3586,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
                     "qzone_auto_interaction_active_hours": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3404,16 +3664,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3485,16 +3749,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3552,16 +3820,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.llm_calls = 0
 
@@ -3638,16 +3910,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.llm_calls = 0
 
@@ -3777,16 +4053,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3877,16 +4157,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -3984,16 +4268,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4076,16 +4364,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4165,29 +4457,36 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_REPLY_STATE_KEY: {
-                            "processed": {
-                                "1:self:c1": {
-                                    "at": int(module.time.time()),
-                                    "action": "replied",
-                                    "content": "谢谢你呀",
-                                    "commenter": "Alice",
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_REPLY_STATE_KEY: {
+                                "processed": {
+                                    "1:self:c1": {
+                                        "at": int(module.time.time()),
+                                        "action": "replied",
+                                        "content": "谢谢你呀",
+                                        "commenter": "Alice",
+                                    }
                                 }
                             }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4289,34 +4588,41 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_REPLY_STATE_KEY: {
-                            "processed": {
-                                "1:self:c1": {
-                                    "at": int(module.time.time()),
-                                    "action": "replied",
-                                    "content": "reply 1",
-                                },
-                                "1:self:r2": {
-                                    "at": int(module.time.time()),
-                                    "action": "thread_replied",
-                                    "parent_comment_id": "c1",
-                                    "content": "reply 2",
-                                },
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_REPLY_STATE_KEY: {
+                                "processed": {
+                                    "1:self:c1": {
+                                        "at": int(module.time.time()),
+                                        "action": "replied",
+                                        "content": "reply 1",
+                                    },
+                                    "1:self:r2": {
+                                        "at": int(module.time.time()),
+                                        "action": "thread_replied",
+                                        "parent_comment_id": "c1",
+                                        "content": "reply 2",
+                                    },
+                                }
                             }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4425,28 +4731,35 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_REPLY_STATE_KEY: {
-                            "processed": {
-                                "1:self:c1": {
-                                    "at": int(module.time.time()),
-                                    "action": "replied",
-                                    "content": "reply 1",
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_REPLY_STATE_KEY: {
+                                "processed": {
+                                    "1:self:c1": {
+                                        "at": int(module.time.time()),
+                                        "action": "replied",
+                                        "content": "reply 1",
+                                    }
                                 }
                             }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4552,29 +4865,36 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
+                super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
-                self.qzone_conf = {
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_REPLY_STATE_KEY: {
-                            "processed": {
-                                "1:self:6": {
-                                    "at": int(module.time.time()),
-                                    "action": "replied",
-                                    "content": "马上",
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_REPLY_STATE_KEY: {
+                                "processed": {
+                                    "1:self:6": {
+                                        "at": int(module.time.time()),
+                                        "action": "replied",
+                                        "content": "马上",
+                                    }
                                 }
                             }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4672,28 +4992,35 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb(
-                    {
-                        module.QZONE_AUTO_REPLY_STATE_KEY: {
-                            "processed": {
-                                "1:self:11": {
-                                    "at": int(module.time.time()),
-                                    "action": "replied",
-                                    "content": "这叫劳逸结合，懂？",
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(
+                        {
+                            module.QZONE_AUTO_REPLY_STATE_KEY: {
+                                "processed": {
+                                    "1:self:11": {
+                                        "at": int(module.time.time()),
+                                        "action": "replied",
+                                        "content": "这叫劳逸结合，懂？",
+                                    }
                                 }
                             }
                         }
-                    }
+                    ),
                 )
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4771,16 +5098,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4862,16 +5193,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -4968,16 +5303,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5086,17 +5425,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                     "qzone_auto_interaction_active_hours": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5192,19 +5535,23 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                     "qzone_enable_auto_comment_image_vision": True,
                 }
-                self.db = FakeDb()
+                self.runtime = replace(self.runtime, db=FakeDb())
                 self.prompts = []
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
-                    context=types.SimpleNamespace(),
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                        context=types.SimpleNamespace(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5315,19 +5662,23 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                     "qzone_enable_auto_comment_image_vision": True,
                 }
-                self.db = FakeDb()
+                self.runtime = replace(self.runtime, db=FakeDb())
                 self.prompts = []
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
-                    context=types.SimpleNamespace(),
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                        context=types.SimpleNamespace(),
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5439,16 +5790,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.prompts = []
 
@@ -5604,17 +5959,21 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                     "qzone_auto_interaction_active_hours": 0,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5707,16 +6066,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5822,16 +6185,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5923,16 +6290,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
 
             async def llm(self, **kwargs):
@@ -5983,16 +6354,20 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=Service(),
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=Service(),
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.llm_calls = 0
 
@@ -6045,14 +6420,17 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_enable_auto_reply": True,
                 }
-                self.plugin = types.SimpleNamespace(_is_terminated=False)
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(_is_terminated=False)
+                )
                 self.calls = []
 
             async def execute_qzone_auto_like(self, *, emit_summary=True):
@@ -6108,14 +6486,17 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_enable_auto_reply": True,
                 }
-                self.plugin = types.SimpleNamespace(_is_terminated=False)
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(_is_terminated=False)
+                )
                 self.calls = []
 
             async def execute_qzone_auto_like(self, *, emit_summary=True):
@@ -6160,14 +6541,17 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_enable_auto_reply": True,
                 }
-                self.plugin = types.SimpleNamespace(_is_terminated=False)
+                self.runtime = replace(
+                    self.runtime, plugin=types.SimpleNamespace(_is_terminated=False)
+                )
                 self.calls = []
 
             async def execute_qzone_auto_like(self, *, emit_summary=True):

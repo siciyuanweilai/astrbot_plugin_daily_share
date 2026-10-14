@@ -7,10 +7,14 @@ from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
 from ..constants import SOURCE_CN_MAP
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginToolContextService(SupportComponent):
+    db = RuntimeField("db")
+    task_manager = RuntimeField("task_manager")
+    tool_context = RuntimeField("tool_context")
+
     _NEWS_LINK_CONTEXT_MARKER = "# 每日分享新闻缓存上下文"
     _QZONE_CONTEXT_MARKER = "# 每日分享 QQ 空间上下文"
     _QZONE_CONTEXT_TTL_SECONDS = 1800

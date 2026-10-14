@@ -5,11 +5,13 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginShareJobService(SupportComponent):
     """在后台执行手动分享，避免阻塞框架消息处理链。"""
+
+    jobs = RuntimeField("jobs")
 
     async def _start_manual_share_task(
         self,

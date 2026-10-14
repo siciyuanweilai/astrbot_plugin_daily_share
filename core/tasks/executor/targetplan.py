@@ -1,8 +1,8 @@
 from ...platform import parse_platform_session
-from .newsitem import TaskExecutorNewsService
+from ..taskbase import TaskServiceBase
 
 
-class TaskExecutorTargetService(TaskExecutorNewsService):
+class TaskExecutorTargetService(TaskServiceBase):
     """分享目标解析。"""
 
     def resolve_execute_share_targets(
@@ -20,13 +20,13 @@ class TaskExecutorTargetService(TaskExecutorNewsService):
         )
 
     @staticmethod
-    def _target_looks_group(target_umo: str) -> bool:
+    def looks_group(target_umo: str) -> bool:
         session = parse_platform_session(target_umo)
         return bool(session and session.is_group)
 
-    def _target_share_type_config(
+    def share_type_config(
         self, target_umo: str, is_group: bool, r_groups: dict, r_users: dict
-    ):
+    ) -> object:
         target_specific_type = self.basic_conf.get("share_type", "自动")
         conf = self.services.targets.get_target_conf(
             target_umo, is_group, r_groups, r_users

@@ -8,15 +8,38 @@ from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from astrbot_plugin_daily_share.core.context.daily.continuity import (
+    continuity_prompt,
+    topic_continuity,
+)
 from astrbot_plugin_daily_share.core.integrations.dailylife import DailyLifeBridge
 from astrbot_plugin_daily_share.core.integrations.delivery import record_confirmed_share
 from astrbot_plugin_daily_share.core.integrations.mediajob import current_share_job
-from astrbot_plugin_daily_share.core.context.daily.continuity import continuity_prompt
-from astrbot_plugin_daily_share.core.context.daily.continuity import topic_continuity
+from astrbot_plugin_daily_share.core.tasks.interact import sight
+from astrbot_plugin_daily_share.core.tasks.taskbase import (
+    TaskConfigState,
+    TaskSharedState,
+)
 from astrbot_plugin_daily_share.core.tasks.transmit.chain import (
     TaskDeliveryChainService,
 )
-from astrbot_plugin_daily_share.core.tasks.interact import sight
+from astrbot_plugin_daily_share.core.tasks.transmit.stage import (
+    TaskDeliveryStatusService,
+)
+
+
+def _delivery_chain(record):
+    runtime = types.SimpleNamespace(
+        plugin=types.SimpleNamespace(
+            daily_life_bridge=types.SimpleNamespace(record_delivery=record)
+        )
+    )
+    config = TaskConfigState({}, {}, {}, {}, {}, {}, {})
+    state = TaskSharedState(asyncio.Lock(), asyncio.Lock())
+    status = TaskDeliveryStatusService(runtime, config, state)
+    owner = TaskDeliveryChainService(runtime, config, state, status=status)
+    owner.send_message_chain = AsyncMock()
+    return owner
 
 
 class ShareUpdateTests(unittest.IsolatedAsyncioTestCase):
@@ -115,51 +138,38 @@ class ShareUpdateTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_confirmed_send_records_time_but_probable_timeout_does_not(self):
         record = AsyncMock()
-        owner = types.SimpleNamespace(
-            plugin=types.SimpleNamespace(
-                daily_life_bridge=types.SimpleNamespace(record_delivery=record)
-            ),
-            send_message_chain=AsyncMock(),
-            _mark_send_stage_success=lambda *args, **kwargs: None,
-            _record_send_stage_error=lambda *args, **kwargs: None,
-            _is_probable_delivery_timeout=lambda error: "sendmsg timeout" in str(error),
-            _send_stage_label=lambda stage: stage,
-        )
+        owner = _delivery_chain(record)
         chain = types.SimpleNamespace(chain=[type("Image", (), {})()])
         media = {}
         self.assertTrue(
-            await TaskDeliveryChainService._send_chain_stage(
-                owner, "qq:FriendMessage:a", chain, "text", media_result=media
+            await owner.send_chain_stage(
+                "qq:FriendMessage:a", chain, "text", media_result=media
             )
         )
         self.assertEqual(record.await_args.kwargs["media_kinds"], ("image",))
         self.assertGreater(media["text_sent_at"], 0)
+        self.assertTrue(media["text_sent"])
         record.reset_mock()
         owner.send_message_chain.side_effect = RuntimeError("sendmsg timeout")
         media = {}
         self.assertTrue(
-            await TaskDeliveryChainService._send_chain_stage(
-                owner, "qq:FriendMessage:a", chain, "image", media_result=media
+            await owner.send_chain_stage(
+                "qq:FriendMessage:a", chain, "image", media_result=media
             )
         )
         record.assert_not_awaited()
         self.assertNotIn("image_sent_at", media)
+        self.assertTrue(media["image_probable_sent"])
+        self.assertTrue(media["partial_errors"][0]["probable_sent"])
+        self.assertEqual(owner.send_message_chain.await_count, 2)
 
     async def test_receipt_failure_never_causes_send_retry(self):
-        owner = types.SimpleNamespace(
-            plugin=types.SimpleNamespace(
-                daily_life_bridge=types.SimpleNamespace(
-                    record_delivery=AsyncMock(
-                        side_effect=RuntimeError("database unavailable")
-                    )
-                )
-            ),
-            send_message_chain=AsyncMock(),
-            _mark_send_stage_success=lambda *args: None,
+        owner = _delivery_chain(
+            AsyncMock(side_effect=RuntimeError("database unavailable"))
         )
         self.assertTrue(
-            await TaskDeliveryChainService._send_chain_stage(
-                owner, "qq:FriendMessage:a", types.SimpleNamespace(chain=[]), "text"
+            await owner.send_chain_stage(
+                "qq:FriendMessage:a", types.SimpleNamespace(chain=[]), "text"
             )
         )
         owner.send_message_chain.assert_awaited_once()
@@ -207,7 +217,7 @@ class ShareUpdateTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("同一动图三帧", context.llm_generate.await_args.kwargs["prompt"])
 
-    async def test_video_failure_explicitly_forbids_guessing(self):
+    async def test_video_failure_reports_evidence_boundary(self):
         describe = AsyncMock(return_value={"status": "unavailable"})
         owner = types.SimpleNamespace(
             plugin=types.SimpleNamespace(
@@ -218,7 +228,8 @@ class ShareUpdateTests(unittest.IsolatedAsyncioTestCase):
             videos=["https://example.com/1.mp4", "https://example.com/2.mp4"]
         )
         result = await sight._qzone_video_context(owner, post)
-        self.assertIn("不推测", result)
+        self.assertIn("完整视频尚无可用摘要", result)
+        self.assertIn("动作与声音未知", result)
         describe.assert_awaited_once_with("https://example.com/1.mp4")
 
     def test_continuity_prompt_never_exports_raw_paths_or_private_projection(self):

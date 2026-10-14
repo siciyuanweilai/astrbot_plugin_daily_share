@@ -32,16 +32,16 @@ def parse_photo_batch_topic(
     return pic, batch, 4
 
 
-def parse_feed_photo_targets(
-    item: dict[str, Any], *, appid: int, owner_uin: int, raw_html: str = ""
-) -> list[QzonePhoto]:
-    """只保留明确配对的照片标识，不从动态 fid 或图片 CDN 地址猜测。"""
-    if appid != 4:
-        return []
-    targets: dict[tuple[int, str, str], QzonePhoto] = {}
-    declared_count = 0
+class _PhotoTargetCollector:
+    """收集和合并照片标识，独立于动态正文与提交验证。"""
 
-    def add(values: dict, album: str = "", owner: int = owner_uin):
+    def __init__(self, owner_uin: int):
+        self.owner_uin = owner_uin
+        self.targets: dict[tuple[int, str, str], QzonePhoto] = {}
+        self.declared_count = 0
+
+    def add(self, values: dict, album: str = "", owner: int | None = None):
+        owner = self.owner_uin if owner is None else owner
         normalized = {
             str(k).lower().replace("-", "").replace("_", ""): v
             for k, v in values.items()
@@ -96,9 +96,9 @@ def parse_feed_photo_targets(
                 else None
             )
             key = (owner, album, pic)
-            existing = targets.get(key)
+            existing = self.targets.get(key)
             if existing is None:
-                targets[key] = QzonePhoto(
+                self.targets[key] = QzonePhoto(
                     owner_uin=owner,
                     album_id=album,
                     pic_key=pic,
@@ -121,13 +121,12 @@ def parse_feed_photo_targets(
                     existing.feed_topic_id = feed_topic
         return album, owner
 
-    def walk(value, album="", owner=owner_uin, depth=0):
-        nonlocal declared_count
+    def walk(self, value, album="", owner=None, depth=0):
         if depth > 6 or not isinstance(value, dict):
             return
         if value.get("is_video"):
             return
-        album, owner = add(value, album, owner)
+        album, owner = self.add(value, album, owner)
         for key in (
             "photo",
             "photos",
@@ -139,64 +138,78 @@ def parse_feed_photo_targets(
         ):
             child = value.get(key)
             if isinstance(child, dict):
-                walk(child, album, owner, depth + 1)
+                self.walk(child, album, owner, depth + 1)
             elif isinstance(child, list):
-                declared_count = max(declared_count, len(child))
+                self.declared_count = max(self.declared_count, len(child))
                 for entry in child[:100]:
-                    walk(entry, album, owner, depth + 1)
+                    self.walk(entry, album, owner, depth + 1)
 
-    class PhotoTags(HTMLParser):
-        def __init__(self):
-            super().__init__(convert_charrefs=True)
-            self.stack: list[tuple[str, bool]] = []
 
-        def handle_starttag(self, tag, attrs):
-            values = dict(attrs)
-            classes = str(values.get("class") or "").lower()
-            blocked = any(skip for _, skip in self.stack) or any(
-                word in classes for word in ("comment", "reply", "repost")
-            )
-            if tag not in {"img", "br", "input", "hr", "meta", "link", "source", "wbr"}:
-                self.stack.append((tag, blocked))
-            if blocked:
-                return
-            # 配对的标识属性必须属于同一个 HTML 元素。
-            album, owner = add({k.removeprefix("data-"): v for k, v in values.items()})
-            for name in ("href", "link"):
-                url = values.get(name) or ""
-                try:
-                    parts = urlsplit(url)
-                    if parts.scheme not in {"", "http", "https"}:
-                        continue
-                    if parts.hostname and not (
-                        parts.hostname == "qzone.qq.com"
-                        or parts.hostname.endswith(".qzone.qq.com")
-                    ):
-                        continue
-                    query = parse_qs(parts.query)
-                    add(
-                        {k: v[0] for k, v in query.items() if len(v) == 1},
-                        album=album,
-                        owner=owner,
-                    )
-                except ValueError:
+class _PhotoTags(HTMLParser):
+    def __init__(self, collector: _PhotoTargetCollector):
+        super().__init__(convert_charrefs=True)
+        self.collector = collector
+        self.stack: list[tuple[str, bool]] = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        classes = str(values.get("class") or "").lower()
+        blocked = any(skip for _, skip in self.stack) or any(
+            word in classes for word in ("comment", "reply", "repost")
+        )
+        if tag not in {"img", "br", "input", "hr", "meta", "link", "source", "wbr"}:
+            self.stack.append((tag, blocked))
+        if blocked:
+            return
+        # 配对的标识属性必须属于同一个 HTML 元素。
+        album, owner = self.collector.add(
+            {k.removeprefix("data-"): v for k, v in values.items()}
+        )
+        for name in ("href", "link"):
+            url = values.get(name) or ""
+            try:
+                parts = urlsplit(url)
+                if parts.scheme not in {"", "http", "https"}:
                     continue
+                if parts.hostname and not (
+                    parts.hostname == "qzone.qq.com"
+                    or parts.hostname.endswith(".qzone.qq.com")
+                ):
+                    continue
+                query = parse_qs(parts.query)
+                self.collector.add(
+                    {k: v[0] for k, v in query.items() if len(v) == 1},
+                    album=album,
+                    owner=owner,
+                )
+            except ValueError:
+                continue
 
-        def handle_endtag(self, tag):
-            for index in range(len(self.stack) - 1, -1, -1):
-                if self.stack[index][0] == tag:
-                    del self.stack[index:]
-                    break
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
 
-    walk(item)
-    PhotoTags().feed(raw_html)
-    result = list(targets.values())
-    if declared_count > len(result):
+
+def parse_feed_photo_targets(
+    item: dict[str, Any], *, appid: int, owner_uin: int, raw_html: str = ""
+) -> list[QzonePhoto]:
+    """只保留明确配对的照片标识，不从动态 fid 或图片 CDN 地址猜测。"""
+    if appid != 4:
+        return []
+    collector = _PhotoTargetCollector(owner_uin)
+    collector.walk(item)
+    parser = _PhotoTags(collector)
+    parser.feed(raw_html)
+    parser.close()
+    result = list(collector.targets.values())
+    if collector.declared_count > len(result):
         # 仅解析出部分照片的批次不能视为唯一的单照片目标。
         result.append(
             QzonePhoto(
                 owner_uin=owner_uin,
-                unresolved_count=declared_count - len(result),
+                unresolved_count=collector.declared_count - len(result),
             )
         )
     return result

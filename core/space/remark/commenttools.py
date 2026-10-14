@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneComment
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneCommentUtilService(QzoneMethodSet):
+
+class QzoneCommentUtilService:
     """QQ 空间评论提交与诊断的通用工具。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     @staticmethod
     def _payload_message(payload: dict) -> str:
@@ -75,9 +82,9 @@ class QzoneCommentUtilService(QzoneMethodSet):
         return f"@{{uin:{uin},nick:{nickname},auto:1}} {text}"
 
     def _comment_submit_ok(self, payload: dict) -> bool:
-        if self._ok(payload):
+        if self.owner._ok(payload):
             return True
-        if self._write_response_without_json_ok(payload):
+        if self.owner._write_response_without_json_ok(payload):
             logger.debug(
                 "[日常分享] QQ 空间评论接口返回内容不是结构化数据，但接口状态正常，按评论成功处理。"
             )

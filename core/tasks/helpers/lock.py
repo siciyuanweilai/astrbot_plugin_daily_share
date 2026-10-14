@@ -1,7 +1,7 @@
-from .arguments import TaskHelperArgsService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperLockService(TaskHelperArgsService):
+class TaskHelperLockService(TaskServiceBase):
     """命令触发分享锁辅助。"""
 
     def get_command_share_lock(

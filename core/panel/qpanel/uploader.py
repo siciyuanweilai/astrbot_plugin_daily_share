@@ -5,10 +5,13 @@ import base64
 import inspect
 
 from ..common import _quart_request
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzoneUploadService(PanelComponent):
+    qzone_upload = RuntimeField("qzone_upload")
+    server = RuntimeField("server")
+
     _QZONE_PANEL_UPLOAD_CHUNK_SIZE = 64 * 1024
     _QZONE_PANEL_UPLOAD_MAX_BYTES = 24 * 1024 * 1024
 

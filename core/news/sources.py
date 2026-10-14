@@ -1,14 +1,22 @@
+from __future__ import annotations
+
 import random
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP, NEWS_TIME_PREFERENCES, TimePeriod
-from .decode import NewsParserService
+
+if TYPE_CHECKING:
+    from . import NewsService
 
 
-class NewsSourceService(NewsParserService):
+class NewsSourceService:
     """新闻源选择和图片地址。"""
+
+    def __init__(self, owner: NewsService) -> None:
+        self.owner = owner
 
     conf: dict
 
@@ -41,10 +49,10 @@ class NewsSourceService(NewsParserService):
 
     def select_news_source(self, excluded_source: str | None = None) -> str:
         """选择主新闻源"""
-        mode = self.conf.get("news_random_mode", "config")
+        mode = self.owner.conf.get("news_random_mode", "config")
 
         if mode == "fixed":
-            source = self.conf.get("news_api_source", "zhihu")
+            source = self.owner.conf.get("news_api_source", "zhihu")
             if not isinstance(source, str) or source not in NEWS_SOURCE_MAP:
                 logger.warning(f"[新闻] 固定新闻源无效: {source}，回退知乎")
                 source = "zhihu"
@@ -58,8 +66,8 @@ class NewsSourceService(NewsParserService):
             logger.info(f"[新闻] 完全随机: {NEWS_SOURCE_MAP[source]['name']}")
             return source
         elif mode == "config":
-            c = self.conf.get("news_random_sources", ["zhihu", "weibo"])
-            valid = self._valid_sources(c)
+            c = self.owner.conf.get("news_random_sources", ["zhihu", "weibo"])
+            valid = self.owner._valid_sources(c)
             if not valid:
                 valid = ["zhihu"]
 
@@ -71,13 +79,13 @@ class NewsSourceService(NewsParserService):
             logger.info(f"[新闻] 配置列表随机: {NEWS_SOURCE_MAP[source]['name']}")
             return source
         elif mode == "time_based":
-            return self._select_by_time(excluded_source)
+            return self.owner._select_by_time(excluded_source)
 
         return "zhihu"
 
     def _select_by_time(self, excluded_source: str | None = None) -> str:
         """基于时间的智能选择"""
-        period = self._get_current_period()
+        period = self.owner._get_current_period()
         # 获取偏好，默认为早晨配置
         prefs = NEWS_TIME_PREFERENCES.get(
             period, NEWS_TIME_PREFERENCES[TimePeriod.MORNING]
@@ -90,8 +98,8 @@ class NewsSourceService(NewsParserService):
                 del prefs[excluded_source]
                 logger.debug(f"[新闻] 已排除上次使用的源: {excluded_source}")
 
-        raw_conf = self.conf.get("news_random_sources", None)
-        conf = self._valid_sources(raw_conf)
+        raw_conf = self.owner.conf.get("news_random_sources", None)
+        conf = self.owner._valid_sources(raw_conf)
 
         selected = "zhihu"
         if raw_conf is not None and not conf:
@@ -143,11 +151,11 @@ class NewsSourceService(NewsParserService):
     def get_hot_news_image_url(self, source: str | None = None) -> tuple:
         """获取热搜图片链接"""
         if not source or source not in NEWS_SOURCE_MAP:
-            source = self.select_news_source()
+            source = self.owner.select_news_source()
 
         base_url = NEWS_SOURCE_MAP[source]["url"]
         extra_params = NEWS_SOURCE_MAP[source].get("extra_params", "")
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
 
         final_url = f"{base_url}?format=image{extra_params}"
         if key:
@@ -157,7 +165,7 @@ class NewsSourceService(NewsParserService):
 
     def get_60s_image_url(self) -> str | None:
         """获取每日 60 秒读世界图片链接"""
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
         if not key:
             logger.error("[新闻] 未配置柠柚接口密钥")
             return None
@@ -165,7 +173,7 @@ class NewsSourceService(NewsParserService):
 
     def get_ai_news_image_url(self) -> str | None:
         """获取每日 AI 资讯图片链接。"""
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
         if not key:
             logger.error("[新闻] 未配置柠柚接口密钥")
             return None

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardQzoneActionService(PanelComponent):
+    events = RuntimeField("events")
+    qzone_actions = RuntimeField("qzone_actions")
+    qzone_service = RuntimeField("qzone_service")
+    server = RuntimeField("server")
+
     async def page_qzone_like(self):
         async def handler():
             body = await self.server._page_json_body()

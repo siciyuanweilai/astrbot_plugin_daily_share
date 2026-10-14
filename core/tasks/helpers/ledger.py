@@ -2,10 +2,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ...toolkit import log_exception
-from .lock import TaskHelperLockService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperRecordService(TaskHelperLockService):
+class TaskHelperRecordService(TaskServiceBase):
     """分享历史与部分发送异常记录。"""
 
     def log_exception(self, message: str, exc: Exception) -> None:

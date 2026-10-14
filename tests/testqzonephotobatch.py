@@ -9,6 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from .testqzonecomment import _interaction_args
+
 from .testqzone import (
     _load_qzone_service,
     _new_qzone_service,
@@ -57,10 +59,12 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.service.query_posts = AsyncMock(return_value=[])
         self.task_module, _ = _load_auto_comment_module()
         service = self.service
+        task_module = self.task_module
 
         class Manager(self.task_module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(task_module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 10,
@@ -68,11 +72,14 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
                     "qzone_auto_reply_limit": 10,
                     "qzone_auto_interaction_active_hours": 0,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=service,
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(self.runtime, db=FakeDb())
+                self.runtime = replace(
+                    self.runtime,
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=service,
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.generated = []
 
@@ -174,9 +181,11 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.vision = AsyncMock(side_effect=describe)
         self.manager.plugin.context = types.SimpleNamespace(
             llm_generate=self.vision,
-            get_using_provider=lambda: types.SimpleNamespace(
-                meta=lambda: types.SimpleNamespace(id="vision-provider")
-            ),
+            get_all_providers=lambda: [
+                types.SimpleNamespace(
+                    meta=lambda: types.SimpleNamespace(id="vision-provider")
+                )
+            ],
         )
         self.manager.plugin.call_llm = AsyncMock(
             return_value=json.dumps({"photo_index": 1, "comment": "Nice photo!"})
@@ -313,7 +322,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
             "anchor_unreadable",
         ):
             with self.subTest(invalid=invalid):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.failed_pics.clear()
                 self.use_upload_capture()
                 if invalid == "different_batch":
@@ -527,7 +536,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
     ):
         for invalid in ("different_batch", "no_batch", "anchor_unreadable"):
             with self.subTest(invalid=invalid):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.failed_pics.clear()
                 self.payload = _parser().parse_qzone_response(batch_capture())
                 self.post = parse_feed(
@@ -598,7 +607,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_vision_obeys_shared_limit_and_synthesizes_one_comment(self):
         for limit, expected in ((None, 1), (1, 1), (2, 2), (3, 3), (9, 3)):
             with self.subTest(limit=limit):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.service._request.reset_mock()
                 self.use_image_vision(limit=limit)
                 result = await self.run_comment()
@@ -747,9 +756,10 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         call = self.manager.plugin.call_llm.call_args
         for detail in ("室内伸懒腰", "展厅里欣赏画作", "夕阳下坐在江边捧着饮料"):
             self.assertIn(detail, call.kwargs["prompt"])
-        self.assertIn("本批照片只发一条综合评论", call.kwargs["prompt"])
-        self.assertIn("不是只评价提交落点这一张", call.kwargs["prompt"])
-        self.assertIn("综合同批全部已识别图片", call.kwargs["system_prompt"])
+        self.assertIn("本批照片只发一条综合评论", call.kwargs["system_prompt"])
+        self.assertIn("不是只评价提交落点这一张", call.kwargs["system_prompt"])
+        self.assertIn("本批全部已识别图片", call.kwargs["system_prompt"])
+        self.assertIn("可选提交落点", call.kwargs["prompt"])
         self.assertEqual(len(self.writes()), 1)
         data = self.writes()[0].kwargs["data"]
         self.assertEqual(
@@ -776,7 +786,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         ]
         for response in cases:
             with self.subTest(response=response):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.service._request.reset_mock()
                 self.use_image_vision(limit=3)
                 self.manager.plugin.call_llm.return_value = response
@@ -792,7 +802,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
     ):
         for limit, failure, selected in ((2, None, 3), (3, 2, 2)):
             with self.subTest(limit=limit, failure=failure):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.service._request.reset_mock()
                 self.use_image_vision(limit=limit)
                 if failure:
@@ -832,7 +842,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
     async def test_duplicate_or_missing_image_url_keeps_selection_mapping(self):
         for image_url, selected in (("https://photo.example/photo-1.jpg", 2), ("", 2)):
             with self.subTest(image_url=image_url):
-                self.manager.db = FakeDb()
+                self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
                 self.service._request.reset_mock()
                 self.payload["data"]["photos"][1]["url"] = image_url
                 self.payload["data"]["photos"][1]["pre"] = image_url

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ...platform import (
@@ -7,14 +11,19 @@ from ...platform import (
     get_platform_bindings,
     parse_platform_session,
 )
-from .names import TaskTargetIdentityService
+
+if TYPE_CHECKING:
+    from . import TaskTargetService
 
 
-class TaskTargetPlatformService(TaskTargetIdentityService):
+class TaskTargetPlatformService:
+    def __init__(self, owner: TaskTargetService) -> None:
+        self.owner = owner
+
     def get_target_platform_bindings(self) -> list[PlatformBinding]:
         """返回主动发送平台的完整能力记录，包含重复标识诊断。"""
         try:
-            return get_platform_bindings(self.plugin.context)
+            return get_platform_bindings(self.owner.plugin.context)
         except Exception:
             return []
 
@@ -22,7 +31,7 @@ class TaskTargetPlatformService(TaskTargetIdentityService):
         """返回当前支持主动发送的目标平台实例标识。"""
         return [
             binding.route_id
-            for binding in self.get_target_platform_bindings()
+            for binding in self.owner.get_target_platform_bindings()
             if binding.supports_proactive
             and not binding.conflicted
             and (not expected_group or binding.supports_group)
@@ -68,7 +77,7 @@ class TaskTargetPlatformService(TaskTargetIdentityService):
         route_id: str = "",
     ) -> PlatformBinding:
         """按内部路由、消息类型和目标标识选择唯一平台实例。"""
-        bindings = self.get_target_platform_bindings()
+        bindings = self.owner.get_target_platform_bindings()
         selected = str(route_id or "").strip()
         exact_route = [binding for binding in bindings if binding.route_id == selected]
         if exact_route:
@@ -80,7 +89,7 @@ class TaskTargetPlatformService(TaskTargetIdentityService):
         else:
             matches = bindings
 
-        matches = self._narrow_target_platform_bindings(
+        matches = self.owner._narrow_target_platform_bindings(
             matches,
             session_id=session_id,
             expected_group=expected_group,
@@ -125,7 +134,7 @@ class TaskTargetPlatformService(TaskTargetIdentityService):
             expected = "群聊" if expected_group else "私聊"
             raise ValueError(f"目标消息类型必须是{expected}")
 
-        return self.select_target_platform_binding(
+        return self.owner.select_target_platform_binding(
             session_id=session.session_id,
             expected_group=session.is_group,
             route_id=session.platform_id,
@@ -137,7 +146,7 @@ class TaskTargetPlatformService(TaskTargetIdentityService):
         if not session:
             return None
         try:
-            return self.ensure_target_platform_routable(target_umo).instance
+            return self.owner.ensure_target_platform_routable(target_umo).instance
         except ValueError as exc:
             if "当前不可用" in str(exc):
                 return None

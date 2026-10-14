@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzoneContext, QzonePost
 from .commentid import QzoneReplyIdentityService
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneReplyVerifyService(QzoneMethodSet):
+
+class QzoneReplyVerifyService:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     async def _verify_thread_reply_submission(
         self,
         post: QzonePost,
@@ -21,11 +26,13 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         ctx: QzoneContext,
         submitted_at: int,
     ) -> dict[str, Any]:
-        target_ids = self._reply_verification_target_ids(
+        target_ids = self.owner._reply_verification_target_ids(
             comment, parent_comment=parent_comment
         )
-        parent_ids = self._comment_id_aliases(parent_comment)
-        before_ids = self._reply_verification_existing_self_ids(post, int(ctx.uin or 0))
+        parent_ids = self.owner._comment_id_aliases(parent_comment)
+        before_ids = self.owner._reply_verification_existing_self_ids(
+            post, int(ctx.uin or 0)
+        )
         base = {
             "status": "not_found",
             "target_ids": sorted(target_ids),
@@ -38,15 +45,15 @@ class QzoneReplyVerifyService(QzoneMethodSet):
             if delay:
                 await asyncio.sleep(delay)
             try:
-                self._invalidate_qzone_cache(
+                self.owner._invalidate_qzone_cache(
                     post_id=post.key,
                     target_id=str(post.uin),
                 )
-                fresh = await self.detail(post.key)
+                fresh = await self.owner.detail(post.key)
             except Exception as exc:
                 last = {**base, "status": "detail_failed", "error": str(exc or "")}
                 continue
-            last = self._verify_thread_reply_in_post(
+            last = self.owner._verify_thread_reply_in_post(
                 fresh,
                 comment,
                 content,
@@ -78,7 +85,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         if not comment_id:
             return {"status": "skipped", "reason": "missing_verified_reply_tid"}
         try:
-            result = await self.delete_comment(
+            result = await self.owner.delete_comment(
                 post,
                 comment_id,
                 comment_uin=int(ctx.uin or 0),
@@ -110,9 +117,11 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         before_ids: set[str],
         submitted_at: int,
     ) -> dict[str, Any]:
+        from ..qzone import QzoneService
+
         comments = list(getattr(post, "comments", []) or [])
-        aliases = cls._comment_alias_map(comments)
-        expected_texts = cls._reply_verification_text_variants(content)
+        aliases = QzoneService._comment_alias_map(comments)
+        expected_texts = QzoneService._reply_verification_text_variants(content)
         target_uin = int(getattr(comment, "uin", 0) or 0)
         candidates: list[dict[str, Any]] = []
         best_wrong: dict[str, Any] | None = None
@@ -120,20 +129,22 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         for item in comments:
             if int(getattr(item, "uin", 0) or 0) != int(self_uin or 0):
                 continue
-            text_matches = cls._reply_verification_text_matches(item, expected_texts)
-            is_new = cls._reply_verification_is_new_self_comment(
+            text_matches = QzoneService._reply_verification_text_matches(
+                item, expected_texts
+            )
+            is_new = QzoneService._reply_verification_is_new_self_comment(
                 item,
                 before_ids=before_ids,
                 submitted_at=submitted_at,
             )
-            target_status = cls._reply_verification_target_status(
+            target_status = QzoneService._reply_verification_target_status(
                 item,
                 aliases=aliases,
                 target_ids=target_ids,
                 parent_ids=parent_ids,
                 target_uin=target_uin,
             )
-            row = cls._reply_verification_candidate_debug(
+            row = QzoneService._reply_verification_candidate_debug(
                 item,
                 text_matches=text_matches,
                 is_new=is_new,
@@ -201,6 +212,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         *,
         parent_comment: QzoneComment | None,
     ) -> set[str]:
+
         target_ids = QzoneReplyIdentityService._comment_id_aliases(comment)
         parent_ids = QzoneReplyIdentityService._comment_id_aliases(parent_comment)
         precise_ids = target_ids - parent_ids
@@ -210,6 +222,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
     def _reply_verification_existing_self_ids(
         cls, post: QzonePost, self_uin: int
     ) -> set[str]:
+
         ids: set[str] = set()
         for item in getattr(post, "comments", []) or []:
             if int(getattr(item, "uin", 0) or 0) != int(self_uin or 0):
@@ -221,6 +234,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
     def _comment_alias_map(
         cls, comments: list[QzoneComment]
     ) -> dict[str, QzoneComment]:
+
         aliases: dict[str, QzoneComment] = {}
         for item in comments:
             for alias in QzoneReplyIdentityService._comment_id_aliases(item):
@@ -237,6 +251,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         parent_ids: set[str],
         target_uin: int,
     ) -> str:
+
         reply_to_tid = str(getattr(item, "reply_to_tid", "") or "").strip()
         if not reply_to_tid:
             return "unknown"
@@ -258,12 +273,16 @@ class QzoneReplyVerifyService(QzoneMethodSet):
 
     @classmethod
     def _reply_verification_text_variants(cls, content: str) -> set[str]:
+        from ..qzone import QzoneService
+
         text = str(content or "").strip()
-        variants = {cls._normalize_reply_verification_text(text)}
+        variants = {QzoneService._normalize_reply_verification_text(text)}
         if text.startswith("@{"):
             end = text.find("}")
             if end >= 0:
-                variants.add(cls._normalize_reply_verification_text(text[end + 1 :]))
+                variants.add(
+                    QzoneService._normalize_reply_verification_text(text[end + 1 :])
+                )
         variants.discard("")
         return variants
 
@@ -275,9 +294,11 @@ class QzoneReplyVerifyService(QzoneMethodSet):
     def _reply_verification_text_matches(
         cls, item: QzoneComment, expected_texts: set[str]
     ) -> bool:
+        from ..qzone import QzoneService
+
         if not expected_texts:
             return False
-        actual_texts = cls._reply_verification_text_variants(
+        actual_texts = QzoneService._reply_verification_text_variants(
             str(getattr(item, "content", "") or "")
         )
         if actual_texts & expected_texts:
@@ -296,6 +317,7 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         before_ids: set[str],
         submitted_at: int,
     ) -> bool:
+
         aliases = QzoneReplyIdentityService._comment_id_aliases(item)
         if aliases and aliases & before_ids:
             return False
@@ -375,12 +397,14 @@ class QzoneReplyVerifyService(QzoneMethodSet):
         attempted_targets: list[dict[str, Any]],
         verification: dict[str, Any] | None = None,
     ) -> None:
+        from ..qzone import QzoneService
+
         setattr(exc, "attempts", [dict(item) for item in attempts])
         setattr(exc, "attempted_targets", [dict(item) for item in attempted_targets])
         if verification is not None:
             setattr(exc, "reply_verification_failed", True)
             setattr(exc, "verification", dict(verification))
-            for key, value in cls._reply_verification_debug_fields(
+            for key, value in QzoneService._reply_verification_debug_fields(
                 verification
             ).items():
                 setattr(exc, key, value)

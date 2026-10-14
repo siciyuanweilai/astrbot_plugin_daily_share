@@ -1,6 +1,6 @@
 from ..database.keys import target_state_key
 from ..platform import parse_platform_session
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 _TARGET_BUCKET_GROUP_KIND = {
     "groups": True,
@@ -81,6 +81,14 @@ def apply_shared_target_bindings(payload: dict) -> dict:
 
 class DashboardTargetConfigService(PanelComponent):
     """仪表盘目标配置、统计和序列化。"""
+
+    ctx_service = RuntimeField("ctx_service")
+    db = RuntimeField("db")
+    extra_shares_conf = RuntimeField("extra_shares_conf")
+    labels = RuntimeField("labels")
+    receiver_conf = RuntimeField("receiver_conf")
+    targets = RuntimeField("targets")
+    task_manager = RuntimeField("task_manager")
 
     async def _page_target_item(self, target_id: str, conf, kind: str) -> dict:
         cron = None

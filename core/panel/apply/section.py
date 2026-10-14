@@ -7,10 +7,14 @@ from ..common import (
     _PAGE_CONTEXT_STRATEGY_OPTIONS,
     _PAGE_NEWS_RANDOM_MODE_OPTIONS,
 )
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardApplySectionService(PanelComponent):
+    config = RuntimeField("config")
+    fields = RuntimeField("fields")
+    validation = RuntimeField("validation")
+
     def _page_apply_content_section(self, sections: dict) -> None:
         content_body = self.runtime.fields._page_payload_section(sections, "content")
         content = self.config.setdefault("content_library", {})

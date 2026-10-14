@@ -3,13 +3,13 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType, TimePeriod
 from ...constants import normalize_share_type_sequence, share_type_label
-from .send import TaskExecutorSendService
+from ..taskbase import TaskServiceBase
 
 
-class TaskExecutorMediaService(TaskExecutorSendService):
+class TaskExecutorMediaService(TaskServiceBase):
     """分享媒体生成。"""
 
-    async def _generate_execute_share_media(
+    async def generate_media(
         self,
         *,
         progress_id: str,
@@ -36,7 +36,7 @@ class TaskExecutorMediaService(TaskExecutorSendService):
                     img_path,
                     send_img_path,
                     image_description,
-                ) = await self.services.executor_helpers.generate_share_image_step(
+                ) = await self.services.executor_helpers.media.generate_share_image_step(
                     progress_id=progress_id,
                     content=content,
                     share_type=stype,
@@ -50,7 +50,7 @@ class TaskExecutorMediaService(TaskExecutorSendService):
                         self.image_conf.get("video_enabled_types", ["问候", "心情"])
                     )
                     if stype.value in video_allowed:
-                        video_url = await self.services.executor_helpers.generate_share_video_step(
+                        video_url = await self.services.executor_helpers.media.generate_share_video_step(
                             progress_id=progress_id,
                             img_path=img_path,
                             content=content,
@@ -91,15 +91,13 @@ class TaskExecutorMediaService(TaskExecutorSendService):
         )
         if enable_tts_global:
             if stype.value in tts_allowed_types:
-                audio_path = (
-                    await self.services.executor_helpers.generate_share_audio_step(
-                        progress_id=progress_id,
-                        content=content,
-                        target_umo=target_umo,
-                        share_type=stype,
-                        period=period,
-                        event=event,
-                    )
+                audio_path = await self.services.executor_helpers.media.generate_share_audio_step(
+                    progress_id=progress_id,
+                    content=content,
+                    target_umo=target_umo,
+                    share_type=stype,
+                    period=period,
+                    event=event,
                 )
             else:
                 logger.info(

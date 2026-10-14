@@ -10,11 +10,29 @@ from .common import (
     _quart_jsonify,
     _quart_request,
 )
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardBaseService(PanelComponent):
     """仪表盘基础能力。"""
+
+    action_routes = RuntimeField("action_routes")
+    config_routes = RuntimeField("config_routes")
+    context = RuntimeField("context")
+    events = RuntimeField("events")
+    media_page = RuntimeField("media_page")
+    page_preferences_file = RuntimeField("page_preferences_file")
+    query_routes = RuntimeField("query_routes")
+    qzone_actions = RuntimeField("qzone_actions")
+    qzone_entry = RuntimeField("qzone_entry")
+    qzone_feed = RuntimeField("qzone_feed")
+    qzone_publish = RuntimeField("qzone_publish")
+    qzone_relations = RuntimeField("qzone_relations")
+    qzone_upload = RuntimeField("qzone_upload")
+    retry_routes = RuntimeField("retry_routes")
+    server = RuntimeField("server")
+    status_routes = RuntimeField("status_routes")
+    target_routes = RuntimeField("target_routes")
 
     def register_web_apis(self) -> None:
         routes = (

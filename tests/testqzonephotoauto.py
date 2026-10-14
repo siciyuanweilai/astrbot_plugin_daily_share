@@ -3,11 +3,12 @@
 import json
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from .testqzone import _load_qzone_service, _new_qzone_service, _parser
-from .testqzonecomment import FakeDb, _load_auto_comment_module
+from .testqzonecomment import FakeDb, _interaction_args, _load_auto_comment_module
 
 
 def captured_album_response():
@@ -376,7 +377,9 @@ class AlbumCommentRoutingTests(unittest.IsolatedAsyncioTestCase):
                 with patch.object(
                     self.service, "_invalidate_qzone_cache"
                 ) as invalidate:
-                    with self.assertRaisesRegex(RuntimeError, "transport=photo_comment"):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "transport=photo_comment"
+                    ):
                         await self.service.comment(self.post.key, "hello")
                     invalidate.assert_not_called()
                 self.assertEqual(len(session.calls), 1)
@@ -475,16 +478,20 @@ class AlbumAutoTaskTests(unittest.IsolatedAsyncioTestCase):
 
         class Manager(module.TaskQzoneAutoCommentService):
             def __init__(self):
-                self.qzone_conf = {
+                super().__init__(*_interaction_args(module))
+                self.config.qzone = {
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
                 }
-                self.db = FakeDb()
-                self.plugin = types.SimpleNamespace(
-                    _is_terminated=False,
-                    qzone_service=service,
-                    emit_dashboard_event=lambda *args, **kwargs: None,
+                self.runtime = replace(
+                    self.runtime,
+                    db=FakeDb(),
+                    plugin=types.SimpleNamespace(
+                        _is_terminated=False,
+                        qzone_service=service,
+                        emit_dashboard_event=lambda *args, **kwargs: None,
+                    ),
                 )
                 self.generated_for = []
 

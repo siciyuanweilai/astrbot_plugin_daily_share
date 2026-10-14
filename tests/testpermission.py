@@ -4,6 +4,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 ROOT = Path(__file__).resolve().parents[1]
 PERMISSION_MODULE_PATH = ROOT / "core" / "host" / "permission.py"
@@ -481,7 +482,27 @@ class QzoneAutoInteractToolPermissionTests(unittest.IsolatedAsyncioTestCase):
 
         await self.host.run_qzone_auto_interaction_tool(event, action="all")
 
-        self.assertEqual([call["emoji_id"] for call in event.bot.calls], [125, 79])
+        self.assertEqual([call["emoji_id"] for call in event.bot.calls], [125, 125, 79])
+        self.assertFalse(event.bot.calls[1]["set"])
+
+    async def test_auto_interaction_distinguishes_failed_partial_and_idle(self):
+        for counts, ending in (
+            ({"failed": 3}, 106),
+            ({"liked": 1, "failed": 1}, 106),
+            ({"generation_failed": 1}, 106),
+            ({"comment": {"rate_limited": True}}, 106),
+            ({"liked": 1, "comment": {"rate_limited": True}}, 106),
+            ({"skipped": 3}, None),
+        ):
+            with self.subTest(counts=counts):
+                event = _event_with_emoji(role="admin")
+                self.host.task_manager.execute_qzone_auto_interaction = AsyncMock(
+                    return_value={"enabled": True, **counts}
+                )
+                await self.host.run_qzone_auto_interaction_tool(event, action="all")
+                expected = [125, 125] + ([ending] if ending else [])
+                self.assertEqual([c["emoji_id"] for c in event.bot.calls], expected)
+                self.assertFalse(event.bot.calls[1]["set"])
 
     async def test_rejects_non_standard_natural_language_action(self):
         result = await self.host.run_qzone_auto_interaction_tool(

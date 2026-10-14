@@ -6,10 +6,12 @@ from urllib.parse import unquote, urlparse
 
 from ...config import ShareType
 from ..common import _PAGE_IMAGE_EXTS, _PAGE_VIDEO_EXTS
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardMediaKindService(PanelComponent):
+    media_kind = RuntimeField("media_kind")
+
     def _page_media_kind_from_ref(self, ref: str) -> str:
         ref = str(ref or "").strip()
         if not ref:

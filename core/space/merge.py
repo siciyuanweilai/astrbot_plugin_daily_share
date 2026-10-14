@@ -1,17 +1,26 @@
 from __future__ import annotations
 
-from .methodset import QzoneMethodSet
+from typing import TYPE_CHECKING
+
 from .models import QzoneComment, QzonePost
 
+if TYPE_CHECKING:
+    from .qzone import QzoneService
 
-class QzoneFeedMergeService(QzoneMethodSet):
+
+class QzoneFeedMergeService:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     @classmethod
     def _merge_post_detail(cls, base: QzonePost, detail: QzonePost | None) -> QzonePost:
+        from .qzone import QzoneService
+
         if detail is None:
             return base
         detail.feed_key = detail.feed_key or base.feed_key
-        detail.curkey = detail.curkey or base.curkey
-        detail.unikey = detail.unikey or base.unikey
+        detail.curkey = base.curkey or detail.curkey
+        detail.unikey = base.unikey or detail.unikey
         detail.busi_param = detail.busi_param or base.busi_param
         # 通用详情解析器默认使用 appid=311，保留动态明确提供的类型和目标。
         if int(base.appid or 311) != 311:
@@ -24,7 +33,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
                 photo.feed_topic_id = previous.feed_topic_id
             photos[key] = photo
         detail.photo_targets = list(photos.values())
-        detail.comments = cls._merge_comments(base.comments, detail.comments)
+        detail.comments = QzoneService._merge_comments(base.comments, detail.comments)
         detail.images = detail.images or base.images
         detail.videos = detail.videos or base.videos
         detail.text = detail.text or base.text
@@ -43,6 +52,8 @@ class QzoneFeedMergeService(QzoneMethodSet):
     def _merge_comments(
         cls, base_comments: list[QzoneComment], detail_comments: list[QzoneComment]
     ) -> list[QzoneComment]:
+        from .qzone import QzoneService
+
         base = list(base_comments or [])
         detail = list(detail_comments or [])
         if not base:
@@ -65,7 +76,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
         used_detail: set[int] = set()
         for comment in base:
             tid = str(comment.tid or "").strip()
-            matched = cls._match_detail_comment(
+            matched = QzoneService._match_detail_comment(
                 comment,
                 detail,
                 detail_by_tid=detail_by_tid,
@@ -73,7 +84,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
                 used_detail=used_detail,
             )
             if matched is not None:
-                merged.append(cls._merge_comment(comment, matched))
+                merged.append(QzoneService._merge_comment(comment, matched))
             else:
                 merged.append(comment)
             if tid:
@@ -99,6 +110,8 @@ class QzoneFeedMergeService(QzoneMethodSet):
         detail_by_submit_tid: dict[str, QzoneComment],
         used_detail: set[int],
     ) -> QzoneComment | None:
+        from .qzone import QzoneService
+
         direct_matches = (
             detail_by_tid.get(str(base_comment.tid or "").strip()),
             detail_by_submit_tid.get(str(base_comment.submit_tid or "").strip()),
@@ -111,7 +124,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
         for candidate in detail_comments:
             if id(candidate) in used_detail:
                 continue
-            if cls._comments_equivalent(base_comment, candidate):
+            if QzoneService._comments_equivalent(base_comment, candidate):
                 used_detail.add(id(candidate))
                 return candidate
         return None
@@ -148,13 +161,15 @@ class QzoneFeedMergeService(QzoneMethodSet):
 
     @classmethod
     def _prefer_submit_tid(cls, *values: str) -> str:
+        from .qzone import QzoneService
+
         best = ""
         best_rank = -1
         for value in values:
             text = str(value or "").strip()
             if not text:
                 continue
-            rank = cls._comment_submit_tid_rank(text)
+            rank = QzoneService._comment_submit_tid_rank(text)
             if rank > best_rank:
                 best = text
                 best_rank = rank
@@ -164,6 +179,8 @@ class QzoneFeedMergeService(QzoneMethodSet):
     def _merge_comment(
         cls, base_comment: QzoneComment, detail_comment: QzoneComment
     ) -> QzoneComment:
+        from .qzone import QzoneService
+
         raw_fields = dict(getattr(base_comment, "raw_fields", {}) or {})
         raw_fields.update(dict(getattr(detail_comment, "raw_fields", {}) or {}))
         return QzoneComment(
@@ -174,7 +191,7 @@ class QzoneFeedMergeService(QzoneMethodSet):
                 detail_comment.create_time or base_comment.create_time or 0
             ),
             tid=str(base_comment.tid or detail_comment.tid or ""),
-            submit_tid=cls._prefer_submit_tid(
+            submit_tid=QzoneService._prefer_submit_tid(
                 str(detail_comment.submit_tid or ""),
                 str(detail_comment.tid or ""),
                 str(base_comment.submit_tid or ""),

@@ -3,12 +3,14 @@ import importlib
 import sys
 import types
 import unittest
+from dataclasses import replace
 from unittest.mock import AsyncMock
 
 if __package__:
     from .testqzonecomment import (
         CORE_PACKAGE_NAME,
         TASKS_PACKAGE_NAME,
+        _interaction_args,
         _load_auto_comment_module,
         _load_qzone_service_module,
     )
@@ -16,6 +18,7 @@ else:
     from testqzonecomment import (
         CORE_PACKAGE_NAME,
         TASKS_PACKAGE_NAME,
+        _interaction_args,
         _load_auto_comment_module,
         _load_qzone_service_module,
     )
@@ -137,13 +140,16 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
             {},
             types.SimpleNamespace(get_share_context=get_share_context),
         )
-        self.owner = module.TaskQzoneAutoCommentService()
-        self.owner.qzone_conf = {}
-        self.owner.ctx_service = ctx
-        self.owner.plugin = types.SimpleNamespace(
-            qzone_service=space,
-            call_llm=AsyncMock(return_value="测试回复"),
-            basic_conf={},
+        self.owner = module.TaskQzoneAutoCommentService(*_interaction_args(module))
+        self.owner.config.qzone = {}
+        self.owner.runtime = replace(self.owner.runtime, ctx_service=ctx)
+        self.owner.runtime = replace(
+            self.owner.runtime,
+            plugin=types.SimpleNamespace(
+                qzone_service=space,
+                call_llm=AsyncMock(return_value="测试回复"),
+                basic_conf={},
+            ),
         )
         self.post = self.models.QzonePost(
             uin=20002, tid="post", name="同名昵称", text="今天看书"
@@ -239,6 +245,32 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
         prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
         self.assertIn("摄影", prompt)
         self.assertIn("paused", prompt)
+        self.assertNotIn("PRIVATE_", prompt)
+        self.assertEqual(self.calls, ["qq-test:FriendMessage:20002"])
+
+    async def test_body_recovery_survives_long_state_without_private_evidence(self):
+        payload = self.payloads["qq-test:FriendMessage:20002"]
+        payload["current_facts"] = {
+            "valid": True,
+            "body": {"discomfort": 40, "uncertain_minutes": 120},
+        }
+        payload["state"] = {
+            "physiological_rhythm": {
+                "body_condition": {
+                    "label": "不适持续",
+                    "kind": "illness_like",
+                    "phase": "recovering",
+                    "burden_present": True,
+                    "started_at": "2026-10-12",
+                    "recovery_evidence": "PRIVATE_BODY_EVIDENCE",
+                }
+            }
+        }
+        await self.owner.generate_qzone_auto_comment(self.post)
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn('"phase": "recovering"', prompt)
+        self.assertIn('"discomfort": 40', prompt)
+        self.assertIn("不等于痊愈", prompt)
         self.assertNotIn("PRIVATE_", prompt)
         self.assertEqual(self.calls, ["qq-test:FriendMessage:20002"])
 

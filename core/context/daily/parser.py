@@ -5,6 +5,7 @@ import json
 from ..contextbase import ContextComponent
 from ..shared import datetime, logger
 from .continuity import continuity_prompt, timing_prompt
+from .facts import body_prompt
 
 
 class ContextLifeParseService(ContextComponent):
@@ -64,6 +65,9 @@ class ContextLifeParseService(ContextComponent):
         action = self._current_action(data)
         if action:
             facts["当前实际活动"] = action
+        body = body_prompt(data)
+        if body:
+            facts["身体状态参考"] = body
         state = data.get("state")
         state = state if isinstance(state, dict) else {}
         awareness = data.get("current_awareness")
@@ -201,13 +205,15 @@ class ContextLifeParseService(ContextComponent):
                 if activity:
                     facts["正在进行的活动"] = activity
         continuity = continuity_prompt(data)
-        if not facts and not continuity:
+        body = body_prompt(data)
+        if not facts and not continuity and not body:
             return ""
         return "\n".join(
             part
             for part in (
                 "【当前生活材料】\n" + json.dumps(facts, ensure_ascii=False, indent=2),
                 self._public_expression(data),
+                body,
                 continuity,
             )
             if part
@@ -246,13 +252,9 @@ class ContextLifeParseService(ContextComponent):
                 current_activity = self._current_life_activity(data.get("timeline", []))
             if current_activity:
                 parts.append(current_activity)
-            body = self._current_facts(data).get("body")
-            if isinstance(body, dict) and body:
-                parts.append(
-                    "【已观测身体状态】"
-                    + json.dumps(body, ensure_ascii=False)
-                    + "；仅为身体状态，不能推断动作已完成，未观测时段不能编造经历。"
-                )
+            body = body_prompt(data)
+            if body:
+                parts.append(body)
 
             self._append_life_memories(parts, data)
             parts.extend(
@@ -375,6 +377,14 @@ class ContextLifeParseService(ContextComponent):
                 suffix = (
                     f" {intensity}/100" if isinstance(intensity, (int, float)) else ""
                 )
+                phase = {
+                    "onset": "刚出现不适",
+                    "ongoing": "不适仍在持续",
+                    "recovering": "恢复中，尚未确认缓解",
+                    "resolved": "已确认缓解",
+                }.get(str(body.get("phase") or ""), "")
+                if phase:
+                    suffix += f"（{phase}）"
                 items.append(f"身体状态: {label}{suffix}")
         social = rhythm.get("social_battery")
         if isinstance(social, (int, float)):

@@ -10,13 +10,19 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
 )
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 def _validate_retry_target(target_id: str) -> None:
-    if ":" not in target_id and target_id.endswith("_broadcast") and target_id not in {
-        QZONE_TARGET_ID, *BRIEFING_TARGET_ALIASES,
-    }:
+    if (
+        ":" not in target_id
+        and target_id.endswith("_broadcast")
+        and target_id
+        not in {
+            QZONE_TARGET_ID,
+            *BRIEFING_TARGET_ALIASES,
+        }
+    ):
         raise RuntimeError("该发布目标已移除，无法重试")
 
 
@@ -29,6 +35,17 @@ def _retry_failure_message(target_id: str) -> str:
 
 
 class DashboardRouteRetryService(PanelComponent):
+    _lock = RuntimeField("_lock")
+    _page_action_runs = RuntimeField("_page_action_runs")
+    _page_action_seq = RuntimeField("_page_action_seq")
+    activity = RuntimeField("activity")
+    db = RuntimeField("db")
+    labels = RuntimeField("labels")
+    retry_routes = RuntimeField("retry_routes")
+    server = RuntimeField("server")
+    task_manager = RuntimeField("task_manager")
+    validation = RuntimeField("validation")
+
     async def _run_page_retry_action(
         self, run_id: str, history_item: dict, share_lock=None
     ) -> None:

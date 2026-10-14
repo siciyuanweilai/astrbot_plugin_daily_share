@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneComment, QzoneContext, QzonePost
 from .recipients import QzoneReplyTargetService
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneReplyPayloadService(QzoneMethodSet):
+
+class QzoneReplyPayloadService:
     """构建各个 QQ 空间回评接口的请求载荷。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     @classmethod
     def _h5_reply_target_id(cls, comment_id: str, comment: QzoneComment | None) -> str:
+
         comment_id = str(comment_id or "").strip()
         if comment is None:
             return comment_id
@@ -31,7 +37,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
 
     def _mood_v6_referrer(self, post: QzonePost) -> str:
         return (
-            f"{self.BASE_URL}/proxy/domain/qzonestyle.gtimg.cn/qzone/app/mood_v6/html/index.html"
+            f"{self.owner.BASE_URL}/proxy/domain/qzonestyle.gtimg.cn/qzone/app/mood_v6/html/index.html"
             f"#mood&g_iframeUser=1&g_iframedescend=1&uin={post.uin}&pfid=2&qz_ver=8"
             f"&appcanvas=0&qz_style=1&params=&entertime={int(time.time() * 1000)}"
             "&canvastype=&cdn_use_https=1"
@@ -54,7 +60,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
     ) -> dict[str, Any]:
         target_comment_id = str(
             payload_comment_id or ""
-        ).strip() or self._h5_reply_target_id(comment_id, comment)
+        ).strip() or self.owner._h5_reply_target_id(comment_id, comment)
         target_t2_tid = str(payload_t2_tid or "").strip() or target_comment_id
         target_t2_uin = int(payload_t2_uin or comment_uin or 0)
         is_reply = bool(target_comment_id and comment_uin)
@@ -77,7 +83,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
             "appid": post.appid or 311,
             "richval": "",
             "richtype": "",
-            "qzreferrer": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
+            "qzreferrer": f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}",
         }
         if target_comment_id:
             data.update(commentId=target_comment_id)
@@ -120,7 +126,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
             "richtype": "",
             "private": 0,
             "paramstr": "2",
-            "qzreferrer": qzreferrer or f"{self.BASE_URL}/{post.uin}",
+            "qzreferrer": qzreferrer or f"{self.owner.BASE_URL}/{post.uin}",
         }
 
     def _addreply_ugc_comment_data(
@@ -151,7 +157,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
             "hostuin": post.uin,
             "code_version": 1,
             "format": "fs",
-            "qzreferrer": self._mood_v6_referrer(post),
+            "qzreferrer": self.owner._mood_v6_referrer(post),
         }
 
     def _sns_comment_data(
@@ -172,7 +178,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
         target_comment_id = str(comment_id or "").strip()
         target_submit_id = str(
             payload_t2_tid or ""
-        ).strip() or self._h5_reply_target_id(target_comment_id, comment)
+        ).strip() or self.owner._h5_reply_target_id(target_comment_id, comment)
         submit_comment_id = (
             str(payload_comment_id or "").strip()
             or target_submit_id
@@ -199,7 +205,7 @@ class QzoneReplyPayloadService(QzoneMethodSet):
             "appid": post.appid or 311,
             "richval": "",
             "richtype": "",
-            "qzreferrer": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
+            "qzreferrer": f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}",
             "commentId": submit_comment_id,
             "commentUin": int(comment_uin or 0),
         }

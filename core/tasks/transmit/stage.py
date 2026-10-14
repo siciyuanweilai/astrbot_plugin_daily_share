@@ -5,7 +5,9 @@ from ..taskbase import TaskServiceBase
 
 
 class TaskDeliveryStatusService(TaskServiceBase):
-    def _init_media_result(
+    """记录实际发送阶段与可能送达状态。"""
+
+    def init_media_result(
         self,
         media_result: dict | None,
         *,
@@ -31,7 +33,7 @@ class TaskDeliveryStatusService(TaskServiceBase):
         if video_url:
             media_result["video_url"] = video_url
 
-    def _record_send_stage_error(
+    def record_send_stage_error(
         self,
         media_result: dict | None,
         stage: str,
@@ -44,13 +46,13 @@ class TaskDeliveryStatusService(TaskServiceBase):
         media_result.setdefault("partial_errors", []).append(
             {
                 "stage": stage,
-                "stage_label": self._send_stage_label(stage),
+                "stage_label": self.send_stage_label(stage),
                 "message": format_exception(error),
                 "probable_sent": probable_sent,
             }
         )
 
-    def _send_stage_label(self, stage: str) -> str:
+    def send_stage_label(self, stage: str) -> str:
         return {
             "text": "文字",
             "audio": "语音",
@@ -58,7 +60,7 @@ class TaskDeliveryStatusService(TaskServiceBase):
             "video": "视频",
         }.get(str(stage or ""), str(stage or "消息"))
 
-    def _mark_send_stage_success(
+    def mark_send_stage_success(
         self,
         media_result: dict | None,
         stage: str,
@@ -71,7 +73,7 @@ class TaskDeliveryStatusService(TaskServiceBase):
         if probable_sent:
             media_result[f"{stage}_probable_sent"] = True
 
-    def _has_sent_stage(self, media_result: dict | None) -> bool:
+    def has_sent_stage(self, media_result: dict | None) -> bool:
         if not media_result:
             return False
         return any(

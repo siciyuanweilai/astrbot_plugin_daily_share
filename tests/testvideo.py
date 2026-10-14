@@ -4,6 +4,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_video_testpkg"
@@ -65,7 +66,24 @@ def _load_video_module():
     sys.modules[VIDEO_MODULE_NAME] = module
     assert spec and spec.loader
     spec.loader.exec_module(module)
+    image_spec = importlib.util.spec_from_file_location(
+        IMAGE_PACKAGE_NAME,
+        ROOT / "core" / "image" / "__init__.py",
+        submodule_search_locations=[str(ROOT / "core" / "image")],
+    )
+    image_module = importlib.util.module_from_spec(image_spec)
+    sys.modules[IMAGE_PACKAGE_NAME] = image_module
+    image_spec.loader.exec_module(image_module)
     return module
+
+
+def _new_image_service():
+    return sys.modules[IMAGE_PACKAGE_NAME].ImageService(
+        context=object(),
+        config={"image_conf": {"enable_ai_video": True}},
+        llm_func=AsyncMock(),
+        daily_life_bridge=object(),
+    )
 
 
 class VideoPromptTests(unittest.TestCase):
@@ -92,21 +110,13 @@ class VideoPromptTests(unittest.TestCase):
         self.assertIn("禁止旁白、画外音、解说或朗读文案", fallback)
 
     def test_video_design_system_prompt_no_longer_pushes_empty_sound(self):
-        mod = _load_video_module()
-
-        class Service(mod.ImageVideoService):
-            def __init__(self):
-                self.system_prompt = ""
-
-            async def _call_llm(self, user_prompt, system_prompt, **kwargs):
-                self.system_prompt = system_prompt
-                return (
-                    '{"motion":"女孩轻轻抬眼，嘴唇自然动一下并与台词同步",'
-                    '"dialogue":"今天这样也挺好",'
-                    '"ambience":"窗外风声、杯子轻响，轻柔背景声铺底"}'
-                )
-
-        service = Service()
+        _load_video_module()
+        service = _new_image_service()
+        service.call_llm.return_value = (
+            '{"motion":"女孩轻轻抬眼，嘴唇自然动一下并与台词同步",'
+            '"dialogue":"今天这样也挺好",'
+            '"ambience":"窗外风声、杯子轻响，轻柔背景声铺底"}'
+        )
         motion, sound = asyncio.run(
             service._build_video_design_prompts(
                 "年轻女孩坐在窗边，手边有一杯热茶",
@@ -117,29 +127,26 @@ class VideoPromptTests(unittest.TestCase):
         self.assertIn("台词同步", motion)
         self.assertIn("今天这样也挺好", sound)
         self.assertIn("轻柔背景声", sound)
-        self.assertIn('"dialogue"', service.system_prompt)
-        self.assertIn('"ambience"', service.system_prompt)
-        self.assertIn("motion 默认要包含自然镜头运动", service.system_prompt)
-        self.assertIn("轻微推近、缓慢横移或少量手持呼吸感", service.system_prompt)
-        self.assertIn("不要默认写静止镜头", service.system_prompt)
-        self.assertIn("人物不要出现明显说话口型", service.system_prompt)
-        self.assertIn("ambience 只写环境声、动作声和轻柔背景声", service.system_prompt)
-        self.assertIn("禁止旁白、画外音、解说或朗读文案", service.system_prompt)
-        self.assertNotIn("可以几乎静止", service.system_prompt)
-        self.assertNotIn("不默认背景声，不默认人声", service.system_prompt)
+        system_prompt = service.call_llm.await_args.args[1]
+        self.assertIn('"dialogue"', system_prompt)
+        self.assertIn('"ambience"', system_prompt)
+        self.assertIn("motion 默认要包含自然镜头运动", system_prompt)
+        self.assertIn("轻微推近、缓慢横移或少量手持呼吸感", system_prompt)
+        self.assertIn("不要默认写静止镜头", system_prompt)
+        self.assertIn("人物不要出现明显说话口型", system_prompt)
+        self.assertIn("ambience 只写环境声、动作声和轻柔背景声", system_prompt)
+        self.assertIn("禁止旁白、画外音、解说或朗读文案", system_prompt)
+        self.assertNotIn("可以几乎静止", system_prompt)
+        self.assertNotIn("不默认背景声，不默认人声", system_prompt)
 
     def test_video_design_keeps_complete_dialogue_and_ambience(self):
-        mod = _load_video_module()
-
-        class Service(mod.ImageVideoService):
-            async def _call_llm(self, user_prompt, system_prompt, **kwargs):
-                return (
-                    '{"motion":"女孩轻轻抬眼，保持自然坐姿",'
-                    '"dialogue":"今天绕了好大一圈，还是觉得这样慢慢待着最舒服",'
-                    '"ambience":"窗边细微风声、衣料轻轻摩擦声和很轻的室内底噪"}'
-                )
-
-        service = Service()
+        _load_video_module()
+        service = _new_image_service()
+        service.call_llm.return_value = (
+            '{"motion":"女孩轻轻抬眼，保持自然坐姿",'
+            '"dialogue":"今天绕了好大一圈，还是觉得这样慢慢待着最舒服",'
+            '"ambience":"窗边细微风声、衣料轻轻摩擦声和很轻的室内底噪"}'
+        )
         motion, sound = asyncio.run(
             service._build_video_design_prompts(
                 "女孩坐在窗边，手边放着一杯温水",
@@ -156,14 +163,10 @@ class VideoPromptTests(unittest.TestCase):
         mod = _load_video_module()
         logs = []
 
-        class Service(mod.ImageVideoService):
-            def __init__(self):
-                self.img_conf = {"enable_ai_video": True}
-                self.context = object()
-                self.daily_life_bridge = object()
-
-            async def _build_video_design_prompts(self, *args, **kwargs):
-                return "轻微推近", "环境声"
+        service = _new_image_service()
+        service._build_video_design_prompts = AsyncMock(
+            return_value=("轻微推近", "环境声")
+        )
 
         async def generate(*args, **kwargs):
             return "https://example.com/private-video.mp4?token=secret"
@@ -175,9 +178,7 @@ class VideoPromptTests(unittest.TestCase):
             warning=lambda message: logs.append(("warning", message)),
         )
 
-        result = asyncio.run(
-            Service().generate_video_from_image("image.png", "测试内容")
-        )
+        result = asyncio.run(service.generate_video_from_image("image.png", "测试内容"))
 
         self.assertTrue(result)
         self.assertTrue(any("视频生成完成" in message for _level, message in logs))

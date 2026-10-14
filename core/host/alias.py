@@ -1,10 +1,16 @@
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginAliasService(SupportComponent):
+    aliases = RuntimeField("aliases")
+    config = RuntimeField("config")
+    contact_aliases = RuntimeField("contact_aliases")
+    ctx_service = RuntimeField("ctx_service")
+    task_manager = RuntimeField("task_manager")
+
     def _normalize_contact_aliases(self) -> dict:
         raw_aliases = getattr(self, "contact_aliases", [])
         aliases = {}

@@ -11,10 +11,14 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_COMMAND,
 )
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class ImageDeliveryShareService(SupportComponent):
+    db = RuntimeField("db")
+    qzone = RuntimeField("qzone")
+    task_manager = RuntimeField("task_manager")
+
     async def _share_static_image_to_qzone(
         self,
         event: AstrMessageEvent,
@@ -35,7 +39,7 @@ class ImageDeliveryShareService(SupportComponent):
                 f"{history_text}(手动)",
                 True,
                 source_type=SOURCE_COMMAND,
-                **self.task_manager.executor_helpers.image_history_kwargs(url),
+                **self.task_manager.executor_helpers.records.image_history_kwargs(url),
             )
         except Exception as exc:
             await self.db.add_sent_history(
@@ -45,7 +49,7 @@ class ImageDeliveryShareService(SupportComponent):
                 False,
                 error_reason=str(exc),
                 source_type=SOURCE_COMMAND,
-                **self.task_manager.executor_helpers.image_history_kwargs(url),
+                **self.task_manager.executor_helpers.records.image_history_kwargs(url),
             )
             yield event.plain_result(f"QQ空间分享失败: {exc}")
 
@@ -74,7 +78,9 @@ class ImageDeliveryShareService(SupportComponent):
                 f"【{broadcast_name}】手动",
                 True,
                 source_type=SOURCE_COMMAND,
-                **self.task_manager.executor_helpers.image_history_kwargs(local_path),
+                **self.task_manager.executor_helpers.records.image_history_kwargs(
+                    local_path
+                ),
             )
             return
 
@@ -85,7 +91,7 @@ class ImageDeliveryShareService(SupportComponent):
             False,
             error_reason=download_fail_message,
             source_type=SOURCE_COMMAND,
-            **self.task_manager.executor_helpers.image_history_kwargs(url),
+            **self.task_manager.executor_helpers.records.image_history_kwargs(url),
         )
         yield event.plain_result(download_fail_message)
 
@@ -116,7 +122,7 @@ class ImageDeliveryShareService(SupportComponent):
                 False,
                 error_reason=download_fail_message,
                 source_type=SOURCE_COMMAND,
-                **self.task_manager.executor_helpers.image_history_kwargs(url),
+                **self.task_manager.executor_helpers.records.image_history_kwargs(url),
             )
             yield event.plain_result(download_fail_message)
             return
@@ -140,7 +146,7 @@ class ImageDeliveryShareService(SupportComponent):
                     f"【{broadcast_name}】手动广播",
                     True,
                     source_type=SOURCE_COMMAND,
-                    **self.task_manager.executor_helpers.image_history_kwargs(
+                    **self.task_manager.executor_helpers.records.image_history_kwargs(
                         prepared_path
                     ),
                 )
@@ -155,7 +161,7 @@ class ImageDeliveryShareService(SupportComponent):
                     False,
                     error_reason=str(exc),
                     source_type=SOURCE_COMMAND,
-                    **self.task_manager.executor_helpers.image_history_kwargs(
+                    **self.task_manager.executor_helpers.records.image_history_kwargs(
                         local_path
                     ),
                 )

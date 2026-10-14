@@ -116,6 +116,9 @@ class _TaskManager:
         self.qzone_share = self
         self.delivery_assets = self
         self.executor_helpers = self
+        self.arguments = self
+        self.records = self
+        self.period = self
 
     async def execute_qzone_share(self, *args, **kwargs):
         self.calls.append((args, kwargs))

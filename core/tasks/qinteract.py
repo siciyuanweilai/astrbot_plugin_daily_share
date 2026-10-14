@@ -32,6 +32,7 @@ from .interact.formatting import (
     _qzone_summary_generation_failed_suffix as _qzone_summary_generation_failed_suffix,
 )
 from .interact.options import QzoneAutoInteractionConfig
+from .interact.policy import QzoneAutoPolicyService
 from .interact.receipt import record_qzone_interaction
 from .interact.response import (
     _qzone_copy_reply_verification_fields,
@@ -40,7 +41,7 @@ from .interact.response import (
     _qzone_reply_success_payload,
     _qzone_submitted_reply_fields,
 )
-from .interact.task import _qzone_result_rate_limited
+from .interact.task import _qzone_result_rate_limited, checkpoint_qzone_action
 from .interact.totals import (
     _qzone_empty_interaction_result,
     _qzone_log_interaction_summary,
@@ -82,11 +83,12 @@ from .interact.tracker import (
 from .interact.tracker import (
     QZONE_AUTO_REPLY_STATE_KEY as QZONE_AUTO_REPLY_STATE_KEY,
 )
+from .taskbase import TaskServiceBase
 
 _QZONE_REPLY_ACTION_DELAY_SECONDS = 0.8
 
 
-class TaskQzoneAutoCommentService(QzoneAutoPromptService):
+class TaskQzoneAutoCommentService(TaskServiceBase):
     """QQ 空间自动互动任务能力。"""
 
     if TYPE_CHECKING:
@@ -168,6 +170,8 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
         processed_action: str,
         dashboard_action: str,
         log_label: str,
+        state: dict,
+        state_key: str,
         parent_comment_id: str = "",
         parent_comment=None,
         result_count_key: str = "replied",
@@ -214,6 +218,7 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
                     **fields,
                 )
                 result["skipped"] += 1
+                await checkpoint_qzone_action(self, state_key, state, processed, result)
                 logger.warning(
                     f"[日常分享] QQ 空间相册回评提交状态未知，已停止自动重试，请查看照片确认: {exc_text}"
                 )
@@ -232,6 +237,7 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
                     **fields,
                 )
                 result["skipped"] += 1
+                await checkpoint_qzone_action(self, state_key, state, processed, result)
                 logger.debug(
                     f"[日常分享] QQ 空间自动回评落点校验未通过，已跳过: {exc_text}"
                 )
@@ -283,6 +289,9 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
         )
 
         _mark_qzone_processed(processed, item_key, processed_action, **fields)
+        count_key = str(result_count_key or "replied")
+        result[count_key] = int(result.get(count_key, 0) or 0) + 1
+        await checkpoint_qzone_action(self, state_key, state, processed, result)
         await record_qzone_interaction(
             self,
             post,
@@ -291,8 +300,6 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
             comment_id=str(getattr(comment, "tid", "") or ""),
             actor_id=str(getattr(comment, "uin", "") or ""),
         )
-        count_key = str(result_count_key or "replied")
-        result[count_key] = int(result.get(count_key, 0) or 0) + 1
         self.plugin.emit_dashboard_event(
             "qzone",
             {
@@ -365,3 +372,147 @@ class TaskQzoneAutoCommentService(QzoneAutoPromptService):
         if _qzone_should_log_interaction_summary(result):
             _qzone_log_interaction_summary(result)
         return result
+
+    @staticmethod
+    def _qzone_is_official_qzone_post(post):
+        return QzoneAutoPolicyService._qzone_is_official_qzone_post(post)
+
+    def _qzone_auto_active_window_hours(self):
+        return self.policy._qzone_auto_active_window_hours()
+
+    def _qzone_auto_timestamp_in_active_window(self, timestamp):
+        return self.policy._qzone_auto_timestamp_in_active_window(timestamp)
+
+    def _qzone_auto_post_in_active_window(self, post):
+        return self.policy._qzone_auto_post_in_active_window(post)
+
+    def _qzone_auto_comment_in_active_window(self, post, comment):
+        return self.policy._qzone_auto_comment_in_active_window(post, comment)
+
+    def _qzone_auto_comment_candidate(self, post, *, self_uin, processed, index=None):
+        return self.policy._qzone_auto_comment_candidate(
+            post, self_uin=self_uin, processed=processed, index=index
+        )
+
+    def _qzone_auto_like_candidate(self, post, *, self_uin, processed):
+        return self.policy._qzone_auto_like_candidate(
+            post, self_uin=self_uin, processed=processed
+        )
+
+    def _qzone_auto_reply_skip_reason(
+        self, post, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_auto_reply_skip_reason(
+            post, comment, self_uin=self_uin, processed=processed, index=index
+        )
+
+    def _qzone_auto_reply_candidate(
+        self, post, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_auto_reply_candidate(
+            post, comment, self_uin=self_uin, processed=processed, index=index
+        )
+
+    def _qzone_auto_reply_thread_skip_reason(
+        self, post, parent_comment, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_auto_reply_thread_skip_reason(
+            post,
+            parent_comment,
+            comment,
+            self_uin=self_uin,
+            processed=processed,
+            index=index,
+        )
+
+    def _qzone_reply_thread_base_skip_reason(
+        self, post, parent_comment, comment, *, self_uin, processed
+    ):
+        return self.policy._qzone_reply_thread_base_skip_reason(
+            post, parent_comment, comment, self_uin=self_uin, processed=processed
+        )
+
+    def _qzone_auto_reply_thread_candidate(
+        self, post, parent_comment, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_auto_reply_thread_candidate(
+            post,
+            parent_comment,
+            comment,
+            self_uin=self_uin,
+            processed=processed,
+            index=index,
+        )
+
+    def _qzone_friend_comment_thread_skip_reason(
+        self, post, parent_comment, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_friend_comment_thread_skip_reason(
+            post,
+            parent_comment,
+            comment,
+            self_uin=self_uin,
+            processed=processed,
+            index=index,
+        )
+
+    @staticmethod
+    def _qzone_auto_comment_post_summary(post):
+        return QzoneAutoPromptService._qzone_auto_comment_post_summary(post)
+
+    async def _qzone_auto_interaction_system_prompt(
+        self, task_prompt, *, output_rule="", scene="qzone_comment"
+    ):
+        return await self.dialogue._qzone_auto_interaction_system_prompt(
+            task_prompt, output_rule=output_rule, scene=scene
+        )
+
+    async def _qzone_auto_interaction_persona_prompt(self):
+        return await self.dialogue._qzone_auto_interaction_persona_prompt()
+
+    async def _qzone_auto_life_context_prompt(self, actor, *, role):
+        return await self.dialogue._qzone_auto_life_context_prompt(actor, role=role)
+
+    async def _qzone_auto_interaction_llm(
+        self, prompt, *, system_prompt, max_bytes=0, target_umo=""
+    ):
+        return await self.dialogue._qzone_auto_interaction_llm(
+            prompt,
+            system_prompt=system_prompt,
+            max_bytes=max_bytes,
+            target_umo=target_umo,
+        )
+
+    async def _qzone_auto_comment_prompt(self, post, image_context):
+        return await self.dialogue._qzone_auto_comment_prompt(post, image_context)
+
+    async def generate_qzone_auto_comment(self, post, *, state=None, target_umo=""):
+        return await self.dialogue.generate_qzone_auto_comment(
+            post, state=state, target_umo=target_umo
+        )
+
+    async def generate_qzone_auto_photo_comment(
+        self, post, photo_posts, *, state=None, target_umo=""
+    ):
+        return await self.dialogue.generate_qzone_auto_photo_comment(
+            post, photo_posts, state=state, target_umo=target_umo
+        )
+
+    async def _generate_qzone_auto_reply(
+        self, post, comment, *, state=None, target_umo=""
+    ):
+        return await self.dialogue._generate_qzone_auto_reply(
+            post, comment, state=state, target_umo=target_umo
+        )
+
+    async def _generate_qzone_auto_reply_thread(
+        self, post, parent_comment, comment, *, state=None, target_umo=""
+    ):
+        return await self.dialogue._generate_qzone_auto_reply_thread(
+            post, parent_comment, comment, state=state, target_umo=target_umo
+        )
+
+    def __init__(self, runtime, config, state) -> None:
+        super().__init__(runtime, config, state)
+        self.policy = QzoneAutoPolicyService(self)
+        self.dialogue = QzoneAutoPromptService(self)

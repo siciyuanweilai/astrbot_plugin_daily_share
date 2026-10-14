@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from astrbot.api.event import AstrMessageEvent
 
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginShareMainRouteService(SupportComponent):
+    briefing_route = RuntimeField("briefing_route")
+    manual = RuntimeField("manual")
+    permissions = RuntimeField("permissions")
+    typed_route = RuntimeField("typed_route")
+
     async def handle_share_command(self, event: AstrMessageEvent):
         parts, arg, is_broadcast, is_qzone_target = (
             self.manual._parse_share_command_parts(event)

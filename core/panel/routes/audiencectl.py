@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from astrbot.api import logger
 
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 from ..revision import (
     require_current_revision,
     target_config_revision,
@@ -12,6 +12,12 @@ from ..roster import apply_shared_target_bindings
 
 
 class DashboardRouteTargetService(PanelComponent):
+    config = RuntimeField("config")
+    refresh = RuntimeField("refresh")
+    server = RuntimeField("server")
+    status_routes = RuntimeField("status_routes")
+    targets = RuntimeField("targets")
+
     async def page_targets_update(self):
         async def handler():
             body = apply_shared_target_bindings(await self.server._page_json_body())

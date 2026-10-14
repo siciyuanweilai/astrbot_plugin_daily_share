@@ -5,16 +5,22 @@ from datetime import datetime
 from astrbot.api import logger
 
 from ...database.keys import SOURCE_MANUAL
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 _PAGE_SHARE_TARGET_SCOPES = {
     "broadcast_groups": "groups",
     "broadcast_users": "users",
 }
 
-_PAGE_SHARE_TARGETS = frozenset({
-    "broadcast", "broadcast_groups", "broadcast_users", "qzone", "briefing",
-})
+_PAGE_SHARE_TARGETS = frozenset(
+    {
+        "broadcast",
+        "broadcast_groups",
+        "broadcast_users",
+        "qzone",
+        "briefing",
+    }
+)
 
 
 def _validate_page_share_target(target: str) -> None:
@@ -35,6 +41,17 @@ def _page_missing_target_message(target: str) -> str:
 
 
 class DashboardRouteActionService(PanelComponent):
+    _lock = RuntimeField("_lock")
+    _page_action_runs = RuntimeField("_page_action_runs")
+    _page_action_seq = RuntimeField("_page_action_seq")
+    action_routes = RuntimeField("action_routes")
+    activity = RuntimeField("activity")
+    labels = RuntimeField("labels")
+    server = RuntimeField("server")
+    targets = RuntimeField("targets")
+    task_manager = RuntimeField("task_manager")
+    validation = RuntimeField("validation")
+
     def _ensure_page_share_targets(
         self, target: str, specific_target: str = ""
     ) -> None:

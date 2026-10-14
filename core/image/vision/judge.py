@@ -1,21 +1,28 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 from ...config import ShareType
-from .extract import ImageVisualExtractService
+
+if TYPE_CHECKING:
+    from .. import ImageService
 
 
-class ImageVisualJudgeService(ImageVisualExtractService):
+class ImageVisualJudgeService:
     """判断配图是否需要出现主角人物。"""
+
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     async def _check_involves_self(
         self, content: str, share_type: ShareType, target_umo: str | None = None
     ) -> bool:
         """检测内容是否涉及“自己”。"""
-        if self.img_conf.get("image_always_include_self", False):
+        if self.owner.img_conf.get("image_always_include_self", False):
             return True
-        if self.img_conf.get("image_never_include_self", False):
+        if self.owner.img_conf.get("image_never_include_self", False):
             return False
 
         try:
@@ -40,7 +47,7 @@ class ImageVisualJudgeService(ImageVisualExtractService):
                 f"类型：{share_type.value} {type_hint}\n内容：{content}\n\n是否含人物？"
             )
 
-            res = await self._call_llm(
+            res = await self.owner._call_llm(
                 user_prompt, system_prompt, timeout=10, target_umo=target_umo
             )
             if res and "YES" in res.strip().upper():

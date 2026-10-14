@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import time
+from copy import deepcopy
 
 from astrbot.api import logger
 
@@ -10,6 +12,42 @@ from .options import QzoneAutoInteractionConfig
 
 QZONE_QUERY_MAX_POSTS = 20
 QZONE_QUERY_MIN_POSTS = 5
+QZONE_CHECKPOINT_TIMEOUT_SECONDS = 5.0
+
+
+class QzoneStatePersistenceError(RuntimeError):
+    """提交后的去重状态未能保存；中止任务，不能当作发送失败继续提交。"""
+
+
+async def checkpoint_qzone_action(
+    owner, state_key: str, state: dict, processed: dict, result: dict
+) -> None:
+    """先持久化提交结果，再执行回执或间隔；取消时最多等五秒。"""
+
+    async def save() -> None:
+        try:
+            await asyncio.wait_for(
+                owner._qzone_auto_save_state(
+                    state_key, deepcopy(state), deepcopy(processed), deepcopy(result)
+                ),
+                timeout=QZONE_CHECKPOINT_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            raise QzoneStatePersistenceError(
+                f"QQ 空间提交结果去重保存失败，已停止后续互动: {exc}"
+            ) from exc
+
+    task = asyncio.create_task(save())
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+    # 必须读取子任务异常，避免取消后静默丢失落库失败。
+    task.result()
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 def _is_qzone_transient_query_error(error: Exception) -> bool:

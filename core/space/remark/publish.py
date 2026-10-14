@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
 
-class QzoneCommentPostService(QzoneMethodSet):
+class QzoneCommentPostService:
     """提交 QQ 空间一级评论。"""
 
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     async def comment(self, post_id: str, content: str) -> None:
-        post = self._require_post(post_id)
+        post = self.owner._require_post(post_id)
         content = str(content or "").strip()
         if not content:
             raise RuntimeError("评论内容不能为空")
@@ -15,19 +21,21 @@ class QzoneCommentPostService(QzoneMethodSet):
             raise RuntimeError(post.comment_target_error)
         if int(post.appid or 311) == 4:
             photo = post.photo_targets[0]
-            await self.comment_photo(
+            await self.owner.comment_photo(
                 owner_uin=post.uin,
                 album_id=photo.album_id,
                 pic_key=photo.pic_key,
                 content=content,
                 feed_topic_id=photo.feed_comment_topic_id,
             )
-            self._invalidate_qzone_cache(post_id=post.key, target_id=str(post.uin))
+            self.owner._invalidate_qzone_cache(
+                post_id=post.key, target_id=str(post.uin)
+            )
             return
-        ctx = await self.context()
+        ctx = await self.owner.context()
         # 按 PC 说说页成功抓包构造一级评论，不能混用 H5 回评参数。
         # hostUin 指动态主人；hostuin 和 commentUin 均为当前登录账号。
-        referer = self._mood_v6_referrer(post)
+        referer = self.owner._mood_v6_referrer(post)
         data = {
             "uin": ctx.uin,
             "hostUin": post.uin,
@@ -47,19 +55,21 @@ class QzoneCommentPostService(QzoneMethodSet):
             "format": "fs",
             "qzreferrer": referer,
         }
-        payload = await self._request(
+        payload = await self.owner._request(
             "POST",
-            self.COMMENT_URL,
+            self.owner.COMMENT_URL,
             params={"g_tk": ctx.gtk},
             data=data,
-            headers=self._pc_form_headers(ctx, referer=referer),
+            headers=self.owner._pc_form_headers(ctx, referer=referer),
             retry_parse_error=False,
         )
-        if self._comment_submit_ok(payload):
-            self._invalidate_qzone_cache(post_id=post.key, target_id=str(post.uin))
+        if self.owner._comment_submit_ok(payload):
+            self.owner._invalidate_qzone_cache(
+                post_id=post.key, target_id=str(post.uin)
+            )
             return
 
-        message = self._payload_message(payload) or "QQ 空间评论失败"
+        message = self.owner._payload_message(payload) or "QQ 空间评论失败"
         code = payload.get("code") if isinstance(payload, dict) else None
         status = payload.get("_http_status") if isinstance(payload, dict) else None
         diagnostics = ["transport=pc_mood", f"appid={post.appid}"]

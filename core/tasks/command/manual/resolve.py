@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType, TimePeriod
-from ..picture import TaskCommandImageService
+
+if TYPE_CHECKING:
+    from .. import TaskCommandShareService
 
 
-class TaskCommandLocalResolveService(TaskCommandImageService):
+class TaskCommandLocalResolveService:
+    def __init__(self, owner: TaskCommandShareService) -> None:
+        self.owner = owner
+
     async def _resolve_command_share_type(
         self,
         *,
@@ -16,12 +23,14 @@ class TaskCommandLocalResolveService(TaskCommandImageService):
     ) -> tuple[bool, ShareType | None]:
         if st_clean in ("自动", "auto", ""):
             return True, None
-        target_type_enum = self.services.executor_helpers.map_share_type_arg(
-            share_type_text
+        target_type_enum = (
+            self.owner.services.executor_helpers.arguments.map_share_type_arg(
+                share_type_text
+            )
         )
         if target_type_enum:
             return True, target_type_enum
-        await self.send_event(
+        await self.owner.send_event(
             event,
             event.plain_result(
                 f"不支持的分享类型：{share_type_text}。支持：自动、问候、新闻、心情、知识、推荐、60 秒新闻、AI 资讯。"
@@ -38,20 +47,24 @@ class TaskCommandLocalResolveService(TaskCommandImageService):
     ) -> tuple[str, str, TimePeriod, ShareType, str]:
         uid = str(event.get_sender_id() or "")
         target_umo = str(event.unified_msg_origin if ":" not in uid else uid)
-        period = self.services.executor_helpers.get_curr_period()
+        period = self.owner.services.executor_helpers.period.get_curr_period()
         if target_type_enum is None:
-            target_type_enum = await self.services.type_selector.decide_type_with_state(
-                period,
-                target_id=target_umo,
-                specific_type="auto",
+            target_type_enum = (
+                await self.owner.services.type_selector.decide_type_with_state(
+                    period,
+                    target_id=target_umo,
+                    specific_type="auto",
+                )
             )
-        target_is_group = self.ctx_service.is_group_chat(target_umo)
-        progress_target_label = await self.services.targets.get_target_display_name(
-            target_umo,
-            event=event,
-            is_group=target_is_group,
+        target_is_group = self.owner.ctx_service.is_group_chat(target_umo)
+        progress_target_label = (
+            await self.owner.services.targets.get_target_display_name(
+                target_umo,
+                event=event,
+                is_group=target_is_group,
+            )
         )
-        progress_id = self.services.progress.start_share_progress(
+        progress_id = self.owner.services.progress.start_share_progress(
             source_type=history_source,
             target_id=target_umo,
             target_label=progress_target_label,
@@ -71,7 +84,7 @@ class TaskCommandLocalResolveService(TaskCommandImageService):
         need_video: bool,
     ) -> bool:
         return bool(
-            await self.services.qzone_share.execute_qzone_share(
+            await self.owner.services.qzone_share.execute_qzone_share(
                 force_type=target_type_enum,
                 news_source=news_src_key,
                 event=event,
@@ -83,13 +96,18 @@ class TaskCommandLocalResolveService(TaskCommandImageService):
     async def _command_content_nickname(
         self, target_umo: str, event: AstrMessageEvent
     ) -> tuple[bool, str]:
-        is_group = self.ctx_service.is_group_chat(target_umo)
-        nickname = self.services.targets.get_contact_alias(target_umo, event=event)
+        is_group = self.owner.ctx_service.is_group_chat(target_umo)
+        nickname = self.owner.services.targets.get_contact_alias(
+            target_umo, event=event
+        )
         if not is_group:
-            nickname = nickname or await self.services.targets.get_onebot_nickname(
-                target_umo, event=event
+            nickname = (
+                nickname
+                or await self.owner.services.targets.get_onebot_nickname(
+                    target_umo, event=event
+                )
             )
-            nickname = nickname or self.services.targets.clean_nickname_candidate(
+            nickname = nickname or self.owner.services.targets.clean_nickname_candidate(
                 event.get_sender_name(),
                 target_umo,
                 event=event,

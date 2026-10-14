@@ -12,7 +12,7 @@ from .common import (
     _PAGE_RECENT_SHARE_LIMIT,
     _PAGE_SHARE_SOURCE_LABELS,
 )
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 _PAGE_STATE_KEYS = (
     GLOBAL_STATE_KEY,
@@ -23,6 +23,11 @@ _PAGE_STATE_KEYS = (
 
 class DashboardActivityService(PanelComponent):
     """仪表盘状态和最近动态。"""
+
+    _page_action_runs = RuntimeField("_page_action_runs")
+    activity = RuntimeField("activity")
+    db = RuntimeField("db")
+    labels = RuntimeField("labels")
 
     async def _page_states(self) -> dict:
         states = {}

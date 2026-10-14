@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 
-def normalize_photo_comment_topic(album_id: str, pic_key: str, topic_id: str = "") -> str:
+def normalize_photo_comment_topic(
+    album_id: str, pic_key: str, topic_id: str = ""
+) -> str:
     canonical = f"{album_id}_{pic_key}_0_0"
     raw = str(topic_id or "").strip()
     if unquote(raw) in {"", album_id, f"{album_id}_{pic_key}", canonical}:
@@ -117,7 +119,9 @@ class QzonePhoto:
 
     @property
     def feed_comment_topic_id(self) -> str:
-        return normalize_photo_comment_topic(self.album_id, self.pic_key, self.feed_topic_id)
+        return normalize_photo_comment_topic(
+            self.album_id, self.pic_key, self.feed_topic_id
+        )
 
 
 @dataclass(slots=True)
@@ -146,6 +150,42 @@ class QzonePost:
     photo_targets: list[QzonePhoto] = field(default_factory=list)
     photo_batch_key: str = ""
     photo_batch_complete: bool = True
+
+    @property
+    def like_keys(self) -> tuple[str, str]:
+        unikey = str(self.unikey or self.curkey or "").strip()
+        curkey = str(self.curkey or self.unikey or "").strip()
+        if not unikey and int(self.appid or 311) == 311 and self.uin and self.tid:
+            unikey = curkey = f"http://user.qzone.qq.com/{self.uin}/mood/{self.tid}"
+        return unikey, curkey
+
+    @property
+    def like_target_error(self) -> str:
+        if not self.uin or not self.tid:
+            return "点赞动态标识无效"
+        appid = int(self.appid or 311)
+        if appid not in {311, 4}:
+            return f"暂不支持该类型动态的点赞（appid={appid}）"
+        keys = self.like_keys
+        if not all(keys):
+            return "相册动态缺少原始点赞键，请刷新好友动态"
+        if appid == 4:
+            for key in keys:
+                try:
+                    target = urlsplit(key.split("^||^", 1)[0])
+                except ValueError:
+                    return "相册动态点赞键无效，请刷新好友动态"
+                parts = target.path.strip("/").split("/")
+                if (
+                    target.scheme not in {"http", "https"}
+                    or target.netloc != "user.qzone.qq.com"
+                    or len(parts) != 4
+                    or parts[0] != str(self.uin)
+                    or parts[1] not in {"photo", "batchphoto"}
+                    or not all(parts)
+                ):
+                    return "相册动态点赞键与照片或批次目标不符，请刷新好友动态"
+        return ""
 
     @property
     def comment_target_error(self) -> str:

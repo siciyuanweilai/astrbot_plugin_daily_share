@@ -5,11 +5,16 @@ from datetime import datetime
 from astrbot.api import logger
 
 from .common import _quart_response
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardEventsService(PanelComponent):
     """仪表盘服务端事件流通道。"""
+
+    _is_terminated = RuntimeField("_is_terminated")
+    _page_event_clients = RuntimeField("_page_event_clients")
+    _page_event_seq = RuntimeField("_page_event_seq")
+    events = RuntimeField("events")
 
     def _ensure_page_event_state(self) -> None:
         if not isinstance(self.runtime._page_event_clients, set):

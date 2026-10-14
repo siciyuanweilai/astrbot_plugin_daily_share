@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..entry import (
     parse_about_me,
@@ -11,10 +11,12 @@ from ..entry import (
     parse_last_year,
     parse_message_board,
 )
-from ..methodset import QzoneMethodSet
 from ..models import QzonePost
 from ..parse import parse_recent_feed_list
 from ..relation import parse_qzone_relations, parse_qzone_visit_stats
+
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
 
 def _about_me_feed_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -50,17 +52,20 @@ def _is_mention_feed_item(item: dict[str, Any], self_uin: int) -> bool:
     return False
 
 
-class QzoneFeedExtraService(QzoneMethodSet):
+class QzoneFeedExtraService:
     """空间附属页面查询。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     async def query_about_me(
         self, *, offset: int = 0, count: int = 10
     ) -> dict[str, Any]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         limit = max(1, min(int(count or 10), 20))
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.ABOUT_ME_URL,
+            self.owner.ABOUT_ME_URL,
             params={
                 "uin": ctx.uin,
                 "begin_time": 0,
@@ -77,14 +82,16 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "scope": 1,
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}"),
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}"
+            ),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间与我相关失败")
             )
         result = parse_about_me(payload)
-        self._remember_posts(result.get("items") or [])
+        self.owner._remember_posts(result.get("items") or [])
         return result
 
     async def query_mention_posts(
@@ -94,22 +101,22 @@ class QzoneFeedExtraService(QzoneMethodSet):
         count: int = 10,
         with_detail: bool = True,
     ) -> list[QzonePost]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         start = max(0, int(offset or 0))
         limit = max(1, min(int(count or 10), 20))
-        cache_key = self._query_cache_key(
+        cache_key = self.owner._query_cache_key(
             "mention",
             offset=start,
             count=limit,
             with_detail=int(bool(with_detail)),
         )
-        cached_posts = self._cached_query_posts(cache_key)
+        cached_posts = self.owner._cached_query_posts(cache_key)
         if cached_posts is not None:
             return cached_posts
 
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.ABOUT_ME_URL,
+            self.owner.ABOUT_ME_URL,
             params={
                 "uin": ctx.uin,
                 "begin_time": 0,
@@ -126,9 +133,11 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "scope": 1,
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}"),
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}"
+            ),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间提到我动态失败")
             )
@@ -140,19 +149,19 @@ class QzoneFeedExtraService(QzoneMethodSet):
         ]
         posts = parse_recent_feed_list({"data": {"data": items}})
         if with_detail:
-            posts = await self._query_recent_post_details(posts)
-        self._remember_posts(posts, detailed=with_detail)
-        self._store_query_posts(cache_key, posts)
+            posts = await self.owner._query_recent_post_details(posts)
+        self.owner._remember_posts(posts, detailed=with_detail)
+        self.owner._store_query_posts(cache_key, posts)
         return posts
 
     async def query_last_year(
         self, *, year: int | None = None, count: int = 10
     ) -> dict[str, Any]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         limit = max(1, min(int(count or 10), 20))
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.LAST_YEAR_URL,
+            self.owner.LAST_YEAR_URL,
             params={
                 "login_uin": ctx.uin,
                 "mode": 1,
@@ -162,25 +171,27 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "year": int(year or datetime.now().year - 1),
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}"),
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}"
+            ),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间那年今日失败")
             )
         result = parse_last_year(payload)
-        self._remember_posts(result.get("items") or [])
+        self.owner._remember_posts(result.get("items") or [])
         return result
 
     async def query_favorites(
         self, *, start: int = 0, num: int = 10, favorite_type: int = 0
     ) -> dict[str, Any]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         offset = max(0, int(start or 0))
         limit = max(1, min(int(num or 10), 20))
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.FAVORITE_URL,
+            self.owner.FAVORITE_URL,
             params={
                 "uin": ctx.uin,
                 "type": max(0, int(favorite_type or 0)),
@@ -196,11 +207,11 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "random": time.time(),
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(
-                ctx, Referer=f"{self.BASE_URL}/{ctx.uin}/myhome/favorite"
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}/myhome/favorite"
             ),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(str(payload.get("message") or "获取 QQ 空间收藏失败"))
         result = parse_favorites(payload)
         result["has_more"] = offset + len(result.get("items") or []) < int(
@@ -211,13 +222,13 @@ class QzoneFeedExtraService(QzoneMethodSet):
     async def query_message_board(
         self, *, target_id: str = "", start: int = 0, num: int = 10
     ) -> dict[str, Any]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         target = str(target_id or ctx.uin).strip() or str(ctx.uin)
         offset = max(0, int(start or 0))
         limit = max(1, min(int(num or 10), 20))
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.MESSAGE_BOARD_URL,
+            self.owner.MESSAGE_BOARD_URL,
             params={
                 "uin": ctx.uin,
                 "hostUin": target,
@@ -233,19 +244,19 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "ref": "qzone",
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{target}"),
+            headers=self.owner._headers(ctx, Referer=f"{self.owner.BASE_URL}/{target}"),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(str(payload.get("message") or "获取 QQ 空间留言板失败"))
         return parse_message_board(payload, start=offset)
 
     async def query_relations(self, *, relation_type: str = "care") -> dict[str, Any]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         relation_key = str(relation_type or "care").strip().lower()
         do_type = 2 if relation_key in {"care_by", "careby", "by", "fans"} else 1
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.RELATION_URL,
+            self.owner.RELATION_URL,
             params={
                 "uin": ctx.uin,
                 "do": do_type,
@@ -254,11 +265,11 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "clean": 1,
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(
-                ctx, Referer=f"{self.BASE_URL}/{ctx.uin}/myhome/friends"
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}/myhome/friends"
             ),
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间在意好友失败")
             )
@@ -268,10 +279,10 @@ class QzoneFeedExtraService(QzoneMethodSet):
         }
 
     async def query_visit_stats(self) -> dict[str, Any]:
-        ctx = await self.context()
-        payload = await self._request(
+        ctx = await self.owner.context()
+        payload = await self.owner._request(
             "GET",
-            self.VISITOR_URL,
+            self.owner.VISITOR_URL,
             params={
                 "uin": ctx.uin,
                 "mask": 2,
@@ -279,10 +290,12 @@ class QzoneFeedExtraService(QzoneMethodSet):
                 "fupdate": 1,
                 "g_tk": ctx.gtk,
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}/main"),
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}/main"
+            ),
             retry_parse_error=False,
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间浏览统计失败")
             )

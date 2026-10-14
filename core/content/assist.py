@@ -5,6 +5,7 @@ from astrbot.api import logger
 
 from ..config import TimePeriod
 from ..database.keys import QZONE_TARGET_ID
+from ..persona import selected_share_persona
 from ..prompt import build_private_target_prompt, build_qzone_post_prompt
 from .contentbase import ContentComponent
 
@@ -13,6 +14,7 @@ class ContentSupportService(ContentComponent):
     """内容生成支撑能力。"""
 
     async def _call_llm(self, *args, target_umo: str | None = None, **kwargs):
+        kwargs.setdefault("purpose", "share_content")
         if target_umo:
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)
@@ -136,10 +138,10 @@ class ContentSupportService(ContentComponent):
         }
         return labels.get(period, "现在")
 
-    async def get_persona_info(self) -> dict:
+    async def get_persona_info(self, target_umo: str | None = None) -> dict:
         info = {"prompt": "", "bot_name": "", "user_name": ""}
         try:
-            personality = await self.context.persona_manager.get_default_persona_v3()
+            personality = await selected_share_persona(self.context, target_umo)
             if personality:
                 info["prompt"] = personality.get("prompt", "")
                 info["bot_name"] = personality.get("bot_name", "")
@@ -172,12 +174,8 @@ class ContentSupportService(ContentComponent):
             "（注：优先按这段消息流判断谁在对谁说话、谁在回复谁、是否 @、是否带图。）"
         )
 
-    def _build_output_format_prompt(self, target_id: str | bool = "") -> str:
-        # 保留布尔参数调用契约，同时允许平台目标使用独立格式。
-        if isinstance(target_id, bool):
-            target = QZONE_TARGET_ID if target_id else ""
-        else:
-            target = str(target_id or "").strip()
+    def _build_output_format_prompt(self, target_id: str = "") -> str:
+        target = str(target_id or "").strip()
         if target == QZONE_TARGET_ID:
             return ""
         general_format = str(

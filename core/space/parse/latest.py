@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .caption import feed_body_text
 from .decoder import (
     _decode_js_escaped_text,
     _html_first_attr,
@@ -129,27 +130,9 @@ def _strip_feed_author_prefix(text: str, author: str = "") -> str:
         prefix = value[:index].strip()
         if not prefix or len(prefix) > 40:
             continue
-        if (
-            not author
-            or prefix == author
-            or "回复" in prefix
-            or re.search(r"[\u4e00-\u9fffA-Za-z0-9_ -]+$", prefix)
-        ):
+        if author and prefix == author:
             return value[index + 1 :].strip()
     return value
-
-
-def _html_text_by_class(raw_html: str, class_name: str) -> str:
-    pattern = re.compile(
-        rf'<(?P<tag>div|p|span|h[1-6])\b[^>]*class=(["\'])[^"\']*\b{re.escape(class_name)}\b[^"\']*\2[^>]*>'
-        rf"(?P<body>.*?)</(?P=tag)>",
-        re.I | re.S,
-    )
-    for match in pattern.finditer(raw_html or ""):
-        text = clean_qzone_text(match.group("body"))
-        if text:
-            return text
-    return ""
 
 
 def _recent_item_name(item: dict[str, Any], raw_html: str, uin: int) -> str:
@@ -192,25 +175,8 @@ def _recent_item_name(item: dict[str, Any], raw_html: str, uin: int) -> str:
 
 
 def _recent_item_text(raw_html: str, author: str = "") -> str:
-    for class_name in (
-        "f-info",
-        "txt-box-title",
-        "txt-box",
-        "content-box",
-        "qz_summary",
-    ):
-        text = _html_text_by_class(raw_html, class_name)
-        if text:
-            return _strip_feed_author_prefix(text, author)
-    return _strip_feed_author_prefix(raw_html, author)
-
-
-def _qzone_unikey(appid: int, uin: int, fid: str) -> str:
-    if not uin or not fid:
-        return ""
-    if int(appid or 311) == 311:
-        return f"https://user.qzone.qq.com/{uin}/mood/{fid}"
-    return f"https://user.qzone.qq.com/{uin}/app/{appid}/{fid}"
+    # Unknown/empty body nodes must not turn comments or controls into a caption.
+    return _strip_feed_author_prefix(feed_body_text(raw_html), author)
 
 
 def _recent_payload_array_items(payload: dict[str, Any]) -> list[dict[str, Any]]:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import inspect
 from contextvars import ContextVar
 from typing import Any
 
@@ -19,7 +18,7 @@ _MEDIA_METHODS = {
 }
 
 
-class DailyLifeBridge(ShareDeliveryBridge):
+class DailyLifeBridge:
     """每日分享与生活插件之间唯一的公开调用边界。"""
 
     def __init__(self, context: Any, db: Any = None):
@@ -31,6 +30,7 @@ class DailyLifeBridge(ShareDeliveryBridge):
             f"daily_share_media_results_{id(self)}",
             default={},
         )
+        self.delivery = ShareDeliveryBridge(self)
 
     def _plugin(self):
         try:
@@ -49,17 +49,6 @@ class DailyLifeBridge(ShareDeliveryBridge):
                 return None
             return metadata.star_cls
         return None
-
-    @staticmethod
-    def _optional_target_kwargs(method, target: str) -> dict:
-        try:
-            return (
-                {"target_umo": target}
-                if "target_umo" in inspect.signature(method).parameters
-                else {}
-            )
-        except (TypeError, ValueError):
-            return {}
 
     async def get_share_context(self, target_umo: str) -> dict:
         plugin = self._plugin()
@@ -111,6 +100,8 @@ class DailyLifeBridge(ShareDeliveryBridge):
             return ""
         chat_share = scene in {"share_private", "share_group"}
         text = " ".join(text.split())[: 1200 if chat_share else 500]
+        if scene in {"qzone_comment", "qzone_reply"}:
+            return f"【daily_life 聊天表达参考】\n{text}\n仅作语气与节奏参考，按当前公开互动任务输出正文。"
         boundary = "当前分享场景" if chat_share else "当前公开场景"
         return (
             f"【daily_life 聊天表达参考】\n{text}\n"
@@ -242,6 +233,11 @@ class DailyLifeBridge(ShareDeliveryBridge):
         job = current_share_job.get()
         plugin = self._plugin()
         task_method = getattr(plugin, "generate_share_image_task", None)
+        if job is not None and not callable(task_method):
+            self._set_media_result(
+                "image", "unavailable", "生活插件缺少持久图片任务接口"
+            )
+            return ""
         if job is not None and callable(task_method):
             job.update(image_description=prompt, contains_character=contains_character)
             await save_share_job(job)
@@ -250,7 +246,7 @@ class DailyLifeBridge(ShareDeliveryBridge):
                 prompt,
                 task_key=f"{job['id']}:image",
                 contains_character=contains_character,
-                **self._optional_target_kwargs(task_method, self.share_target(job)),
+                target_umo=self.share_target(job),
             )
             if not isinstance(result, dict):
                 raise RuntimeError("分享生图任务返回格式无效")
@@ -314,7 +310,7 @@ class DailyLifeBridge(ShareDeliveryBridge):
                     prompt,
                     task_key=f"{job['id']}:video",
                     reference_image=reference_image,
-                    **self._optional_target_kwargs(method, self.share_target(job)),
+                    target_umo=self.share_target(job),
                 )
                 if result.get("status") == "pending":
                     self._set_media_result("video", "pending", "原视频任务仍在处理")
@@ -327,6 +323,10 @@ class DailyLifeBridge(ShareDeliveryBridge):
                 job.update(video_url=value, pending_media="")
                 await save_share_job(job)
                 return value
+            self._set_media_result(
+                "video", "unavailable", "生活插件缺少持久视频任务接口"
+            )
+            return ""
         result = await self._call_media(
             "generate_share_video",
             "视频",
@@ -334,9 +334,6 @@ class DailyLifeBridge(ShareDeliveryBridge):
             prompt,
             reference_image=str(reference_image or "").strip(),
         )
-        if job is not None:
-            job["video_url"] = result
-            await save_share_job(job)
         return result
 
     async def generate_voice(
@@ -524,6 +521,21 @@ class DailyLifeBridge(ShareDeliveryBridge):
         except Exception as exc:
             logger.warning(f"[上下文] 回传生活插件主动行为失败: {exc}")
             return False
+
+    @staticmethod
+    def share_target(job):
+        return ShareDeliveryBridge.share_target(job)
+
+    async def record_delivery(self, target_umo, sent_at, *, media_kinds=()):
+        return await self.delivery.record_delivery(
+            target_umo, sent_at, media_kinds=media_kinds
+        )
+
+    async def _send_delivery_receipt(self, receipt):
+        return await self.delivery._send_delivery_receipt(receipt)
+
+    async def flush_delivery_receipts(self):
+        return await self.delivery.flush_delivery_receipts()
 
 
 __all__ = ["DAILY_LIFE_PLUGIN_ID", "DailyLifeBridge"]

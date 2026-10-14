@@ -3,11 +3,9 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
-
-from .methodset import QzoneMethodSet
 
 try:
     import httpx
@@ -19,8 +17,14 @@ from astrbot.api import logger
 from .models import QzoneContext
 from .parse import parse_qzone_response
 
+if TYPE_CHECKING:
+    from .qzone import QzoneService
 
-class QzoneClientGateway(QzoneMethodSet):
+
+class QzoneClientGateway:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     def _refresh_request_credentials(
         self,
         old_ctx: QzoneContext,
@@ -56,40 +60,40 @@ class QzoneClientGateway(QzoneMethodSet):
                 None,
             )
             if cookie_key:
-                cookie_values = self._cookie_values_from_header(
+                cookie_values = self.owner._cookie_values_from_header(
                     str(refreshed_headers[cookie_key] or "")
                 )
                 cookie_values.update(new_ctx.cookies)
-                refreshed_headers[cookie_key] = self._cookie_header_from_values(
+                refreshed_headers[cookie_key] = self.owner._cookie_header_from_values(
                     cookie_values
                 )
         return refreshed_params, refreshed_data, refreshed_headers
 
     async def close(self) -> None:
-        async with self._session_lock:
-            if self._session and not self._session.closed:
-                await self._session.close()
-            self._session = None
-            self._session_timeout_seconds = None
-        async with self._h2_session_lock:
-            if self._h2_session is not None:
-                await self._h2_session.aclose()
-            self._h2_session = None
-            self._h2_timeout_seconds = None
-        self._h5_transport = ""
-        self._h5_transport_logged = False
+        async with self.owner._session_lock:
+            if self.owner._session and not self.owner._session.closed:
+                await self.owner._session.close()
+            self.owner._session = None
+            self.owner._session_timeout_seconds = None
+        async with self.owner._h2_session_lock:
+            if self.owner._h2_session is not None:
+                await self.owner._h2_session.aclose()
+            self.owner._h2_session = None
+            self.owner._h2_timeout_seconds = None
+        self.owner._h5_transport = ""
+        self.owner._h5_transport_logged = False
 
     def invalidate(self) -> None:
-        self._ctx = None
-        self._ctx_at = 0.0
-        self._clear_qzone_cache()
+        self.owner._ctx = None
+        self.owner._ctx_at = 0.0
+        self.owner._clear_qzone_cache()
 
     def configured(self) -> bool:
-        return bool(self._get_bot())
+        return bool(self.owner._get_bot())
 
     async def status(self) -> dict:
         try:
-            ctx = await self.context()
+            ctx = await self.owner.context()
             return {
                 "available": True,
                 "configured": True,
@@ -99,43 +103,49 @@ class QzoneClientGateway(QzoneMethodSet):
         except Exception as exc:
             return {
                 "available": False,
-                "configured": bool(self._get_bot()),
+                "configured": bool(self.owner._get_bot()),
                 "uin": 0,
                 "nickname": "",
                 "error": str(exc),
             }
 
     async def context(self) -> QzoneContext:
-        self._ensure_bot_cache_scope()
-        if self._ctx and time.monotonic() - self._ctx_at < self.COOKIE_TTL_SECONDS:
-            return self._ctx
+        self.owner._ensure_bot_cache_scope()
+        if (
+            self.owner._ctx
+            and time.monotonic() - self.owner._ctx_at < self.owner.COOKIE_TTL_SECONDS
+        ):
+            return self.owner._ctx
 
-        async with self._ctx_fetch_lock:
-            self._ensure_bot_cache_scope()
-            bot = self._cache_bot
+        async with self.owner._ctx_fetch_lock:
+            self.owner._ensure_bot_cache_scope()
+            bot = self.owner._cache_bot
             now = time.monotonic()
-            if self._ctx and now - self._ctx_at < self.COOKIE_TTL_SECONDS:
-                return self._ctx
-            cookie = await self._fetch_bot_cookie(bot=bot)
-            ctx = await self._context_from_cookie(cookie, bot=bot)
-            if self._get_bot() is not bot:
-                self._ensure_bot_cache_scope()
+            if (
+                self.owner._ctx
+                and now - self.owner._ctx_at < self.owner.COOKIE_TTL_SECONDS
+            ):
+                return self.owner._ctx
+            cookie = await self.owner._fetch_bot_cookie(bot=bot)
+            ctx = await self.owner._context_from_cookie(cookie, bot=bot)
+            if self.owner._get_bot() is not bot:
+                self.owner._ensure_bot_cache_scope()
                 raise RuntimeError("QQ 空间机器人实例在读取登录态期间发生变化，请重试")
 
-            self._ctx = ctx
-            self._ctx_at = time.monotonic()
+            self.owner._ctx = ctx
+            self.owner._ctx_at = time.monotonic()
             return ctx
 
     def _ensure_bot_cache_scope(self) -> None:
         """登录态、列表和详情缓存属于同一个机器人实例。"""
-        bot = self._get_bot()
-        if bot is not self._cache_bot:
-            self.invalidate()
-            self._cache_bot = bot
+        bot = self.owner._get_bot()
+        if bot is not self.owner._cache_bot:
+            self.owner.invalidate()
+            self.owner._cache_bot = bot
 
     def _ensure_request_bot(self, bot, method: str) -> None:
-        self._ensure_bot_cache_scope()
-        if self._cache_bot is bot:
+        self.owner._ensure_bot_cache_scope()
+        if self.owner._cache_bot is bot:
             return
         message = "QQ 空间机器人实例在请求期间发生变化，已停止重试"
         if str(method or "").upper() not in {"GET", "HEAD", "OPTIONS"}:
@@ -143,15 +153,15 @@ class QzoneClientGateway(QzoneMethodSet):
         raise RuntimeError(message)
 
     def _get_bot(self):
-        conf = self._qzone_config()
+        conf = self.owner._qzone_config()
         configured_adapter_id = str(conf.get("qzone_adapter_id", "") or "").strip()
-        cached_adapter_id = str(self._qq_adapter_id() or "").strip()
+        cached_adapter_id = str(self.owner._qq_adapter_id() or "").strip()
         adapter_id = configured_adapter_id or cached_adapter_id
         if adapter_id:
-            bot = self.ctx_service.get_bot_instance(adapter_id)
+            bot = self.owner.ctx_service.get_bot_instance(adapter_id)
             if bot:
                 return bot
-            bot = self.ctx_service.get_onebot_bot(
+            bot = self.owner.ctx_service.get_onebot_bot(
                 target_umo="0",
                 adapter_id=adapter_id,
             )
@@ -162,11 +172,11 @@ class QzoneClientGateway(QzoneMethodSet):
                 f"[日常分享] QQ 空间配置的机器人实例不可用: {configured_adapter_id}，"
             )
             return None
-        bot_map = self.ctx_service.bot_map
+        bot_map = self.owner.ctx_service.bot_map
         onebot_bots = [
             item
             for key, item in bot_map.items()
-            if self.ctx_service.is_onebot_platform(str(key))
+            if self.owner.ctx_service.is_onebot_platform(str(key))
         ]
         if len(onebot_bots) == 1:
             return onebot_bots[0]
@@ -176,16 +186,16 @@ class QzoneClientGateway(QzoneMethodSet):
                 "请在 QQ 空间设置中选择机器人实例"
             )
             return None
-        return self.ctx_service.get_onebot_bot(target_umo="0", adapter_id="")
+        return self.owner.ctx_service.get_onebot_bot(target_umo="0", adapter_id="")
 
     async def _fetch_bot_cookie(self, *, bot=None) -> str:
-        bot = bot if bot is not None else self._get_bot()
+        bot = bot if bot is not None else self.owner._get_bot()
         if not bot:
             raise RuntimeError("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
         values: dict[str, str] = {}
-        for domain in self.QZONE_COOKIE_DOMAINS:
+        for domain in self.owner.QZONE_COOKIE_DOMAINS:
             try:
-                payload = await self.ctx_service.call_onebot_action(
+                payload = await self.owner.ctx_service.call_onebot_action(
                     bot, "get_cookies", domain=domain
                 )
             except Exception as exc:
@@ -196,7 +206,7 @@ class QzoneClientGateway(QzoneMethodSet):
                 if isinstance(payload, dict)
                 else ""
             )
-            domain_values = self._cookie_values_from_header(cookie)
+            domain_values = self.owner._cookie_values_from_header(cookie)
             if not domain_values:
                 continue
             values.update(domain_values)
@@ -208,10 +218,10 @@ class QzoneClientGateway(QzoneMethodSet):
             raise RuntimeError(
                 "机器人客户端未返回 QQ 空间登录态，请确认账号已登录且适配器支持读取登录态"
             )
-        return self._cookie_header_from_values(values)
+        return self.owner._cookie_header_from_values(values)
 
     async def _context_from_cookie(self, cookie: str, *, bot=None) -> QzoneContext:
-        values = self._cookie_values_from_header(cookie)
+        values = self.owner._cookie_values_from_header(cookie)
         uin_text = str(
             values.get("uin") or values.get("p_uin") or values.get("pt2gguin") or "0"
         )
@@ -221,7 +231,7 @@ class QzoneClientGateway(QzoneMethodSet):
         skey = values.get("skey") or p_skey
         if not uin or not p_skey:
             raise RuntimeError("机器人客户端返回的 QQ 空间登录态缺少账号标识或密钥")
-        nickname = await self._bot_nickname(str(uin), bot=bot)
+        nickname = await self.owner._bot_nickname(str(uin), bot=bot)
         return QzoneContext(
             uin=uin,
             skey=skey,
@@ -231,11 +241,13 @@ class QzoneClientGateway(QzoneMethodSet):
         )
 
     async def _bot_nickname(self, fallback: str, *, bot=None) -> str:
-        bot = bot if bot is not None else self._get_bot()
+        bot = bot if bot is not None else self.owner._get_bot()
         if not bot:
             return fallback
         try:
-            info = await self.ctx_service.call_onebot_action(bot, "get_login_info")
+            info = await self.owner.ctx_service.call_onebot_action(
+                bot, "get_login_info"
+            )
             return (
                 str(info.get("nickname") or fallback)
                 if isinstance(info, dict)
@@ -245,65 +257,68 @@ class QzoneClientGateway(QzoneMethodSet):
             return fallback
 
     async def _http(self) -> aiohttp.ClientSession:
-        timeout_seconds = self._api_timeout_seconds()
-        async with self._session_lock:
+        timeout_seconds = self.owner._api_timeout_seconds()
+        async with self.owner._session_lock:
             if (
-                self._session
-                and not self._session.closed
-                and self._session_timeout_seconds != timeout_seconds
+                self.owner._session
+                and not self.owner._session.closed
+                and self.owner._session_timeout_seconds != timeout_seconds
             ):
-                await self._session.close()
-                self._session = None
-            if self._session is None or self._session.closed:
-                self._session = aiohttp.ClientSession(
+                await self.owner._session.close()
+                self.owner._session = None
+            if self.owner._session is None or self.owner._session.closed:
+                self.owner._session = aiohttp.ClientSession(
                     timeout=aiohttp.ClientTimeout(total=timeout_seconds)
                 )
-                self._session_timeout_seconds = timeout_seconds
-            return self._session
+                self.owner._session_timeout_seconds = timeout_seconds
+            return self.owner._session
 
     async def _h2_http(self):
         if httpx is None or importlib.util.find_spec("h2") is None:
-            if not self._h5_transport_logged:
+            if not self.owner._h5_transport_logged:
                 logger.warning(
                     "[日常分享] QQ 空间 H5 请求未启用 HTTP/2，已退回 HTTP/1.1。"
                 )
-                self._h5_transport_logged = True
-            self._h5_transport = "HTTP/1.1"
+                self.owner._h5_transport_logged = True
+            self.owner._h5_transport = "HTTP/1.1"
             return None
-        timeout_seconds = self._api_timeout_seconds()
-        async with self._h2_session_lock:
+        timeout_seconds = self.owner._api_timeout_seconds()
+        async with self.owner._h2_session_lock:
             if (
-                self._h2_session is not None
-                and self._h2_timeout_seconds != timeout_seconds
+                self.owner._h2_session is not None
+                and self.owner._h2_timeout_seconds != timeout_seconds
             ):
-                await self._h2_session.aclose()
-                self._h2_session = None
-                self._h2_timeout_seconds = None
-            if self._h2_session is None:
+                await self.owner._h2_session.aclose()
+                self.owner._h2_session = None
+                self.owner._h2_timeout_seconds = None
+            if self.owner._h2_session is None:
                 try:
-                    self._h2_session = httpx.AsyncClient(
+                    self.owner._h2_session = httpx.AsyncClient(
                         http2=True,
                         timeout=timeout_seconds,
                         headers={"accept-encoding": "gzip"},
                     )
-                    self._h2_timeout_seconds = timeout_seconds
+                    self.owner._h2_timeout_seconds = timeout_seconds
                 except ImportError:
-                    self._h5_transport = "HTTP/1.1"
+                    self.owner._h5_transport = "HTTP/1.1"
                     return None
-        if not self._h5_transport_logged:
+        if not self.owner._h5_transport_logged:
             logger.info("[日常分享] QQ 空间 H5 上传已启用 HTTP/2。")
-            self._h5_transport_logged = True
-        self._h5_transport = "HTTP/2"
-        return self._h2_session
+            self.owner._h5_transport_logged = True
+        self.owner._h5_transport = "HTTP/2"
+        return self.owner._h2_session
 
     def _api_timeout_seconds(self) -> int:
-        conf = self.qzone_conf
+        conf = self.owner.qzone_conf
         try:
-            value = int(conf.get("qzone_api_timeout_seconds", self.API_TIMEOUT_SECONDS))
+            value = int(
+                conf.get("qzone_api_timeout_seconds", self.owner.API_TIMEOUT_SECONDS)
+            )
         except (TypeError, ValueError):
-            value = self.API_TIMEOUT_SECONDS
+            value = self.owner.API_TIMEOUT_SECONDS
         return max(
-            self.API_TIMEOUT_MIN_SECONDS, min(value, self.API_TIMEOUT_MAX_SECONDS)
+            self.owner.API_TIMEOUT_MIN_SECONDS,
+            min(value, self.owner.API_TIMEOUT_MAX_SECONDS),
         )
 
     async def _request(
@@ -317,13 +332,13 @@ class QzoneClientGateway(QzoneMethodSet):
         retry=True,
         retry_parse_error=True,
     ) -> dict[str, Any]:
-        ctx = await self.context()
-        request_bot = self._cache_bot
-        session = await self._http()
-        self._ensure_request_bot(request_bot, method)
-        request_headers = headers or self._headers(ctx)
+        ctx = await self.owner.context()
+        request_bot = self.owner._cache_bot
+        session = await self.owner._http()
+        self.owner._ensure_request_bot(request_bot, method)
+        request_headers = headers or self.owner._headers(ctx)
         request_cookies = (
-            None if self._has_cookie_header(request_headers) else ctx.cookies
+            None if self.owner._has_cookie_header(request_headers) else ctx.cookies
         )
         try:
             async with session.request(
@@ -338,12 +353,12 @@ class QzoneClientGateway(QzoneMethodSet):
                 status = resp.status
         except asyncio.TimeoutError as exc:
             raise RuntimeError(
-                f"QQ 空间请求超时（{self._api_timeout_seconds()}秒）"
+                f"QQ 空间请求超时（{self.owner._api_timeout_seconds()}秒）"
             ) from exc
         except aiohttp.ClientError as exc:
             raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
         payload = await asyncio.to_thread(parse_qzone_response, text)
-        self._ensure_request_bot(request_bot, method)
+        self.owner._ensure_request_bot(request_bot, method)
         payload["_http_status"] = status
         payload["_raw_length"] = len(text or "")
         payload["_raw_blank"] = not str(text or "").strip()
@@ -364,17 +379,17 @@ class QzoneClientGateway(QzoneMethodSet):
                     f"[日常分享] QQ 空间返回暂不可解析，刷新登录态后重试。接口状态码 {status}，响应片段: {preview}"
                 )
             old_ctx = ctx
-            self.invalidate()
-            new_ctx = await self.context()
-            self._ensure_request_bot(request_bot, method)
-            params, data, headers = self._refresh_request_credentials(
+            self.owner.invalidate()
+            new_ctx = await self.owner.context()
+            self.owner._ensure_request_bot(request_bot, method)
+            params, data, headers = self.owner._refresh_request_credentials(
                 old_ctx,
                 new_ctx,
                 params=params,
                 data=data,
                 headers=headers,
             )
-            return await self._request(
+            return await self.owner._request(
                 method,
                 url,
                 params=params,
@@ -395,13 +410,13 @@ class QzoneClientGateway(QzoneMethodSet):
         headers=None,
         retry=True,
     ) -> str:
-        ctx = await self.context()
-        request_bot = self._cache_bot
-        session = await self._http()
-        self._ensure_request_bot(request_bot, method)
-        request_headers = headers or self._headers(ctx)
+        ctx = await self.owner.context()
+        request_bot = self.owner._cache_bot
+        session = await self.owner._http()
+        self.owner._ensure_request_bot(request_bot, method)
+        request_headers = headers or self.owner._headers(ctx)
         request_cookies = (
-            None if self._has_cookie_header(request_headers) else ctx.cookies
+            None if self.owner._has_cookie_header(request_headers) else ctx.cookies
         )
         try:
             async with session.request(
@@ -416,24 +431,24 @@ class QzoneClientGateway(QzoneMethodSet):
                 status = resp.status
         except asyncio.TimeoutError as exc:
             raise RuntimeError(
-                f"QQ 空间请求超时（{self._api_timeout_seconds()}秒）"
+                f"QQ 空间请求超时（{self.owner._api_timeout_seconds()}秒）"
             ) from exc
         except aiohttp.ClientError as exc:
             raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
-        self._ensure_request_bot(request_bot, method)
+        self.owner._ensure_request_bot(request_bot, method)
         if retry and status in {401, 403}:
             old_ctx = ctx
-            self.invalidate()
-            new_ctx = await self.context()
-            self._ensure_request_bot(request_bot, method)
-            params, data, headers = self._refresh_request_credentials(
+            self.owner.invalidate()
+            new_ctx = await self.owner.context()
+            self.owner._ensure_request_bot(request_bot, method)
+            params, data, headers = self.owner._refresh_request_credentials(
                 old_ctx,
                 new_ctx,
                 params=params,
                 data=data,
                 headers=headers,
             )
-            return await self._request_text(
+            return await self.owner._request_text(
                 method,
                 url,
                 params=params,

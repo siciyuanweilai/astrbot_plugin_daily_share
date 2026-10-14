@@ -39,8 +39,11 @@ class _PersonaManager:
     def __init__(self, prompt):
         self.prompt = prompt
 
-    async def get_default_persona_v3(self):
+    async def get_default_persona_v3(self, umo=None):
         return {"prompt": self.prompt, "bot_name": "测试机器人", "user_name": ""}
+
+    async def resolve_selected_persona(self, **kwargs):
+        return None, None, None, False
 
 
 def _clear_modules():
@@ -256,9 +259,9 @@ class IdentityPromptTests(unittest.IsolatedAsyncioTestCase):
             context=None,
             db_manager=types.SimpleNamespace(),
         )
-        for target in ("qzone_broadcast", True):
+        for target in ("qzone_broadcast",):
             self.assertEqual(service.support._build_output_format_prompt(target), "")
-        for target in (False, "private-target", "group-target"):
+        for target in ("", "private-target", "group-target"):
             prompt = service.support._build_output_format_prompt(target)
             self.assertIn("普通分享格式", prompt)
             self.assertNotIn("已移除格式", prompt)

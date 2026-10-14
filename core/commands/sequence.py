@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ..config import SHARE_TYPE_SEQUENCES, TimePeriod
@@ -8,10 +12,15 @@ from ..constants import (
     period_label,
 )
 from ..database.keys import QZONE_STATE_KEY, target_state_key
-from .commandbase import CommandServiceBase
+
+if TYPE_CHECKING:
+    from . import CommandHandler
 
 
-class CommandSequenceService(CommandServiceBase):
+class CommandSequenceService:
+    def __init__(self, owner: CommandHandler) -> None:
+        self.owner = owner
+
     async def cmd_reset_seq(self, event: AstrMessageEvent):
         """重置序列（支持分离当前会话和 QQ 空间）"""
         is_qzone = "空间" in event.message_str
@@ -25,7 +34,7 @@ class CommandSequenceService(CommandServiceBase):
             }
             for p in TimePeriod:
                 qzone_updates[f"index_{p.value}"] = 0
-            await self.db.update_share_state(QZONE_STATE_KEY, qzone_updates)
+            await self.owner.db.update_share_state(QZONE_STATE_KEY, qzone_updates)
             yield event.plain_result("QQ 空间的序列指针已重置")
 
         else:
@@ -40,7 +49,7 @@ class CommandSequenceService(CommandServiceBase):
             }
             for p in TimePeriod:
                 updates[f"index_{p.value}"] = 0
-            await self.db.update_share_state(state_key, updates)
+            await self.owner.db.update_share_state(state_key, updates)
             yield event.plain_result("当前会话的序列指针已重置")
 
     async def cmd_view_seq(self, event: AstrMessageEvent):
@@ -49,26 +58,30 @@ class CommandSequenceService(CommandServiceBase):
         is_qzone = "空间" in event.message_str
 
         # 获取当前时段信息
-        period = self.plugin.task_manager.executor_helpers.get_curr_period()
-        time_range = self.plugin.task_manager.executor_helpers.get_period_range_str(
-            period
+        period = (
+            self.owner.plugin.task_manager.executor_helpers.period.get_curr_period()
+        )
+        time_range = (
+            self.owner.plugin.task_manager.executor_helpers.period.get_period_range_str(
+                period
+            )
         )
 
         # 尝试获取该会话的独立配置类型
-        adapter_id, real_id = self.plugin.ctx_service.parse_umo(target_uid)
-        is_group = self.plugin.ctx_service.is_group_chat(target_uid)
+        adapter_id, real_id = self.owner.plugin.ctx_service.parse_umo(target_uid)
+        is_group = self.owner.plugin.ctx_service.is_group_chat(target_uid)
 
-        r_groups = self.plugin.task_manager.targets.parse_targets_config(
-            self.plugin.receiver_conf.get("groups", []), expected_group=True
+        r_groups = self.owner.plugin.task_manager.targets.parse_targets_config(
+            self.owner.plugin.receiver_conf.get("groups", []), expected_group=True
         )
-        r_users = self.plugin.task_manager.targets.parse_targets_config(
-            self.plugin.receiver_conf.get("users", []), expected_group=False
+        r_users = self.owner.plugin.task_manager.targets.parse_targets_config(
+            self.owner.plugin.receiver_conf.get("users", []), expected_group=False
         )
 
         target_specific_type = "自动"
         if not is_qzone:
             # QQ 空间走独立配置，普通会话看群聊、私聊独立配置。
-            conf = self.plugin.task_manager.targets.get_target_conf(
+            conf = self.owner.plugin.task_manager.targets.get_target_conf(
                 target_uid, is_group, r_groups, r_users
             )
             if conf is not None:
@@ -76,10 +89,10 @@ class CommandSequenceService(CommandServiceBase):
                     conf.get("seq", "自动") if isinstance(conf, dict) else conf
                 )
         else:
-            target_specific_type = self.qzone_conf.get("qzone_share_type", "自动")
+            target_specific_type = self.owner.qzone_conf.get("qzone_share_type", "自动")
 
         state_key = QZONE_STATE_KEY if is_qzone else target_state_key(target_uid)
-        state = await self.db.get_share_state(state_key, {})
+        state = await self.owner.db.get_share_state(state_key, {})
 
         # 优先判断是否使用了独立时段序列
         if target_specific_type:
@@ -106,7 +119,7 @@ class CommandSequenceService(CommandServiceBase):
 
         # 如果没用独立时段序列（即自动模式），则走全局时段序列逻辑
         prefix = "qzone_" if is_qzone else ""
-        conf_node = self.qzone_conf if is_qzone else self.basic_conf
+        conf_node = self.owner.qzone_conf if is_qzone else self.owner.basic_conf
         config_key = f"{prefix}{period.value}_sequence"
         seq = conf_node.get(config_key, [])
         if not seq:
@@ -134,19 +147,19 @@ class CommandSequenceService(CommandServiceBase):
             target_uid = event.unified_msg_origin
 
             # 检测独立配置
-            adapter_id, real_id = self.plugin.ctx_service.parse_umo(target_uid)
-            is_group = self.plugin.ctx_service.is_group_chat(target_uid)
+            adapter_id, real_id = self.owner.plugin.ctx_service.parse_umo(target_uid)
+            is_group = self.owner.plugin.ctx_service.is_group_chat(target_uid)
 
-            r_groups = self.plugin.task_manager.targets.parse_targets_config(
-                self.plugin.receiver_conf.get("groups", []), expected_group=True
+            r_groups = self.owner.plugin.task_manager.targets.parse_targets_config(
+                self.owner.plugin.receiver_conf.get("groups", []), expected_group=True
             )
-            r_users = self.plugin.task_manager.targets.parse_targets_config(
-                self.plugin.receiver_conf.get("users", []), expected_group=False
+            r_users = self.owner.plugin.task_manager.targets.parse_targets_config(
+                self.owner.plugin.receiver_conf.get("users", []), expected_group=False
             )
 
             target_specific_type = "自动"
             if not is_qzone:
-                conf = self.plugin.task_manager.targets.get_target_conf(
+                conf = self.owner.plugin.task_manager.targets.get_target_conf(
                     target_uid, is_group, r_groups, r_users
                 )
                 if conf is not None:
@@ -154,7 +167,9 @@ class CommandSequenceService(CommandServiceBase):
                         conf.get("seq", "自动") if isinstance(conf, dict) else conf
                     )
             else:
-                target_specific_type = self.qzone_conf.get("qzone_share_type", "自动")
+                target_specific_type = self.owner.qzone_conf.get(
+                    "qzone_share_type", "自动"
+                )
 
             state_key = QZONE_STATE_KEY if is_qzone else target_state_key(target_uid)
 
@@ -165,7 +180,7 @@ class CommandSequenceService(CommandServiceBase):
                 )
                 if custom_seq and custom_seq != ["auto"]:
                     if 0 <= target_idx < len(custom_seq):
-                        await self.db.update_share_state(
+                        await self.owner.db.update_share_state(
                             state_key,
                             {
                                 "custom_sequence_index": target_idx,
@@ -185,8 +200,10 @@ class CommandSequenceService(CommandServiceBase):
                     return
 
             # 全局模式，调整时段指针
-            period = self.plugin.task_manager.executor_helpers.get_curr_period()
-            conf_node = self.qzone_conf if is_qzone else self.basic_conf
+            period = (
+                self.owner.plugin.task_manager.executor_helpers.period.get_curr_period()
+            )
+            conf_node = self.owner.qzone_conf if is_qzone else self.owner.basic_conf
             prefix = "qzone_" if is_qzone else ""
 
             config_key = f"{prefix}{period.value}_sequence"
@@ -196,7 +213,7 @@ class CommandSequenceService(CommandServiceBase):
 
             if 0 <= target_idx < len(seq):
                 idx_key = f"index_{period.value}"
-                await self.db.update_share_state(
+                await self.owner.db.update_share_state(
                     state_key,
                     {
                         idx_key: target_idx,

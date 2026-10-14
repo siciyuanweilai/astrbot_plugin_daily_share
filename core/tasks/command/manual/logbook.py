@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType
 from ....integrations.delivery import record_confirmed_share
-from .mediafile import TaskCommandLocalMediaService
+
+if TYPE_CHECKING:
+    from .. import TaskCommandShareService
 
 
-class TaskCommandLocalRecordService(TaskCommandLocalMediaService):
+class TaskCommandLocalRecordService:
+    def __init__(self, owner: TaskCommandShareService) -> None:
+        self.owner = owner
+
     async def _send_command_generated_share(
         self,
         *,
@@ -20,10 +27,10 @@ class TaskCommandLocalRecordService(TaskCommandLocalMediaService):
         progress_id: str,
     ) -> tuple[bool, dict]:
         media_result: dict = {}
-        self.services.progress.update_share_progress(
+        self.owner.services.progress.update_share_progress(
             progress_id, "send", message="发送中"
         )
-        sent = await self.services.delivery.send(
+        sent = await self.owner.services.delivery.send(
             target_umo,
             content,
             send_img_path,
@@ -49,13 +56,13 @@ class TaskCommandLocalRecordService(TaskCommandLocalMediaService):
         image_description: str = "",
         degradation_reason: str = "",
     ) -> None:
-        await self.ctx_service.record_bot_reply_to_history(
+        await self.owner.ctx_service.record_bot_reply_to_history(
             target_umo, content, image_desc=image_description
         )
         await record_confirmed_share(
-            self.ctx_service, target_umo, content, image_description, media_result
+            self.owner.ctx_service, target_umo, content, image_description, media_result
         )
-        await self.services.executor_helpers.record_share_history(
+        await self.owner.services.executor_helpers.records.record_share_history(
             target_id=target_umo,
             share_type=target_type_enum.value,
             content=content,

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from .formatter import TaskNewsCacheFormatService
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..cache import TaskNewsCacheService
 
 
-class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
+class TaskNewsCacheLookupService:
+    def __init__(self, owner: TaskNewsCacheService) -> None:
+        self.owner = owner
+
     async def get_cached_news_link(
         self,
         target_uid: str,
@@ -17,18 +23,18 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
         if not target:
             return "工具内部提示：没有当前会话信息。请自然说明暂时查不到刚才那条新闻链接，不要提及工具状态。"
 
-        snapshot = await self._load_news_snapshot(target, source_key=source_key)
-        if not self._is_news_snapshot(snapshot):
+        snapshot = await self.owner._load_news_snapshot(target, source_key=source_key)
+        if not self.owner._is_news_snapshot(snapshot):
             return "工具内部提示：还没有可用于反查的新闻列表。请自然提醒用户先分享一次新闻，再问“第3条链接”，不要提及工具状态。"
-        if not self._is_news_snapshot_fresh(snapshot):
+        if not self.owner._is_news_snapshot_fresh(snapshot):
             return "工具内部提示：最近的新闻列表已过期。请自然提醒用户先分享一次最新新闻，再查询链接、摘要或来源，不要提及工具状态。"
 
-        action_key = self._normalize_news_link_action(action)
+        action_key = self.owner._normalize_news_link_action(action)
         items = snapshot.get("items") or []
         if action_key == "list":
-            return self._format_news_link_preview(snapshot, items)
+            return self.owner._format_news_link_preview(snapshot, items)
 
-        item_index = await self._resolve_news_item_index(
+        item_index = await self.owner._resolve_news_item_index(
             target,
             snapshot,
             source_key=source_key,
@@ -38,20 +44,20 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
         if isinstance(item_index, str):
             return item_index
         if item_index is not None:
-            return await self._format_indexed_news_link(
+            return await self.owner._format_indexed_news_link(
                 target, snapshot, items, item_index, action_key
             )
 
         text = str(query or "").strip()
         if not text:
-            return self._format_news_link_preview(snapshot, items)
+            return self.owner._format_news_link_preview(snapshot, items)
 
         keyword = text.lower()
         for idx, item in enumerate(items, start=1):
             haystack = f"{item.get('title', '')} {item.get('description', '')}".lower()
             if keyword in haystack:
-                await self._remember_news_focus(target, snapshot, idx)
-                return await self._format_news_link_item(
+                await self.owner._remember_news_focus(target, snapshot, idx)
+                return await self.owner._format_news_link_item(
                     snapshot, item, idx, action_key
                 )
 
@@ -60,7 +66,7 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
     async def _load_news_snapshot(
         self, target: str, *, source_key: str | None = None
     ) -> dict:
-        sent_snapshot = await self.db.get_latest_news_snapshot(target, source_key)
+        sent_snapshot = await self.owner.db.get_latest_news_snapshot(target, source_key)
         return sent_snapshot or {}
 
     async def _resolve_news_item_index(
@@ -73,7 +79,7 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
         fallback_to_query: bool = False,
     ) -> int | str | None:
         index_text = str(index or "").strip()
-        item_index = self._coerce_news_tool_index(index_text)
+        item_index = self.owner._coerce_news_tool_index(index_text)
         if index_text and item_index is None:
             if fallback_to_query:
                 return None
@@ -83,7 +89,9 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
             )
 
         if item_index is None:
-            item_index = await self._focused_news_index(target, snapshot, source_key)
+            item_index = await self.owner._focused_news_index(
+                target, snapshot, source_key
+            )
         return item_index
 
     async def _format_indexed_news_link(
@@ -96,7 +104,7 @@ class TaskNewsCacheLookupService(TaskNewsCacheFormatService):
     ) -> str:
         if item_index < 1 or item_index > len(items):
             return f"工具内部提示：当前新闻列表共有 {len(items)} 条，用户请求的序号超出范围。请自然提醒换个 1-{len(items)} 范围内的序号，不要提及工具状态。"
-        await self._remember_news_focus(target, snapshot, item_index)
-        return await self._format_news_link_item(
+        await self.owner._remember_news_focus(target, snapshot, item_index)
+        return await self.owner._format_news_link_item(
             snapshot, items[item_index - 1], item_index, action_key
         )

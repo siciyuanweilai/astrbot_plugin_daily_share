@@ -1,9 +1,9 @@
 from astrbot.api.event import AstrMessageEvent
 
-from .imagery import TaskHelperMediaService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperContextService(TaskHelperMediaService):
+class TaskHelperContextService(TaskServiceBase):
     """文案上下文和新闻快照辅助。"""
 
     async def _recent_share_history(self, target_id: str) -> list[dict]:

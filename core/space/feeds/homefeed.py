@@ -1,21 +1,28 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
+from typing import TYPE_CHECKING
+
 from ..models import QzonePost
 from ..parse import parse_home_feed_list
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneFeedHomeService(QzoneMethodSet):
+
+class QzoneFeedHomeService:
     """空间主页动态。"""
 
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     async def query_home_posts(self, *, pos: int = 0, num: int = 5) -> list[QzonePost]:
-        ctx = await self.context()
+        ctx = await self.owner.context()
         offset = max(0, int(pos or 0))
         limit = max(1, min(int(num or 5), 20))
         fetch_limit = max(1, min(offset + limit, 20))
-        raw = await self._request_text(
+        raw = await self.owner._request_text(
             "GET",
-            self.HOME_FEED_URL,
+            self.owner.HOME_FEED_URL,
             params={
                 "g_iframeUser": 1,
                 "i_uin": ctx.uin,
@@ -32,8 +39,10 @@ class QzoneFeedHomeService(QzoneMethodSet):
                 "refer": 2,
                 "paramstring": "os-windows|100",
             },
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{ctx.uin}/main"),
+            headers=self.owner._headers(
+                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}/main"
+            ),
         )
         posts = parse_home_feed_list(raw)[offset : offset + limit]
-        self._remember_posts(posts)
+        self.owner._remember_posts(posts)
         return posts

@@ -74,7 +74,14 @@ class ContextLifeFormatService(ContextComponent):
         if isinstance(state, dict):
             state = {
                 key: state[key]
-                for key in ("天气", "心情", "时段", "忙碌度", "当前实际活动")
+                for key in (
+                    "天气",
+                    "心情",
+                    "时段",
+                    "忙碌度",
+                    "当前实际活动",
+                    "身体状态参考",
+                )
                 if isinstance(state.get(key), str) and state[key].strip()
             }
             if state:

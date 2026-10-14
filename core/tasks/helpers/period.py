@@ -1,10 +1,10 @@
 from datetime import datetime
 
 from ...config import TimePeriod
-from .ledger import TaskHelperRecordService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperPeriodService(TaskHelperRecordService):
+class TaskHelperPeriodService(TaskServiceBase):
     """分享时段辅助。"""
 
     def get_curr_period(self) -> TimePeriod:

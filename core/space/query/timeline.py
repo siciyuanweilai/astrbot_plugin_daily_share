@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
-from ..methodset import QzoneMethodSet
 from ..models import QzoneContext, QzonePost
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneFeedQueryService(QzoneMethodSet):
+
+class QzoneFeedQueryService:
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
+
     def _recent_posts_params(
         self, ctx: QzoneContext, *, count: int, cursor: str = ""
     ) -> dict[str, Any]:
@@ -44,7 +49,7 @@ class QzoneFeedQueryService(QzoneMethodSet):
     def _friend_feeds_params(
         self, ctx: QzoneContext, *, count: int, cursor: str = ""
     ) -> dict[str, Any]:
-        return self._recent_posts_params(ctx, count=count, cursor=cursor)
+        return self.owner._recent_posts_params(ctx, count=count, cursor=cursor)
 
     @staticmethod
     def _friend_feeds_next_cursor(payload: dict[str, Any]) -> str:
@@ -121,4 +126,4 @@ class QzoneFeedQueryService(QzoneMethodSet):
 
     @property
     def last_friend_feeds_meta(self) -> dict[str, Any]:
-        return dict(self._last_friend_feeds_meta or {})
+        return dict(self.owner._last_friend_feeds_meta or {})

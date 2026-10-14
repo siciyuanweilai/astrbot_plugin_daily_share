@@ -9,6 +9,7 @@ from ..errors import QzoneAutoInteractionRateLimited
 from ..receipt import record_qzone_interaction
 from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
 from ..task import (
+    QzoneStatePersistenceError,
     _qzone_abort_query_failure,
     _qzone_auto_config,
     _qzone_auto_result,
@@ -17,6 +18,7 @@ from ..task import (
     _qzone_mark_result_rate_limited,
     _qzone_prepare_task,
     _qzone_query_fetch_count,
+    checkpoint_qzone_action,
 )
 from ..tracker import (
     QZONE_ACTION_COMMENTED,
@@ -112,6 +114,8 @@ async def _execute_qzone_auto_comment_thread_reply(
                 processed_action=QZONE_ACTION_THREAD_COMMENTED,
                 dashboard_action="auto_comment",
                 log_label="已自动续评 QQ 空间好友动态",
+                state=state,
+                state_key=QZONE_AUTO_COMMENT_STATE_KEY,
                 parent_comment_id=str(getattr(parent_comment, "tid", "") or ""),
                 parent_comment=parent_comment,
                 result_count_key="commented",
@@ -119,6 +123,8 @@ async def _execute_qzone_auto_comment_thread_reply(
             post_key = str(getattr(post, "key", "") or "").strip()
             if post_key:
                 replied_post_keys.add(post_key)
+        except QzoneStatePersistenceError:
+            raise
         except QzoneAutoInteractionRateLimited as exc:
             paused = True
             result["skipped"] += 1
@@ -128,6 +134,153 @@ async def _execute_qzone_auto_comment_thread_reply(
             result["failed"] += 1
             logger.warning(f"[日常分享] QQ 空间好友动态自动续评失败: {exc}")
     return replied_post_keys
+
+
+async def _submit_qzone_auto_comment(
+    owner,
+    post,
+    comment: str,
+    photo_key: str,
+    state: dict,
+    processed: dict,
+    result: dict,
+) -> bool:
+    """仅捕获提交异常；已确认的动作落库后才执行联动和回执。
+
+    返回 True 表示触发限流，需要结束本轮提交。
+    """
+    post_key = post.key
+    if not comment:
+        _mark_qzone_processed(processed, post_key, QZONE_ACTION_SKIPPED)
+        result["skipped"] += 1
+        return False
+    try:
+        bridge = getattr(owner.plugin, "daily_life_bridge", None)
+        clean = getattr(bridge, "clean_expression_punctuation", None)
+        if callable(clean):
+            comment = await clean(comment, scene="qzone_comment")
+        await owner.plugin.qzone_service.comment(post_key, comment)
+    except Exception as exc:
+        if int(post.appid or 311) == 4 and getattr(exc, "submission_unknown", False):
+            _mark_qzone_post_processed(
+                processed,
+                post,
+                QZONE_ACTION_SKIPPED,
+                content=comment,
+                reason=str(exc),
+                submission_unknown=True,
+                photo_target_key=photo_key,
+            )
+            result["skipped"] += 1
+            await checkpoint_qzone_action(
+                owner, QZONE_AUTO_COMMENT_STATE_KEY, state, processed, result
+            )
+            logger.warning(
+                f"[日常分享] QQ 空间相册评论提交状态未知，已停止整批自动重试: {exc}"
+            )
+            return False
+        if _qzone_is_retry_later_error(exc):
+            _mark_qzone_post_processed(
+                processed,
+                post,
+                QZONE_ACTION_RETRY_LATER,
+                content=comment,
+                post_key=post_key,
+                post_uin=int(getattr(post, "uin", 0) or 0),
+                post_tid=str(getattr(post, "tid", "") or ""),
+                author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
+                reason=str(exc),
+                photo_target_key=photo_key,
+            )
+            result["skipped"] += 1
+            _qzone_mark_result_rate_limited(result, exc)
+            logger.debug(f"[日常分享] QQ 空间自动评论稍后重试: {exc}")
+            return True
+        result["failed"] += 1
+        logger.warning(f"[日常分享] QQ 空间自动评论失败: {exc}")
+        return False
+    _mark_qzone_post_processed(
+        processed,
+        post,
+        QZONE_ACTION_COMMENTED,
+        content=comment,
+        post_key=post_key,
+        post_uin=int(getattr(post, "uin", 0) or 0),
+        post_tid=str(getattr(post, "tid", "") or ""),
+        author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
+        photo_target_key=photo_key,
+    )
+    result["commented"] += 1
+    await checkpoint_qzone_action(
+        owner, QZONE_AUTO_COMMENT_STATE_KEY, state, processed, result
+    )
+    await record_qzone_interaction(
+        owner,
+        post,
+        comment,
+        scene="qzone_comment",
+        actor_id=str(getattr(post, "uin", "") or ""),
+    )
+    owner.plugin.emit_dashboard_event(
+        "qzone",
+        {"action": "auto_comment", "post_id": post_key},
+    )
+    logger.info(
+        f"[日常分享] 已自动评论 QQ 空间动态: "
+        f"{getattr(post, 'name', '') or getattr(post, 'uin', '')}"
+        + (f"，照片={photo_key}" if photo_key else "")
+    )
+    await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
+    return False
+
+
+async def _generate_qzone_comment_target(
+    owner,
+    post,
+    posts: list,
+    ctx,
+    state: dict,
+    processed: dict,
+    *,
+    target_umo: str,
+    skip_post_keys: set[str],
+):
+    """生成整批评论并验证实际提交目标，不在这里修改持久状态。"""
+    photo_key = post.photo_targets[0].key if int(post.appid or 311) == 4 else ""
+    batch_posts = _qzone_auto_comment_batch_posts(post, posts)
+    if len(batch_posts) > 1:
+        (
+            selected_key,
+            comment,
+        ) = await owner.generate_qzone_auto_photo_comment(
+            _qzone_auto_comment_generation_post(post, batch_posts),
+            batch_posts,
+            state=state,
+            target_umo=target_umo,
+        )
+        selected_post = next(
+            (item for item in batch_posts if item.photo_targets[0].key == selected_key),
+            None,
+        )
+        if selected_post is None:
+            raise RuntimeError("相册评论选择了本批以外的照片，停止提交")
+        if (
+            selected_post.key in skip_post_keys
+            or not owner._qzone_auto_comment_candidate(
+                selected_post, self_uin=ctx.uin, processed=processed
+            )
+        ):
+            return None
+        post = selected_post
+        photo_key = selected_key
+    else:
+        comment = await owner.generate_qzone_auto_comment(
+            post,
+            state=state,
+            target_umo=target_umo,
+        )
+
+    return post, comment, photo_key
 
 
 async def _execute_qzone_auto_comment_new_posts(
@@ -172,7 +325,6 @@ async def _execute_qzone_auto_comment_new_posts(
             result["skipped"] += 1
             logger.debug(f"[日常分享] QQ 空间自动评论跳过: {target_error}")
             continue
-        post_key = str(getattr(post, "key", "") or "").strip()
         comment_index = QzoneCommentIndex.build(post, ctx.uin)
         if not owner._qzone_auto_comment_candidate(
             post,
@@ -214,127 +366,29 @@ async def _execute_qzone_auto_comment_new_posts(
             comment = pending_comment
         else:
             try:
-                batch_posts = _qzone_auto_comment_batch_posts(post, posts)
-                if len(batch_posts) > 1:
-                    (
-                        selected_key,
-                        comment,
-                    ) = await owner.generate_qzone_auto_photo_comment(
-                        _qzone_auto_comment_generation_post(post, batch_posts),
-                        batch_posts,
-                        state=state,
-                        target_umo=target_umo,
-                    )
-                    selected_post = next(
-                        (
-                            item
-                            for item in batch_posts
-                            if item.photo_targets[0].key == selected_key
-                        ),
-                        None,
-                    )
-                    if selected_post is None:
-                        raise RuntimeError("相册评论选择了本批以外的照片，停止提交")
-                    if (
-                        selected_post.key in skip_post_keys
-                        or not owner._qzone_auto_comment_candidate(
-                            selected_post, self_uin=ctx.uin, processed=processed
-                        )
-                    ):
-                        result["skipped"] += 1
-                        continue
-                    post = selected_post
-                    post_key = post.key
-                    photo_key = selected_key
-                else:
-                    comment = await owner.generate_qzone_auto_comment(
-                        post,
-                        state=state,
-                        target_umo=target_umo,
-                    )
+                generated = await _generate_qzone_comment_target(
+                    owner,
+                    post,
+                    posts,
+                    ctx,
+                    state,
+                    processed,
+                    target_umo=target_umo,
+                    skip_post_keys=skip_post_keys,
+                )
+                if generated is None:
+                    result["skipped"] += 1
+                    continue
+                post, comment, photo_key = generated
             except Exception as exc:
                 result["failed"] += 1
                 result["generation_failed"] += 1
                 logger.warning(f"[日常分享] QQ 空间自动评论生成失败: {exc}")
                 continue
-        try:
-            if not comment:
-                _mark_qzone_processed(processed, post_key, QZONE_ACTION_SKIPPED)
-                result["skipped"] += 1
-                continue
-            bridge = getattr(owner.plugin, "daily_life_bridge", None)
-            clean = getattr(bridge, "clean_expression_punctuation", None)
-            if callable(clean):
-                comment = await clean(comment, scene="qzone_comment")
-            await owner.plugin.qzone_service.comment(post_key, comment)
-            _mark_qzone_post_processed(
-                processed,
-                post,
-                QZONE_ACTION_COMMENTED,
-                content=comment,
-                post_key=post_key,
-                post_uin=int(getattr(post, "uin", 0) or 0),
-                post_tid=str(getattr(post, "tid", "") or ""),
-                author=str(getattr(post, "name", "") or getattr(post, "uin", "") or ""),
-                photo_target_key=photo_key,
-            )
-            await record_qzone_interaction(
-                owner,
-                post,
-                comment,
-                scene="qzone_comment",
-                actor_id=str(getattr(post, "uin", "") or ""),
-            )
-            result["commented"] += 1
-            owner.plugin.emit_dashboard_event(
-                "qzone",
-                {"action": "auto_comment", "post_id": post_key},
-            )
-            logger.info(
-                f"[日常分享] 已自动评论 QQ 空间动态: "
-                f"{getattr(post, 'name', '') or getattr(post, 'uin', '')}"
-                + (f"，照片={photo_key}" if photo_key else "")
-            )
-            await asyncio.sleep(QZONE_ACTION_DELAY_SECONDS)
-        except Exception as exc:
-            if int(post.appid or 311) == 4 and getattr(
-                exc, "submission_unknown", False
-            ):
-                _mark_qzone_post_processed(
-                    processed,
-                    post,
-                    QZONE_ACTION_SKIPPED,
-                    content=comment,
-                    reason=str(exc),
-                    submission_unknown=True,
-                    photo_target_key=photo_key,
-                )
-                result["skipped"] += 1
-                logger.warning(
-                    f"[日常分享] QQ 空间相册评论提交状态未知，已停止整批自动重试: {exc}"
-                )
-                continue
-            if _qzone_is_retry_later_error(exc):
-                _mark_qzone_post_processed(
-                    processed,
-                    post,
-                    QZONE_ACTION_RETRY_LATER,
-                    content=comment,
-                    post_key=post_key,
-                    post_uin=int(getattr(post, "uin", 0) or 0),
-                    post_tid=str(getattr(post, "tid", "") or ""),
-                    author=str(
-                        getattr(post, "name", "") or getattr(post, "uin", "") or ""
-                    ),
-                    reason=str(exc),
-                    photo_target_key=photo_key,
-                )
-                result["skipped"] += 1
-                _qzone_mark_result_rate_limited(result, exc)
-                logger.debug(f"[日常分享] QQ 空间自动评论稍后重试: {exc}")
-                break
-            result["failed"] += 1
-            logger.warning(f"[日常分享] QQ 空间自动评论失败: {exc}")
+        if await _submit_qzone_auto_comment(
+            owner, post, comment, photo_key, state, processed, result
+        ):
+            break
 
 
 async def execute_qzone_auto_comment_task(

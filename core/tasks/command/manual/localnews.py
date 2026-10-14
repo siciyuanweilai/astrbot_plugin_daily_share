@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import NEWS_SOURCE_MAP, ShareType
 from ....toolkit import format_exception
-from .resolve import TaskCommandLocalResolveService
+
+if TYPE_CHECKING:
+    from .. import TaskCommandShareService
 
 
-class TaskCommandLocalNewsService(TaskCommandLocalResolveService):
+class TaskCommandLocalNewsService:
+    def __init__(self, owner: TaskCommandShareService) -> None:
+        self.owner = owner
+
     async def _load_command_news(
         self,
         *,
@@ -23,16 +30,16 @@ class TaskCommandLocalNewsService(TaskCommandLocalResolveService):
             return True, None, None, news_src_key
 
         if not news_src_key:
-            news_src_key = self.news_service.select_news_source()
-        news_data = await self.news_service.get_hot_news(
+            news_src_key = self.owner.news_service.select_news_source()
+        news_data = await self.owner.news_service.get_hot_news(
             news_src_key,
-            limit=self.services.snapshots.get_news_snapshot_limit(),
+            limit=self.owner.services.snapshots.get_news_snapshot_limit(),
         )
         if not news_data:
             source_name = (
                 NEWS_SOURCE_MAP.get(news_src_key or "", {}).get("name") or "新闻源"
             )
-            await self.send_event(
+            await self.owner.send_event(
                 event,
                 event.plain_result(f"获取【{source_name}】新闻失败，分享已取消。"),
             )
@@ -44,10 +51,12 @@ class TaskCommandLocalNewsService(TaskCommandLocalResolveService):
         if (
             get_image
             and not need_image
-            and self.image_conf.get("attach_hot_news_image", True)
+            and self.owner.image_conf.get("attach_hot_news_image", True)
         ):
             try:
-                img_path, _ = self.news_service.get_hot_news_image_url(news_src_key)
+                img_path, _ = self.owner.news_service.get_hot_news_image_url(
+                    news_src_key
+                )
             except Exception as e:
                 logger.warning(
                     f"[日常分享] 主流程获取热搜图片失败: {format_exception(e)}"

@@ -912,6 +912,118 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("整天日程和未来计划", image)
         self.assertLess(len(post), 500)
 
+    async def test_body_recovery_is_shared_by_post_private_and_group_without_evidence(
+        self,
+    ):
+        _, service = _service()
+        raw = await _DailyLifePlugin().get_share_context()
+        raw["current_facts"] = {
+            "valid": True,
+            "body": {
+                "discomfort": 42,
+                "fatigue": 60,
+                "uncertain_minutes": 90,
+                "private_evidence": "PRIVATE_BODY_EVIDENCE",
+            },
+        }
+        condition = raw["state"]["physiological_rhythm"]["body_condition"]
+        condition.update(
+            kind="illness_like",
+            burden_present=True,
+            started_at="2026-10-12",
+            expires_at="2026-10-13 08:00",
+            recovery_evidence="PRIVATE_RECOVERY_EVIDENCE",
+            source="PRIVATE_SOURCE",
+        )
+        service.daily_life_bridge = types.SimpleNamespace(
+            get_share_context=lambda target: asyncio.sleep(0, result=raw)
+        )
+        for phase in ("onset", "ongoing", "recovering", "resolved"):
+            condition["phase"] = phase
+            condition["burden_present"] = phase != "resolved"
+            post = await service.get_qzone_share_context()
+            private = await service.get_chat_share_context("bot:FriendMessage:u1")
+            group = await service.get_chat_share_context("bot:GroupMessage:g1")
+            for prompt in (
+                post["post_context"],
+                private["post_context"],
+                service.format_life_context(
+                    group["post_context"],
+                    sys.modules[CONFIG_MODULE_NAME].ShareType.MOOD,
+                    True,
+                ),
+            ):
+                with self.subTest(phase=phase, prompt=prompt[:30]):
+                    self.assertIn(phase, prompt)
+                    self.assertIn("discomfort", prompt)
+                    self.assertIn("uncertain_minutes", prompt)
+                    self.assertIn("不等于痊愈", prompt)
+                    self.assertNotIn("PRIVATE_", prompt)
+                    self.assertNotIn("恢复建议", prompt)
+
+    async def test_stale_snapshot_omits_body_and_continuity_from_all_share_scenes(self):
+        _, service = _service()
+        raw = await _DailyLifePlugin().get_share_context()
+        raw["current_facts"] = {"valid": False}
+        raw["state"]["physiological_rhythm"]["body_condition"]["label"] = "STALE_BODY"
+        raw["continuity"] = {
+            "version": 1,
+            "objects": [{"title": "STALE_OBJECT"}],
+            "public": {"version": 1, "objects": [{"title": "STALE_PUBLIC_OBJECT"}]},
+        }
+        service.daily_life_bridge = types.SimpleNamespace(
+            get_share_context=lambda target: asyncio.sleep(0, result=raw)
+        )
+        results = [
+            await service.get_qzone_share_context(),
+            await service.get_chat_share_context("bot:FriendMessage:u1"),
+            await service.get_chat_share_context("bot:GroupMessage:g1"),
+            await service.get_qzone_interaction_context("bot:FriendMessage:u1"),
+        ]
+        for result in results:
+            self.assertNotIn("STALE_", json.dumps(result, ensure_ascii=False))
+            self.assertNotIn("body_context", result)
+
+    def test_body_projection_is_bounded_and_rejects_non_numeric_values(self):
+        _service()
+        from importlib import import_module
+
+        body_prompt = import_module(f"{CONTEXT_MODULE_NAME}.daily.facts").body_prompt
+        prompt = body_prompt(
+            {
+                "current_facts": {
+                    "body": {
+                        "discomfort": 35,
+                        "fatigue": float("nan"),
+                        "energy": True,
+                        "thirst": "70",
+                        "sleep_pressure": float("inf"),
+                        "hunger": -1,
+                        "social_battery": 101,
+                        "uncertain_minutes": -5,
+                    }
+                },
+                "state": {
+                    "physiological_rhythm": {
+                        "body_condition": {
+                            "label": "长" * 1000,
+                            "kind": [],
+                            "phase": "recovering",
+                            "burden_present": False,
+                            "intensity": 75,
+                            "recovery_evidence": "PRIVATE_EVIDENCE",
+                        }
+                    }
+                },
+            }
+        )
+        material = json.loads(prompt.splitlines()[1])
+        self.assertEqual(set(material), {"discomfort", "condition"})
+        self.assertEqual(material["condition"]["intensity"], 0)
+        self.assertEqual(len(material["condition"]["label"]), 60)
+        self.assertNotIn("PRIVATE_", prompt)
+        self.assertLess(len(prompt), 500)
+
     async def test_chat_share_snapshot_separates_current_facts_and_target_identity(
         self,
     ):

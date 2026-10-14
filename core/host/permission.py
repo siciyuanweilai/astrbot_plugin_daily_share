@@ -1,11 +1,20 @@
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginPermissionService(SupportComponent):
     """处理工具事件解析和插件权限判断。"""
+
+    _cached_adapter_id = RuntimeField("_cached_adapter_id")
+    _cached_qq_adapter_id = RuntimeField("_cached_qq_adapter_id")
+    _cached_weixin_adapter_id = RuntimeField("_cached_weixin_adapter_id")
+    ctx_service = RuntimeField("ctx_service")
+    extra_shares_conf = RuntimeField("extra_shares_conf")
+    permissions = RuntimeField("permissions")
+    receiver_conf = RuntimeField("receiver_conf")
+    task_manager = RuntimeField("task_manager")
 
     def _remember_event_adapter(self, event: AstrMessageEvent) -> None:
         if event is None:

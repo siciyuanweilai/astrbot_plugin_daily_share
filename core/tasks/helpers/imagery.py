@@ -1,10 +1,10 @@
 from astrbot.api.event import AstrMessageEvent
 
 from ...image import GeneratedImage
-from .sync import TaskHelperSyncService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperMediaService(TaskHelperSyncService):
+class TaskHelperMediaService(TaskServiceBase):
     """分享媒体生成步骤辅助。"""
 
     def _media_failure_message(self, media_kind: str, default: str) -> str:

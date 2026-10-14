@@ -31,7 +31,7 @@ class TaskBriefingService(TaskServiceBase):
         target_id = (
             QZONE_TARGET_ID
             if to_qzone
-            else self.services.executor_helpers.event_history_target(event)
+            else self.services.executor_helpers.arguments.event_history_target(event)
         )
         target_label = (
             ""
@@ -65,7 +65,7 @@ class TaskBriefingService(TaskServiceBase):
                     qzone_text,
                     True,
                     source_type=history_source,
-                    **self.services.executor_helpers.image_history_kwargs(url),
+                    **self.services.executor_helpers.records.image_history_kwargs(url),
                 )
                 self.services.progress.finish_share_progress(
                     progress_id, success=True, message="早报分享完成"
@@ -103,12 +103,12 @@ class TaskBriefingService(TaskServiceBase):
         )
         await self.send_event(event, event.image_result(local_path))
         await self.db.add_sent_history(
-            self.services.executor_helpers.event_history_target(event),
+            self.services.executor_helpers.arguments.event_history_target(event),
             HISTORY_SHARE_BRIEFING,
             local_history_text,
             True,
             source_type=history_source,
-            **self.services.executor_helpers.image_history_kwargs(local_path),
+            **self.services.executor_helpers.records.image_history_kwargs(local_path),
         )
         self.services.progress.finish_share_progress(
             progress_id, success=True, message="早报分享完成"
@@ -174,7 +174,9 @@ class TaskBriefingService(TaskServiceBase):
                     f"{title}(定时自动)",
                     True,
                     source_type=history_source,
-                    **self.services.executor_helpers.image_history_kwargs(original_url),
+                    **self.services.executor_helpers.records.image_history_kwargs(
+                        original_url
+                    ),
                 )
                 await asyncio.sleep(3)
                 sent_any = True
@@ -191,7 +193,9 @@ class TaskBriefingService(TaskServiceBase):
                     False,
                     error_reason=str(exc),
                     source_type=history_source,
-                    **self.services.executor_helpers.image_history_kwargs(original_url),
+                    **self.services.executor_helpers.records.image_history_kwargs(
+                        original_url
+                    ),
                 )
         return sent_any
 
@@ -234,7 +238,7 @@ class TaskBriefingService(TaskServiceBase):
                         f"【{name}】早报",
                         True,
                         source_type=history_source,
-                        **self.services.executor_helpers.image_history_kwargs(
+                        **self.services.executor_helpers.records.image_history_kwargs(
                             local_path
                         ),
                     )

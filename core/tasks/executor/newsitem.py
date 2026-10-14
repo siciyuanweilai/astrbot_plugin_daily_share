@@ -4,13 +4,13 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import NEWS_SOURCE_MAP, ShareType
 from ...database.keys import target_state_key
 from ...toolkit import format_exception
-from .artwork import TaskExecutorMediaService
+from ..taskbase import TaskServiceBase
 
 
-class TaskExecutorNewsService(TaskExecutorMediaService):
+class TaskExecutorNewsService(TaskServiceBase):
     """分享新闻数据与新闻配图。"""
 
-    async def _load_execute_share_news(
+    async def load_news(
         self,
         *,
         uid: str,
@@ -44,7 +44,7 @@ class TaskExecutorNewsService(TaskExecutorMediaService):
         logger.warning(
             f"[日常分享] 获取新闻失败: {source_name} ({current_news_source})"
         )
-        await self.services.executor_helpers.record_share_failure(
+        await self.services.executor_helpers.records.record_share_failure(
             target_id=uid,
             share_type=stype.value,
             message=f"获取新闻失败: {source_name}",
@@ -61,7 +61,7 @@ class TaskExecutorNewsService(TaskExecutorMediaService):
         )
         return False, None
 
-    async def _maybe_attach_hot_news_image(
+    async def hot_news_image_url(
         self, *, uid: str, stype: ShareType, news_data=None
     ) -> str | None:
         if stype != ShareType.NEWS or not self.image_conf.get(

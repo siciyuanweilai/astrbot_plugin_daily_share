@@ -1,21 +1,28 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType
 from ...database.keys import QZONE_TARGET_ID, SOURCE_COMMAND
 from ...reaction import mark_failed, mark_processing, mark_success
 from ...toolkit import format_exception
-from .local import TaskCommandLocalService
+
+if TYPE_CHECKING:
+    from . import TaskCommandShareService
 
 
-class TaskCommandRunnerService(TaskCommandLocalService):
+class TaskCommandRunnerService:
+    def __init__(self, owner: TaskCommandShareService) -> None:
+        self.owner = owner
+
     def _finish_command_progress(
         self, progress: dict, success: bool, message: str
     ) -> None:
         progress_id = str(progress.get("id") or "")
         if progress_id and not progress.get("done"):
-            self.services.progress.finish_share_progress(
+            self.owner.services.progress.finish_share_progress(
                 progress_id, success=success, message=message
             )
             progress["done"] = True
@@ -32,7 +39,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         share_type_text = str(share_type or "auto").strip()
         st_clean = share_type_text.lower().replace(" ", "").replace("　", "")
 
-        briefing_result = await self._try_send_command_briefing(
+        briefing_result = await self.owner._try_send_command_briefing(
             event=event,
             st_clean=st_clean,
             to_qzone=to_qzone,
@@ -41,7 +48,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         if briefing_result is not None:
             return {"handled": True, "success": briefing_result}
 
-        valid_type, target_type_enum = await self._resolve_command_share_type(
+        valid_type, target_type_enum = await self.owner._resolve_command_share_type(
             event=event,
             share_type_text=share_type_text,
             st_clean=st_clean,
@@ -52,7 +59,9 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         return {
             "handled": False,
             "target_type": target_type_enum,
-            "news_source": self.services.executor_helpers.map_news_source_arg(source),
+            "news_source": self.owner.services.executor_helpers.arguments.map_news_source_arg(
+                source
+            ),
         }
 
     async def _run_command_share_request(
@@ -78,7 +87,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
                 period,
                 target_type_enum,
                 progress_id,
-            ) = await self._prepare_command_local_target(
+            ) = await self.owner._prepare_command_local_target(
                 event=event,
                 target_type_enum=target_type_enum,
                 history_source=history_source,
@@ -93,7 +102,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             and not need_video
         )
         if to_qzone and is_news_image_mode and not progress.get("id"):
-            progress["id"] = self.services.progress.start_share_progress(
+            progress["id"] = self.owner.services.progress.start_share_progress(
                 source_type=history_source,
                 target_id=QZONE_TARGET_ID,
                 share_type=target_type_enum,
@@ -101,7 +110,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
                 message="准备发送新闻长图",
             )
 
-        news_image_result = await self._try_send_command_news_image(
+        news_image_result = await self.owner._try_send_command_news_image(
             event=event,
             target_type_enum=target_type_enum,
             get_image=get_image,
@@ -112,15 +121,15 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             progress_id=progress.get("id", ""),
             news_src_key=news_src_key,
             history_source=history_source,
-            finish_progress=lambda success, message: self._finish_command_progress(
-                progress, success, message
+            finish_progress=lambda success, message: (
+                self.owner._finish_command_progress(progress, success, message)
             ),
         )
         if news_image_result is not None:
             return news_image_result
 
         if to_qzone:
-            return await self._run_command_qzone_share(
+            return await self.owner._run_command_qzone_share(
                 event=event,
                 target_type_enum=target_type_enum,
                 news_src_key=news_src_key,
@@ -128,9 +137,14 @@ class TaskCommandRunnerService(TaskCommandLocalService):
                 need_video=need_video,
             )
 
-        share_context = await self.ctx_service.get_chat_share_context(target_umo)
+        share_context = await self.owner.ctx_service.get_chat_share_context(target_umo)
         life_ctx = share_context["life_context"]
-        loaded_news, news_data, img_path, news_src_key = await self._load_command_news(
+        (
+            loaded_news,
+            news_data,
+            img_path,
+            news_src_key,
+        ) = await self.owner._load_command_news(
             event=event,
             target_umo=target_umo,
             target_type_enum=target_type_enum,
@@ -139,10 +153,10 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             need_image=need_image,
         )
         if not loaded_news:
-            self._finish_command_progress(progress, False, "获取新闻失败")
+            self.owner._finish_command_progress(progress, False, "获取新闻失败")
             return False
 
-        return await self._run_command_local_share(
+        return await self.owner._run_command_local_share(
             event=event,
             uid=uid,
             target_umo=target_umo,
@@ -157,8 +171,8 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             need_voice=need_voice,
             progress_id=progress.get("id", ""),
             history_source=history_source,
-            finish_progress=lambda success, message: self._finish_command_progress(
-                progress, success, message
+            finish_progress=lambda success, message: (
+                self.owner._finish_command_progress(progress, success, message)
             ),
         )
 
@@ -174,7 +188,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         to_qzone: bool,
     ):
         """自然语言触发的分享后台任务。"""
-        if self.plugin._is_terminated:
+        if self.owner.plugin._is_terminated:
             return
 
         feedback_enabled = event is not None
@@ -183,17 +197,17 @@ class TaskCommandRunnerService(TaskCommandLocalService):
 
         share_target = str(getattr(event, "unified_msg_origin", "") or "").strip()
         share_global_scope = bool(to_qzone)
-        is_busy = self.services.executor_helpers.is_command_share_busy(
+        is_busy = self.owner.services.executor_helpers.locks.is_command_share_busy(
             share_target, global_scope=share_global_scope
         )
-        share_lock = self.services.executor_helpers.get_command_share_lock(
+        share_lock = self.owner.services.executor_helpers.locks.get_command_share_lock(
             share_target, global_scope=share_global_scope
         )
 
         if is_busy:
             if feedback_enabled:
                 await mark_failed(event)
-            await self.send_event(
+            await self.owner.send_event(
                 event, event.plain_result("正如火如荼地准备中，请稍后...")
             )
             return
@@ -207,7 +221,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             if feedback_enabled:
                 await mark_processing(event)
 
-            request = await self._resolve_command_share_request(
+            request = await self.owner._resolve_command_share_request(
                 event=event,
                 share_type=share_type,
                 source=source,
@@ -218,7 +232,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
                 feedback_success = bool(request.get("success"))
                 return
 
-            feedback_success = await self._run_command_share_request(
+            feedback_success = await self.owner._run_command_share_request(
                 event=event,
                 request=request,
                 get_image=get_image,
@@ -231,13 +245,15 @@ class TaskCommandRunnerService(TaskCommandLocalService):
             )
 
         except Exception as e:
-            self.services.executor_helpers.log_exception("[日常分享] 异步任务错误", e)
-            await self.send_event(
+            self.owner.services.executor_helpers.records.log_exception(
+                "[日常分享] 异步任务错误", e
+            )
+            await self.owner.send_event(
                 event, event.plain_result(f"分享出错: {format_exception(e)}")
             )
-            self._finish_command_progress(progress, False, "分享出错")
+            self.owner._finish_command_progress(progress, False, "分享出错")
         finally:
-            await self._finalize_command_share_task(
+            await self.owner._finalize_command_share_task(
                 event=event,
                 progress=progress,
                 feedback_enabled=feedback_enabled,
@@ -260,7 +276,7 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         share_global_scope: bool,
         share_target: str,
     ) -> None:
-        self._finish_command_progress(
+        self.owner._finish_command_progress(
             progress, feedback_success, "分享完成" if feedback_success else "分享未完成"
         )
         if feedback_enabled:
@@ -268,4 +284,6 @@ class TaskCommandRunnerService(TaskCommandLocalService):
         if lock_acquired and share_lock.locked():
             share_lock.release()
         if not share_global_scope:
-            self.services.executor_helpers.release_command_share_lock(share_target)
+            self.owner.services.executor_helpers.locks.release_command_share_lock(
+                share_target
+            )

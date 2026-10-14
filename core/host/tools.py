@@ -11,14 +11,15 @@ from ..database.keys import (
     QZONE_TARGET_ID,
     SOURCE_COMMAND,
 )
-from ..reaction import mark_failed, mark_processing, mark_success
+from ..reaction import clear_processing, mark_failed, mark_processing, mark_success
 from ..tasks.interact.receipt import record_qzone_interaction
+from ..tasks.interact.totals import qzone_interaction_outcome
 from ..tasks.interact.tracker import (
     QZONE_ACTION_COMMENTED,
     QZONE_AUTO_COMMENT_STATE_KEY,
     _mark_qzone_post_processed,
 )
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 def _qzone_tool_period_label(hour: int) -> str:
@@ -50,6 +51,15 @@ def _format_qzone_tool_datetime(timestamp: int) -> str:
 
 class PluginToolService(SupportComponent):
     """大语言模型工具和相关事件的实际处理逻辑。"""
+
+    _is_terminated = RuntimeField("_is_terminated")
+    db = RuntimeField("db")
+    permissions = RuntimeField("permissions")
+    plugin = RuntimeField("plugin")
+    qzone_service = RuntimeField("qzone_service")
+    task_manager = RuntimeField("task_manager")
+    tool_context = RuntimeField("tool_context")
+    tools = RuntimeField("tools")
 
     async def run_daily_share_tool(
         self,
@@ -247,10 +257,6 @@ class PluginToolService(SupportComponent):
         prefix = success_prefixes.get(action)
         return bool(prefix and str(result or "").startswith(prefix))
 
-    @staticmethod
-    def _qzone_auto_interaction_succeeded(result) -> bool:
-        return isinstance(result, dict) and bool(result.get("enabled", True))
-
     async def run_qzone_auto_interaction_tool(
         self,
         event: AstrMessageEvent,
@@ -281,7 +287,7 @@ class PluginToolService(SupportComponent):
             scoped_target = sender_id
 
         marked_processing = False
-        operation_succeeded = False
+        outcome = "failed"
         try:
             lock = self.task_manager.qzone_auto_interaction_lock
             if lock.locked():
@@ -292,18 +298,20 @@ class PluginToolService(SupportComponent):
                 result = await self.tools._execute_qzone_auto_interact_action(
                     event, action_key, scoped_target
                 )
-                operation_succeeded = self.tools._qzone_auto_interaction_succeeded(
-                    result
-                )
+                outcome = qzone_interaction_outcome(result)
             return self.tools._format_qzone_auto_interact_result(action_key, result)
         except Exception as exc:
             logger.warning(f"[日常分享] QQ 空间自动互动工具调用失败: {exc}")
             return f"QQ 空间自动互动执行失败: {exc}"
         finally:
             if marked_processing:
-                await (
-                    mark_success(event) if operation_succeeded else mark_failed(event)
-                )
+                await clear_processing(event)
+                if outcome != "idle":
+                    await (
+                        mark_success(event)
+                        if outcome == "success"
+                        else mark_failed(event)
+                    )
 
     async def _execute_qzone_auto_interact_action(
         self, event: AstrMessageEvent, action_key: str, scoped_target: str

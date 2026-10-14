@@ -13,10 +13,15 @@ from ..common import (
     _PAGE_THUMBNAIL_MAX_SIDE,
     _PAGE_VIEW_IMAGE_MAX_SIDE,
 )
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardMediaPreviewService(PanelComponent):
+    labels = RuntimeField("labels")
+    media_files = RuntimeField("media_files")
+    media_kind = RuntimeField("media_kind")
+    media_preview = RuntimeField("media_preview")
+
     def _page_image_data_url(
         self, path: Path, max_side: int = _PAGE_THUMBNAIL_MAX_SIDE, quality: int = 86
     ) -> str:

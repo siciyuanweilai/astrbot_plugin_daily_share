@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from ...schedule import ScheduleDefinition, normalize_schedule_mode
-from ..panelcomponent import PanelComponent
+from ..panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardApplyScheduleService(PanelComponent):
+    schedule_apply = RuntimeField("schedule_apply")
+    validation = RuntimeField("validation")
+
     def _page_apply_schedule_fields(
         self,
         target: dict,
@@ -42,9 +45,7 @@ class DashboardApplyScheduleService(PanelComponent):
         smart_prompt_key = definition.smart_prompt_key
         if mode_key in source:
             target[mode_key] = self.validation._page_choice_value(
-                normalize_schedule_mode(
-                    source.get(mode_key), definition.mode_default
-                ),
+                normalize_schedule_mode(source.get(mode_key), definition.mode_default),
                 definition.mode_options,
                 definition.mode_default,
                 definition.mode_label,

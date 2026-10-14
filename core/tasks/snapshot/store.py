@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 from ...config import NEWS_SOURCE_MAP
-from .cleanse import TaskNewsCacheNormalizeService
+
+if TYPE_CHECKING:
+    from ..cache import TaskNewsCacheService
 
 
-class TaskNewsCacheStoreService(TaskNewsCacheNormalizeService):
+class TaskNewsCacheStoreService:
+    def __init__(self, owner: TaskNewsCacheService) -> None:
+        self.owner = owner
+
     @staticmethod
     def news_snapshot_payload(items, source: str | None):
         return {
@@ -24,7 +31,7 @@ class TaskNewsCacheStoreService(TaskNewsCacheNormalizeService):
         source_key = str(
             snapshot_data.get("source") or snapshot_data.get("source_key") or ""
         ).strip()
-        items = self._normalize_news_snapshot_items(snapshot_data.get("items"))
+        items = self.owner._normalize_news_snapshot_items(snapshot_data.get("items"))
         if not source_key or not items:
             return None
         return {
@@ -47,11 +54,11 @@ class TaskNewsCacheStoreService(TaskNewsCacheNormalizeService):
             if not target or not isinstance(snapshot_data, dict):
                 return False
 
-            record = self.prepare_news_snapshot_record(snapshot_data, image_url)
+            record = self.owner.prepare_news_snapshot_record(snapshot_data, image_url)
             if not record:
                 return False
 
-            snapshot = await self.db.add_news_snapshot(
+            snapshot = await self.owner.db.add_news_snapshot(
                 target,
                 record["source_key"],
                 record["source_name"],

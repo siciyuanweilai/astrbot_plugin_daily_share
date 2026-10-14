@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import asyncio
 import json
 from time import monotonic
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
 from ..integrations.mediajob import ShareMediaPending, current_share_job
 from ..toolkit import call_default_daily_life_media_tool, log_exception
 from .composer import _extract_json_object
+
+if TYPE_CHECKING:
+    from . import ImageService
 
 VIDEO_MOTION_FALLBACK = (
     "保持原图主体、人物五官、服装、场景、光线、构图重心、景别和主体位置一致；根据画面加入自然轻微镜头运动"
@@ -21,14 +26,8 @@ VIDEO_AMBIENCE_MAX_CHARS = 180
 
 
 class ImageVideoService:
-    if TYPE_CHECKING:
-        context: Any
-        img_conf: dict
-        daily_life_bridge: Any
-
-        async def _call_llm(
-            self, *args: Any, target_umo: str | None = None, **kwargs: Any
-        ) -> Any: ...
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     @staticmethod
     def _normalize_video_design_value(value: object, limit: int | None = None) -> str:
@@ -86,15 +85,15 @@ class ImageVideoService:
         )
 
         try:
-            res = await self._call_llm(
+            res = await self.owner._call_llm(
                 user_prompt, system_prompt, timeout=18, target_umo=target_umo
             )
             data = await asyncio.to_thread(json.loads, _extract_json_object(res))
             if not isinstance(data, dict):
                 raise ValueError("视频设计结果不是 JSON 对象")
 
-            motion = self._normalize_video_design_value(data.get("motion"), 260)
-            sound = self._compose_video_sound(
+            motion = self.owner._normalize_video_design_value(data.get("motion"), 260)
+            sound = self.owner._compose_video_sound(
                 str(data.get("dialogue") or ""), str(data.get("ambience") or "")
             )
             if motion and sound:
@@ -122,7 +121,7 @@ class ImageVideoService:
         event=None,
     ) -> str | None:
         """图片转视频"""
-        if not self.img_conf.get("enable_ai_video", False):
+        if not self.owner.img_conf.get("enable_ai_video", False):
             return None
         job = current_share_job.get()
         if job is not None and job.get("video_started"):
@@ -134,7 +133,7 @@ class ImageVideoService:
                 return None
             logger.info("[日常分享] 正在将配图转换为视频...")
 
-            motion_prompt, sound_prompt = await self._build_video_design_prompts(
+            motion_prompt, sound_prompt = await self.owner._build_video_design_prompts(
                 image_description,
                 content,
                 target_umo=target_umo,
@@ -145,12 +144,12 @@ class ImageVideoService:
             logger.debug(f"[日常分享] 最终视频提示词: {video_prompt[:180]}...")
 
             video_ref = await call_default_daily_life_media_tool(
-                self.context,
+                self.owner.context,
                 media_kind="video",
                 prompt=video_prompt,
                 image_ref=image_path,
                 event=event,
-                bridge=self.daily_life_bridge,
+                bridge=self.owner.daily_life_bridge,
             )
             elapsed = monotonic() - started_at
             if video_ref:

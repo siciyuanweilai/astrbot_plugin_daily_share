@@ -4,10 +4,13 @@ from astrbot.api.event import AstrMessageEvent
 
 from ..config import NEWS_SOURCE_MAP, ShareType
 from ..constants import CMD_CN_MAP, SOURCE_CN_MAP
-from .supportcomponent import SupportComponent
+from .supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginManualShareService(SupportComponent):
+    command_handler = RuntimeField("command_handler")
+    permissions = RuntimeField("permissions")
+
     @staticmethod
     def _manual_share_target_desc(*, is_broadcast: bool, is_qzone_target: bool) -> str:
         if is_qzone_target:

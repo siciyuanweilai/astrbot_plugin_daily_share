@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType, TimePeriod
-from ...continuation import preserve_share
-from .logbook import TaskCommandLocalRecordService
+
+if TYPE_CHECKING:
+    from .. import TaskCommandShareService
 
 
-class TaskCommandLocalRunService(TaskCommandLocalRecordService):
+class TaskCommandLocalRunService:
+    def __init__(self, owner: TaskCommandShareService) -> None:
+        self.owner = owner
+
     async def _run_command_local_share(
         self,
         *,
@@ -27,21 +33,25 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
         finish_progress,
         post_context: str | None = None,
     ) -> bool:
-        is_group, nickname = await self._command_content_nickname(target_umo, event)
-        content_context = await self.services.executor_helpers.prepare_content_context(
-            target_umo=target_umo,
-            share_type=target_type_enum,
-            life_ctx=post_context if post_context is not None else life_ctx,
-            is_group=is_group,
-            event=event,
-            nickname=nickname,
-            recent_target_id=uid,
+        is_group, nickname = await self.owner._command_content_nickname(
+            target_umo, event
+        )
+        content_context = (
+            await self.owner.services.executor_helpers.context.prepare_content_context(
+                target_umo=target_umo,
+                share_type=target_type_enum,
+                life_ctx=post_context if post_context is not None else life_ctx,
+                is_group=is_group,
+                event=event,
+                nickname=nickname,
+                recent_target_id=uid,
+            )
         )
 
-        self.services.progress.update_share_progress(
+        self.owner.services.progress.update_share_progress(
             progress_id, "content", message="文案生成中"
         )
-        content = await self.content_service.generate(
+        content = await self.owner.content_service.generate(
             target_type_enum,
             period,
             target_umo,
@@ -54,16 +64,16 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             recent_post_contents=content_context.get("recent_post_contents", []),
         )
         if not content:
-            await self.send_event(
+            await self.owner.send_event(
                 event, event.plain_result("内容生成失败，请稍后再试。")
             )
             finish_progress(False, "文案生成失败")
             return False
 
-        self.services.progress.complete_share_progress_step(
+        self.owner.services.progress.complete_share_progress_step(
             progress_id, "content", "文案已生成"
         )
-        return await self.send_prepared_command_share(
+        return await self.owner.send_prepared_command_share(
             event=event,
             target_umo=target_umo,
             target_type_enum=target_type_enum,
@@ -80,7 +90,6 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             content=content,
         )
 
-    @preserve_share("command")
     async def send_prepared_command_share(
         self,
         *,
@@ -102,7 +111,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
         if finish_progress is None:
 
             def finish_progress(success, message):
-                self.services.progress.finish_share_progress(
+                self.owner.services.progress.finish_share_progress(
                     progress_id, success=success, message=message
                 )
 
@@ -113,7 +122,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             video_url,
             audio_path,
             image_description,
-        ) = await self._generate_command_media(
+        ) = await self.owner._generate_command_media(
             progress_id=progress_id,
             content=content,
             target_type_enum=target_type_enum,
@@ -127,10 +136,10 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             need_voice=need_voice,
         )
 
-        continuations = getattr(self.plugin, "share_continuations", None)
+        continuations = getattr(self.owner.plugin, "share_continuations", None)
         if continuations is not None:
             await continuations.mark_submitting()
-        sent, media_result = await self._send_command_generated_share(
+        sent, media_result = await self.owner._send_command_generated_share(
             target_umo=target_umo,
             content=content,
             send_img_path=send_img_path,
@@ -141,7 +150,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
         )
         if not sent:
             if event:
-                await self.send_event(
+                await self.owner.send_event(
                     event,
                     event.plain_result(
                         "内容已生成，但发送失败，请查看日志或检查平台连接状态。"
@@ -158,7 +167,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             and hot_news_image_url
             and media_result.get("image_sent")
         ):
-            news_snapshot_data = self.services.snapshots.news_snapshot_payload(
+            news_snapshot_data = self.owner.services.snapshots.news_snapshot_payload(
                 news_data[0], news_data[1]
             )
             news_image_url = (
@@ -168,7 +177,7 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
                 or ""
             )
 
-        await self._record_command_share_success(
+        await self.owner._record_command_share_success(
             target_umo=target_umo,
             target_type_enum=target_type_enum,
             content=content,
@@ -179,14 +188,18 @@ class TaskCommandLocalRunService(TaskCommandLocalRecordService):
             news_snapshot_data=news_snapshot_data,
             news_image_url=news_image_url,
             image_description=image_description,
-            degradation_reason=self.services.progress.share_progress_degradation_reason(
+            degradation_reason=self.owner.services.progress.share_progress_degradation_reason(
                 progress_id
             ),
         )
-        self.services.executor_helpers.log_partial_send_errors(target_umo, media_result)
+        self.owner.services.executor_helpers.records.log_partial_send_errors(
+            target_umo, media_result
+        )
         if event:
-            await self.services.executor_helpers.notify_partial_send_errors(
-                event, media_result
+            await (
+                self.owner.services.executor_helpers.records.notify_partial_send_errors(
+                    event, media_result
+                )
             )
         finish_progress(True, "分享完成")
         return True

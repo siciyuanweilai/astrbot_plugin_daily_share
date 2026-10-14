@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from ..methodset import QzoneMethodSet
+from typing import TYPE_CHECKING
+
 from ..models import QzoneContext, QzonePost
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneCommentDeleteService(QzoneMethodSet):
+
+class QzoneCommentDeleteService:
     """删除 QQ 空间评论。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     async def delete_comment(
         self,
@@ -15,20 +22,20 @@ class QzoneCommentDeleteService(QzoneMethodSet):
         comment_uin: int = 0,
         ctx: QzoneContext | None = None,
     ) -> dict:
-        qzone_post = self._require_post(post) if isinstance(post, str) else post
+        qzone_post = self.owner._require_post(post) if isinstance(post, str) else post
         comment_id = str(comment_id or "").strip()
         if not comment_id:
             raise RuntimeError("QQ 空间评论 ID 无效")
-        ctx = ctx or await self.context()
+        ctx = ctx or await self.owner.context()
         comment_uin = int(comment_uin or ctx.uin or 0)
-        sns_payload = await self._delete_comment_via_sns(
+        sns_payload = await self.owner._delete_comment_via_sns(
             ctx,
             qzone_post,
             comment_id=comment_id,
             comment_uin=comment_uin,
         )
-        if self._ok(sns_payload):
-            self._invalidate_qzone_cache(
+        if self.owner._ok(sns_payload):
+            self.owner._invalidate_qzone_cache(
                 post_id=qzone_post.key, target_id=str(qzone_post.uin)
             )
             return {
@@ -36,13 +43,15 @@ class QzoneCommentDeleteService(QzoneMethodSet):
                 "comment_id": comment_id,
                 "payload": sns_payload,
             }
-        pc_payload = await self._delete_comment_via_pc(
+        pc_payload = await self.owner._delete_comment_via_pc(
             ctx,
             qzone_post,
             comment_id=comment_id,
         )
-        if self._ok(pc_payload) or self._write_response_without_json_ok(pc_payload):
-            self._invalidate_qzone_cache(
+        if self.owner._ok(pc_payload) or self.owner._write_response_without_json_ok(
+            pc_payload
+        ):
+            self.owner._invalidate_qzone_cache(
                 post_id=qzone_post.key, target_id=str(qzone_post.uin)
             )
             return {
@@ -51,8 +60,8 @@ class QzoneCommentDeleteService(QzoneMethodSet):
                 "payload": pc_payload,
             }
         raise RuntimeError(
-            self._payload_message(pc_payload)
-            or self._payload_message(sns_payload)
+            self.owner._payload_message(pc_payload)
+            or self.owner._payload_message(sns_payload)
             or "QQ 空间删除评论失败"
         )
 
@@ -64,9 +73,9 @@ class QzoneCommentDeleteService(QzoneMethodSet):
         comment_id: str,
         comment_uin: int,
     ) -> dict:
-        return await self._request(
+        return await self.owner._request(
             "POST",
-            self.SNS_DELETE_COMMENT_URL,
+            self.owner.SNS_DELETE_COMMENT_URL,
             params={"g_tk": ctx.gtk},
             data={
                 "inCharset": "utf-8",
@@ -82,10 +91,10 @@ class QzoneCommentDeleteService(QzoneMethodSet):
                 "format": "fs",
                 "ref": "feeds",
                 "paramstr": "2",
-                "qzreferrer": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
+                "qzreferrer": f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}",
             },
-            headers=self._comment_sns_headers(
-                ctx, referer=f"{self.BASE_URL}/{post.uin}/mood/{post.tid}"
+            headers=self.owner._comment_sns_headers(
+                ctx, referer=f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}"
             ),
             retry_parse_error=False,
         )
@@ -97,9 +106,9 @@ class QzoneCommentDeleteService(QzoneMethodSet):
         *,
         comment_id: str,
     ) -> dict:
-        return await self._request(
+        return await self.owner._request(
             "POST",
-            self.DELETE_COMMENT_URL,
+            self.owner.DELETE_COMMENT_URL,
             params={"g_tk": ctx.gtk},
             data={
                 "hostuin": ctx.uin,
@@ -107,7 +116,7 @@ class QzoneCommentDeleteService(QzoneMethodSet):
                 "tid": post.tid,
                 "comment_id": comment_id,
                 "format": "json",
-                "qzreferrer": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
+                "qzreferrer": f"{self.owner.BASE_URL}/{post.uin}/mood/{post.tid}",
             },
             retry_parse_error=False,
         )

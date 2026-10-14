@@ -1,32 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from ...config import ShareType, TimePeriod
+if TYPE_CHECKING:
+    from .. import ImageService
 
 
 class ImageVisualFrameService:
     """图像视觉组件共享的显式依赖契约。"""
 
-    if TYPE_CHECKING:
-        context: Any
-        config: dict
-        img_conf: dict
-        call_llm: Callable[..., Awaitable[Any]]
-
-        async def _call_llm(
-            self, *args: Any, target_umo: str | None = None, **kwargs: Any
-        ) -> Any: ...
-
-        def _get_current_period(self) -> TimePeriod: ...
-
-        async def _check_involves_self(
-            self,
-            content: str,
-            share_type: ShareType,
-            target_umo: str | None = None,
-        ) -> bool: ...
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     """视觉构图和穿搭一致性提示。"""
 
@@ -38,12 +22,12 @@ class ImageVisualFrameService:
     def _resolve_visual_mode(self, visuals: dict, contains_character: bool) -> str:
         if contains_character:
             return "person"
-        return "object" if self._has_visual_subject(visuals) else "landscape"
+        return "object" if self.owner._has_visual_subject(visuals) else "landscape"
 
     def _enforce_visual_mode(self, visuals: dict, contains_character: bool) -> dict:
         """固定人物、静物或风景模式，避免模型构图覆盖上游决策。"""
         normalized = dict(visuals or {})
-        visual_mode = self._resolve_visual_mode(normalized, contains_character)
+        visual_mode = self.owner._resolve_visual_mode(normalized, contains_character)
         extracted_mode = normalized.get("visual_mode")
         normalized["visual_mode"] = visual_mode
         if visual_mode != "person" and extracted_mode != visual_mode:
@@ -55,7 +39,7 @@ class ImageVisualFrameService:
     def _resolve_composition(
         self, visuals: dict, involves_self: bool
     ) -> tuple[str, str]:
-        visual_mode = self._resolve_visual_mode(visuals, involves_self)
+        visual_mode = self.owner._resolve_visual_mode(visuals, involves_self)
         composition = str(visuals.get("composition", "") or "").strip()
         frame_logic = str(
             visuals.get("frame_logic", "") or visuals.get("composition_logic", "") or ""

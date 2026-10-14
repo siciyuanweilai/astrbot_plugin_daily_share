@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api import logger
 
-from .methodset import QzoneMethodSet
 from .models import (
     QzoneComment,
     QzonePhoto,
@@ -18,6 +18,9 @@ from .models import (
 from .parse.decoder import clean_qzone_text
 from .parse.photo import photo_reply_mention, photo_thread_comments
 from .parse.phototarget import parse_photo_batch_topic
+
+if TYPE_CHECKING:
+    from .qzone import QzoneService
 
 
 def _parse_photo(payload: dict[str, Any], *, album_id: str, pic_key: str):
@@ -128,9 +131,16 @@ async def _verify_photo_reply(
                 if parent.comment_id != root.tid or parent.uin != root.uin:
                     misplaced = True
                     continue
-                if photo_reply_mention(item.content)[
-                    0
-                ] != target.uin or item.content != clean_qzone_text(content):
+
+                # QQ 会改写提及标记的 nick/auto/who 字段；核对 QQ 号及实际正文。
+                def body(value):
+                    return re.sub(r"@\{[^}]*\}", "", clean_qzone_text(value)).strip()
+
+                if (
+                    photo_reply_mention(item.content)[0] != target.uin
+                    or photo_reply_mention(content)[0] != target.uin
+                    or body(item.content) != body(content)
+                ):
                     return {"verification_status": "wrong_target"}
                 return {
                     "verification_status": "confirmed",
@@ -183,12 +193,15 @@ def _photo_submit_result(
     return comment
 
 
-class QzonePhotoService(QzoneMethodSet):
+class QzonePhotoService:
     """读取 QQ 空间相册中的单张照片并发表评论。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     async def query_photo_posts(self, post_id: str) -> list[QzonePost]:
         """读取动态中明确标识的照片，分别建立可安全提交的目标。"""
-        post = self._require_post(post_id)
+        post = self.owner._require_post(post_id)
         if int(post.appid or 311) != 4:
             return [post]
         targets = {}
@@ -238,12 +251,12 @@ class QzonePhotoService(QzoneMethodSet):
                 )
             shared_topics[target.key] = sibling.key
         if len(post.photo_targets) == 1 and not shared_topics:
-            return [await self.detail(post.key)]
+            return [await self.owner.detail(post.key)]
 
         seeds = {}
         if missing_count:
             for target in targets.values():
-                seeds[target.key] = await self.query_photo(
+                seeds[target.key] = await self.owner.query_photo(
                     owner_uin=post.uin,
                     album_id=target.album_id,
                     pic_key=target.pic_key,
@@ -268,7 +281,7 @@ class QzonePhotoService(QzoneMethodSet):
             try:
                 photo = seeds.get(target.key)
                 if photo is None:
-                    photo = await self.query_photo(
+                    photo = await self.owner.query_photo(
                         owner_uin=post.uin,
                         album_id=target.album_id,
                         pic_key=target.pic_key,
@@ -352,7 +365,7 @@ class QzonePhotoService(QzoneMethodSet):
         for item in result:
             item.photo_batch_key = batch_key
             item.photo_batch_complete = complete
-        self._remember_posts(result, detailed=True)
+        self.owner._remember_posts(result, detailed=True)
         return result
 
     async def query_photo(
@@ -368,7 +381,7 @@ class QzonePhotoService(QzoneMethodSet):
         album = _photo_identifier(album_id, label="相册 ID")
         pic = _photo_identifier(pic_key, label="照片 picKey")
         limit = max(1, min(int(comment_count or 10), 50))
-        ctx = await self.context()
+        ctx = await self.owner.context()
         params = {
             "t": str(photo_t or "").strip(),
             "topicId": album,
@@ -396,14 +409,14 @@ class QzonePhotoService(QzoneMethodSet):
             "postNum": 18,
             "g_tk": ctx.gtk,
         }
-        payload = await self._request(
+        payload = await self.owner._request(
             "GET",
-            self.PHOTO_VIEW_URL,
+            self.owner.PHOTO_VIEW_URL,
             params=params,
-            headers=self._headers(ctx, Referer=f"{self.BASE_URL}/{owner}"),
+            headers=self.owner._headers(ctx, Referer=f"{self.owner.BASE_URL}/{owner}"),
             retry_parse_error=False,
         )
-        if not self._ok(payload):
+        if not self.owner._ok(payload):
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间相册照片失败")
             )
@@ -433,8 +446,8 @@ class QzonePhotoService(QzoneMethodSet):
         text = str(content or "").strip()
         if not text:
             raise RuntimeError("相册照片评论内容不能为空")
-        ctx = await self.context()
-        referer = f"{self.BASE_URL}/{ctx.uin}/infocenter"
+        ctx = await self.owner.context()
+        referer = f"{self.owner.BASE_URL}/{ctx.uin}/infocenter"
         data = {
             "uin": ctx.uin,
             "hostUin": owner,
@@ -456,12 +469,14 @@ class QzonePhotoService(QzoneMethodSet):
             "qzreferrer": referer,
         }
         try:
-            payload = await self._request(
+            payload = await self.owner._request(
                 "POST",
-                self.PHOTO_COMMENT_URL,
+                self.owner.PHOTO_COMMENT_URL,
                 params={"g_tk": ctx.gtk},
                 data=data,
-                headers=_photo_form_headers(self, ctx, owner=owner, referer=referer),
+                headers=_photo_form_headers(
+                    self.owner, ctx, owner=owner, referer=referer
+                ),
                 retry_parse_error=False,
             )
         except RuntimeError as error:
@@ -471,7 +486,7 @@ class QzonePhotoService(QzoneMethodSet):
             setattr(exc, "submission_unknown", True)
             raise exc from error
         return _photo_submit_result(
-            self, payload, content=text, uin=ctx.uin, transport="photo_comment"
+            self.owner, payload, content=text, uin=ctx.uin, transport="photo_comment"
         )
 
     async def reply_photo_comment(
@@ -503,8 +518,8 @@ class QzonePhotoService(QzoneMethodSet):
         text = str(content or "").strip()
         if not text:
             raise RuntimeError("相册评论回复内容不能为空")
-        ctx = await self.context()
-        submit_content = self._reply_content(text, comment)
+        ctx = await self.owner.context()
+        submit_content = self.owner._reply_content(text, comment)
         if (
             parent_comment is not None
             and photo_reply_mention(submit_content)[0] != comment.uin
@@ -527,16 +542,16 @@ class QzonePhotoService(QzoneMethodSet):
             "private": 0,
             "with_fwd": 0,
             "to_tweet": 0,
-            "qzreferrer": f"{self.BASE_URL}/{owner}",
+            "qzreferrer": f"{self.owner.BASE_URL}/{owner}",
         }
         targets = [{"comment_id": comment_id, "comment_uin": commenter}]
         try:
-            payload = await self._request(
+            payload = await self.owner._request(
                 "POST",
-                self.PHOTO_REPLY_URL,
+                self.owner.PHOTO_REPLY_URL,
                 params={"g_tk": ctx.gtk},
                 data=data,
-                headers=_photo_form_headers(self, ctx, owner=owner),
+                headers=_photo_form_headers(self.owner, ctx, owner=owner),
                 retry_parse_error=False,
             )
         except RuntimeError as error:
@@ -556,7 +571,7 @@ class QzonePhotoService(QzoneMethodSet):
         }
         try:
             reply = _photo_submit_result(
-                self,
+                self.owner,
                 payload,
                 content=submit_content,
                 uin=ctx.uin,
@@ -566,7 +581,7 @@ class QzonePhotoService(QzoneMethodSet):
             setattr(exc, "attempted_targets", targets)
             setattr(exc, "attempts", [attempt])
             raise
-        self._invalidate_qzone_cache(target_id=str(owner))
+        self.owner._invalidate_qzone_cache(target_id=str(owner))
         result = {
             "comment_id": comment_id,
             "comment_uin": commenter,
@@ -577,7 +592,7 @@ class QzonePhotoService(QzoneMethodSet):
         }
         if parent_comment is not None:
             verification = await _verify_photo_reply(
-                self,
+                self.owner,
                 owner=owner,
                 album=album,
                 pic=pic,

@@ -1,12 +1,3 @@
-from __future__ import annotations
+from .transmit.dispatch import TaskDeliveryService
 
-import random
-
-from .transmit import TaskDeliverySendService
-
-
-class TaskDeliveryService(TaskDeliverySendService):
-    """平台发送与投递结果处理。"""
-
-
-__all__ = ["TaskDeliveryService", "random"]
+__all__ = ["TaskDeliveryService"]

@@ -19,40 +19,6 @@ class RuntimeField:
 class SupportComponent:
     """只接受明确宿主运行时的宿主组件基类。"""
 
-    aliases = RuntimeField("aliases")
-    briefing_route = RuntimeField("briefing_route")
-    delivery_outbox = RuntimeField("delivery_outbox")
-    jobs = RuntimeField("jobs")
-    main_route = RuntimeField("main_route")
-    manual = RuntimeField("manual")
-    news_outbox = RuntimeField("news_outbox")
-    permissions = RuntimeField("permissions")
-    qzone = RuntimeField("qzone")
-    start_route = RuntimeField("start_route")
-    static_outbox = RuntimeField("static_outbox")
-    tool_context = RuntimeField("tool_context")
-    tools = RuntimeField("tools")
-    typed_route = RuntimeField("typed_route")
-
-    plugin = RuntimeField("plugin")
-    context = RuntimeField("context")
-    config = RuntimeField("config")
-    db = RuntimeField("db")
-    ctx_service = RuntimeField("ctx_service")
-    news_service = RuntimeField("news_service")
-    qzone_service = RuntimeField("qzone_service")
-    task_manager = RuntimeField("task_manager")
-    command_handler = RuntimeField("command_handler")
-    receiver_conf = RuntimeField("receiver_conf")
-    basic_conf = RuntimeField("basic_conf")
-    extra_shares_conf = RuntimeField("extra_shares_conf")
-    qzone_conf = RuntimeField("qzone_conf")
-    contact_aliases = RuntimeField("contact_aliases")
-    _is_terminated = RuntimeField("_is_terminated")
-    _cached_adapter_id = RuntimeField("_cached_adapter_id")
-    _cached_qq_adapter_id = RuntimeField("_cached_qq_adapter_id")
-    _cached_weixin_adapter_id = RuntimeField("_cached_weixin_adapter_id")
-
     def __init__(self, runtime) -> None:
         if runtime is None:
             raise TypeError("宿主组件必须绑定运行时")

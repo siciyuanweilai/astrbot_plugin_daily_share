@@ -29,7 +29,6 @@ from .latest import (
     _feed_block_meta,
     _feed_data_attr,
     _first_feed_data_attrs,
-    _qzone_unikey,
     _recent_item_fid,
     _recent_item_name,
     _recent_item_text,
@@ -53,6 +52,31 @@ def _qzone_liked(*sources: dict[str, Any]) -> bool:
                     "yes",
                 }
     return False
+
+
+def _qzone_like_keys(item: dict[str, Any], raw_html: str = "") -> tuple[str, str]:
+    """只读取接口提供的点赞键，保留复合目标，不用动态 ID 猜相册目标。"""
+    sources = (
+        item,
+        _first_json_mapping(item, FEED_LIKE_KEYS),
+        _first_json_mapping(item, FEED_OPERATION_KEYS),
+        _first_json_mapping(item, FEED_COMMON_KEYS),
+    )
+    attrs = _first_feed_data_attrs(raw_html)
+
+    def read(name: str, *aliases: str) -> str:
+        for source in sources:
+            value = _mapping_first(source, (name, *aliases))
+            if value:
+                return str(value).strip()
+        return _feed_data_attr(attrs, name) or _html_first_attr(
+            raw_html,
+            tuple(attr for key in (name, *aliases) for attr in (f"data-{key}", key)),
+        )
+
+    unikey = read("unikey", "unilikekey", "unlikekey")
+    curkey = read("curkey", "curlikekey")
+    return unikey or curkey, curkey or unikey
 
 
 def _qzone_conlist_text(value: Any) -> str:
@@ -174,6 +198,7 @@ def parse_feed_item(item: dict[str, Any]) -> QzonePost | None:
             videos.append(str(url))
     videos.extend(_extract_video_sources("", item))
 
+    unikey, curkey = _qzone_like_keys(item)
     return QzonePost(
         tid=tid,
         uin=uin,
@@ -206,12 +231,9 @@ def parse_feed_item(item: dict[str, Any]) -> QzonePost | None:
         photo_targets=parse_feed_photo_targets(
             item, appid=_safe_int(item.get("appid")) or 311, owner_uin=uin
         ),
-        curkey=str(item.get("curkey") or item.get("curlikekey") or ""),
-        unikey=str(item.get("unikey") or item.get("unlikekey") or ""),
-        liked=_qzone_liked(
-            item["like"] if isinstance(item.get("like"), dict) else {},
-            item,
-        ),
+        curkey=curkey,
+        unikey=unikey,
+        liked=_qzone_liked(_first_json_mapping(item, FEED_LIKE_KEYS), item),
         busi_param=(
             item["busi_param"] if isinstance(item.get("busi_param"), dict) else {}
         ),
@@ -260,27 +282,18 @@ def parse_recent_feed_list(payload: dict[str, Any]) -> list[QzonePost]:
         operation = _first_json_mapping(item, FEED_OPERATION_KEYS)
         like = _first_json_mapping(item, FEED_LIKE_KEYS)
         video_urls = _extract_video_sources(raw_html, item, common, operation)
+        photo_targets = parse_feed_photo_targets(
+            item, appid=appid, owner_uin=uin, raw_html=raw_html
+        )
         if (
             not clean_qzone_text(text_source)
             and not rt_text
             and not image_urls
             and not video_urls
+            and not photo_targets
         ):
             continue
-        curkey = str(
-            _mapping_first(item, ("curkey", "curlikekey"))
-            or _mapping_first(common, ("curkey", "curlikekey"))
-            or _feed_data_attr(feed_attrs, "curkey")
-            or _html_first_attr(raw_html, ("data-curkey", "curkey"))
-            or _qzone_unikey(appid, uin, tid)
-        )
-        unikey = str(
-            _mapping_first(item, ("unikey", "unlikekey"))
-            or _mapping_first(common, ("unikey", "unlikekey"))
-            or _feed_data_attr(feed_attrs, "unikey")
-            or _html_first_attr(raw_html, ("data-unikey", "unikey"))
-            or _qzone_unikey(appid, uin, tid)
-        )
+        unikey, curkey = _qzone_like_keys(item, raw_html)
         busi_param = operation.get("busi_param") or {}
         if not isinstance(busi_param, dict):
             busi_param = {}
@@ -314,9 +327,7 @@ def parse_recent_feed_list(payload: dict[str, Any]) -> list[QzonePost]:
                 expandable=has_qzone_expand_marker(text_source)
                 or has_qzone_expand_marker(raw_html),
                 appid=appid,
-                photo_targets=parse_feed_photo_targets(
-                    item, appid=appid, owner_uin=uin, raw_html=raw_html
-                ),
+                photo_targets=photo_targets,
                 feed_key=str(item.get("key") or ""),
                 curkey=curkey,
                 unikey=unikey,

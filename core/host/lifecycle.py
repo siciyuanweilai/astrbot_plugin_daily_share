@@ -7,6 +7,25 @@ from astrbot.api import logger
 from ..toolkit import log_exception
 
 
+class TargetShareLock(asyncio.Lock):
+    """等待者被唤醒前仍保留锁的所有权，防止回收后产生第二把锁。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.acquiring = 0
+
+    async def acquire(self) -> bool:
+        self.acquiring += 1
+        try:
+            return await super().acquire()
+        finally:
+            self.acquiring -= 1
+
+    @property
+    def busy(self) -> bool:
+        return self.locked() or self.acquiring > 0
+
+
 class RuntimeService:
     """管理插件生命周期、后台任务、分享锁和配置持久化。"""
 
@@ -162,7 +181,7 @@ class RuntimeService:
         key = str(target_uid or "").strip()
         lock = plugin._target_locks.get(key)
         if lock is None:
-            lock = asyncio.Lock()
+            lock = TargetShareLock()
             plugin._target_locks[key] = lock
         return lock
 
@@ -172,7 +191,7 @@ class RuntimeService:
         plugin = self.plugin
         if global_scope:
             return plugin._lock.locked() or any(
-                lock.locked() for lock in plugin._target_locks.values()
+                lock.busy for lock in plugin._target_locks.values()
             )
         if plugin._lock.locked():
             return True
@@ -180,13 +199,13 @@ class RuntimeService:
         if not key:
             return False
         lock = plugin._target_locks.get(key)
-        return bool(lock and lock.locked())
+        return bool(lock and lock.busy)
 
     def release_idle_share_lock(self, target_uid: str | None = None) -> None:
         plugin = self.plugin
         key = str(target_uid or "").strip()
         lock = plugin._target_locks.get(key)
-        if lock and not lock.locked():
+        if lock and not lock.busy:
             plugin._target_locks.pop(key, None)
 
     async def initialize(self) -> None:

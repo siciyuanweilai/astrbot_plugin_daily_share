@@ -1,8 +1,4 @@
-from .targetplan import TaskExecutorTargetService
-
-
-class TaskExecutorService(TaskExecutorTargetService):
-    """分享主流程。"""
+from .flow import TaskExecutorService
 
 
 __all__ = ["TaskExecutorService"]

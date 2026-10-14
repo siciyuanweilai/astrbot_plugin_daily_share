@@ -2,13 +2,13 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType
 from ...integrations.delivery import record_confirmed_share
-from .flow import TaskExecutorFlowService
+from ..taskbase import TaskServiceBase
 
 
-class TaskExecutorSendService(TaskExecutorFlowService):
+class TaskExecutorSendService(TaskServiceBase):
     """分享发送与记录。"""
 
-    async def _send_execute_share_result(
+    async def send(
         self,
         *,
         uid: str,
@@ -34,7 +34,7 @@ class TaskExecutorSendService(TaskExecutorFlowService):
         )
         return bool(sent), media_result
 
-    async def _record_execute_share_success(
+    async def record_success(
         self,
         *,
         uid: str,
@@ -55,7 +55,7 @@ class TaskExecutorSendService(TaskExecutorFlowService):
         await record_confirmed_share(
             self.ctx_service, uid, content, image_description, media_result
         )
-        await self.services.executor_helpers.record_share_history(
+        await self.services.executor_helpers.records.record_share_history(
             target_id=uid,
             share_type=stype.value,
             content=content,

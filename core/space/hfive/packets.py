@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import zlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..methodset import QzoneMethodSet
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
 
-class QzoneH5BaseService(QzoneMethodSet):
+class QzoneH5BaseService:
     """H5 传输基础工具。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     _H5_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 

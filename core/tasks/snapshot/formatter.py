@@ -2,24 +2,29 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
-from .focus import TaskNewsCacheFocusService
+if TYPE_CHECKING:
+    from ..cache import TaskNewsCacheService
 
 NEWS_SHORT_URL_CACHE_KEY = "news_short_url_cache"
 NEWS_SHORT_URL_CACHE_MAX_ITEMS = 256
 
 
-class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
+class TaskNewsCacheFormatService:
+    def __init__(self, owner: TaskNewsCacheService) -> None:
+        self.owner = owner
+
     async def _news_short_url_cache(self) -> dict:
-        cache = await self.db.get_cache_state(NEWS_SHORT_URL_CACHE_KEY, {})
+        cache = await self.owner.db.get_cache_state(NEWS_SHORT_URL_CACHE_KEY, {})
         return cache if isinstance(cache, dict) else {}
 
     async def _save_news_short_url_cache(self, cache: dict) -> None:
         if not isinstance(cache, dict):
             return
-        await self.db.merge_cache_entries(
+        await self.owner.db.merge_cache_entries(
             "cache",
             NEWS_SHORT_URL_CACHE_KEY,
             cache,
@@ -27,18 +32,18 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
         )
 
     async def _shorten_news_url(self, url: str) -> str:
-        original_url = self._clean_snapshot_text(url, 500)
+        original_url = self.owner._clean_snapshot_text(url, 500)
         if not original_url:
             return ""
 
-        locks = getattr(self, "_news_short_url_locks", None)
+        locks = getattr(self.owner, "_news_short_url_locks", None)
         if locks is None:
-            locks = self._news_short_url_locks = {}
+            locks = self.owner._news_short_url_locks = {}
         lock, users = locks.get(original_url, (asyncio.Lock(), 0))
         locks[original_url] = (lock, users + 1)
         try:
             async with lock:
-                return await self._shorten_news_url_once(original_url)
+                return await self.owner._shorten_news_url_once(original_url)
         finally:
             users = locks[original_url][1] - 1
             if users:
@@ -48,10 +53,10 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
 
     async def _shorten_news_url_once(self, original_url: str) -> str:
 
-        cache = await self._news_short_url_cache()
+        cache = await self.owner._news_short_url_cache()
         cached = cache.get(original_url)
         short_url = (
-            self._clean_snapshot_text(cached.get("short_url"), 500)
+            self.owner._clean_snapshot_text(cached.get("short_url"), 500)
             if isinstance(cached, dict)
             else ""
         )
@@ -59,11 +64,11 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
             return short_url
 
         try:
-            short_url = await self.news_service.shorten_url(original_url)
-            short_url = self._clean_snapshot_text(short_url, 500)
+            short_url = await self.owner.news_service.shorten_url(original_url)
+            short_url = self.owner._clean_snapshot_text(short_url, 500)
             if not short_url:
                 return original_url
-            await self._save_news_short_url_cache(
+            await self.owner._save_news_short_url_cache(
                 {original_url: {"short_url": short_url, "at": int(time.time())}}
             )
             return short_url
@@ -81,7 +86,7 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
         if not url:
             return f"【{source_name}】第 {index} 条暂时没有可用原文链接。\n{title}"
 
-        link = await self._shorten_news_url(url)
+        link = await self.owner._shorten_news_url(url)
         if action == "source":
             lines = [
                 f"【{source_name}】第 {index} 条",
@@ -94,7 +99,7 @@ class TaskNewsCacheFormatService(TaskNewsCacheFocusService):
             return "\n".join(lines)
 
         lines = [f"【{source_name}】第 {index} 条", f"标题：{title}", f"短链接：{link}"]
-        desc = self._clean_snapshot_text(item.get("description"), 160)
+        desc = self.owner._clean_snapshot_text(item.get("description"), 160)
         if desc and desc != title:
             lines.append(f"摘要：{desc}")
         elif action == "summary":

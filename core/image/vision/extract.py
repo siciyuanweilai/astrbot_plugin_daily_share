@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
 from ...config import ShareType, TimePeriod
-from .frame import ImageVisualFrameService
 from .json import _extract_json_object
+
+if TYPE_CHECKING:
+    from .. import ImageService
 
 
 def _visual_time_hint(period: TimePeriod, hour: int) -> str:
@@ -115,8 +118,11 @@ def _visual_location_logic(priority_text: bool, hour: int) -> str:
 """
 
 
-class ImageVisualExtractService(ImageVisualFrameService):
+class ImageVisualExtractService:
     """用大语言模型提取图像视觉要素。"""
+
+    def __init__(self, owner: ImageService) -> None:
+        self.owner = owner
 
     def _format_visual_extraction_frame(
         self, share_type: ShareType | None = None, involves_self: bool = False
@@ -207,19 +213,19 @@ class ImageVisualExtractService(ImageVisualFrameService):
             return {}
 
         now = datetime.now()
-        period = self._get_current_period()
+        period = self.owner._get_current_period()
         hour = now.hour
-        system_prompt = self._visual_extraction_system_prompt()
+        system_prompt = self.owner._visual_extraction_system_prompt()
         user_prompt = (
             f"【当前画面条件】\n当前小时：{hour}:00\n"
             f"当前光线：{_visual_time_hint(period, hour)}\n"
-            f"地点来源：{_visual_location_logic(self.img_conf.get('priority_text_over_schedule', True), hour)}\n"
-            f"【预设构图】\n{self._format_visual_extraction_frame(share_type, involves_self)}\n"
+            f"地点来源：{_visual_location_logic(self.owner.img_conf.get('priority_text_over_schedule', True), hour)}\n"
+            f"【预设构图】\n{self.owner._format_visual_extraction_frame(share_type, involves_self)}\n"
             f"【分享文案】：{content}\n【生活日程】：{life_context or ''}\n\n请提取视觉元素："
         )
 
         try:
-            res = await self._call_llm(
+            res = await self.owner._call_llm(
                 user_prompt, system_prompt, timeout=45, target_umo=target_umo
             )
             if not res:

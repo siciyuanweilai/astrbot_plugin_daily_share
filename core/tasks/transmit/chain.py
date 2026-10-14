@@ -2,16 +2,35 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 
 from ...platformsession import create_message_session
 from ...toolkit import format_exception
-from .pause import TaskDeliveryDelayService
+from ..taskbase import TaskServiceBase
+from .stage import TaskDeliveryStatusService
+
+if TYPE_CHECKING:
+    from ..runtime import TaskRuntime
+    from ..taskbase import TaskConfigState, TaskSharedState
 
 
-class TaskDeliveryChainService(TaskDeliveryDelayService):
+class TaskDeliveryChainService(TaskServiceBase):
+    """按平台路由消息，登记阶段结果和已确认的生活回执。"""
+
+    def __init__(
+        self,
+        runtime: TaskRuntime,
+        config: TaskConfigState,
+        state: TaskSharedState,
+        *,
+        status: TaskDeliveryStatusService,
+    ) -> None:
+        super().__init__(runtime, config, state)
+        self.status = status
+
     async def send_message_chain(
         self, uid, chain: MessageChain, event: AstrMessageEvent | None = None
     ):
@@ -66,7 +85,7 @@ class TaskDeliveryChainService(TaskDeliveryDelayService):
             )
         )
 
-    async def _send_chain_stage(
+    async def send_chain_stage(
         self,
         uid,
         chain: MessageChain,
@@ -76,7 +95,7 @@ class TaskDeliveryChainService(TaskDeliveryDelayService):
     ) -> bool:
         try:
             await self.send_message_chain(uid, chain, event)
-            self._mark_send_stage_success(media_result, stage)
+            self.status.mark_send_stage_success(media_result, stage)
             sent_at = time.time()
             if isinstance(media_result, dict):
                 media_result[f"{stage}_sent_at"] = sent_at
@@ -102,20 +121,20 @@ class TaskDeliveryChainService(TaskDeliveryDelayService):
             return True
         except Exception as error:
             if self._is_probable_delivery_timeout(error):
-                self._record_send_stage_error(
+                self.status.record_send_stage_error(
                     media_result,
                     stage,
                     error,
                     probable_sent=True,
                 )
-                self._mark_send_stage_success(
+                self.status.mark_send_stage_success(
                     media_result,
                     stage,
                     probable_sent=True,
                 )
                 logger.warning(
-                    f"[日常分享] {self._send_stage_label(stage)}发送回执超时，消息可能已送达，继续后续流程: {format_exception(error)}"
+                    f"[日常分享] {self.status.send_stage_label(stage)}发送回执超时，消息可能已送达，继续后续流程: {format_exception(error)}"
                 )
                 return True
-            self._record_send_stage_error(media_result, stage, error)
+            self.status.record_send_stage_error(media_result, stage, error)
             raise

@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
-
-from ..methodset import QzoneMethodSet
 
 try:
     import httpx
 except Exception:  # pragma: no cover - 可选运行时依赖
     httpx = None
 
+if TYPE_CHECKING:
+    from ..qzone import QzoneService
 
-class QzoneH5ErrorService(QzoneMethodSet):
+
+class QzoneH5ErrorService:
     """H5 传输错误识别与格式化。"""
+
+    def __init__(self, owner: QzoneService) -> None:
+        self.owner = owner
 
     def _h5_error_message(self, payload: dict[str, Any], fallback: str) -> str:
         try:
@@ -26,7 +30,7 @@ class QzoneH5ErrorService(QzoneMethodSet):
         if code == -1 and (status == 429 or status >= 500):
             message = fallback
         else:
-            message = self._qzone_error_message(
+            message = self.owner._qzone_error_message(
                 {
                     "code": code,
                     "message": payload.get("msg") or payload.get("message"),
@@ -49,6 +53,8 @@ class QzoneH5ErrorService(QzoneMethodSet):
 
     @classmethod
     def _h5_transient_or_unstructured_failure(cls, payload: dict[str, Any]) -> bool:
+        from ..qzone import QzoneService
+
         if not isinstance(payload, dict):
             return False
         try:
@@ -60,7 +66,7 @@ class QzoneH5ErrorService(QzoneMethodSet):
         if payload.get("code") == -1 and bool(payload.get("_raw_length")):
             return True
         return any(
-            cls._h5_transient_or_unstructured_message(payload.get(key))
+            QzoneService._h5_transient_or_unstructured_message(payload.get(key))
             for key in ("msg", "message", "error")
         )
 
@@ -93,6 +99,8 @@ class QzoneH5ErrorService(QzoneMethodSet):
 
     @classmethod
     def _h5_login_expired(cls, payload: dict[str, Any]) -> bool:
+        from ..qzone import QzoneService
+
         if not isinstance(payload, dict):
             return False
         try:
@@ -101,7 +109,7 @@ class QzoneH5ErrorService(QzoneMethodSet):
             status = 0
         if status in {401, 403}:
             return True
-        return cls._h5_login_expired_message(
+        return QzoneService._h5_login_expired_message(
             payload.get("msg")
             or payload.get("message")
             or (
@@ -121,8 +129,8 @@ class QzoneH5ErrorService(QzoneMethodSet):
         if "阶段:" in text:
             return text
         detail = [f"阶段: {phase}"]
-        if self._h5_transport:
-            detail.append(f"传输: {self._h5_transport}")
+        if self.owner._h5_transport:
+            detail.append(f"传输: {self.owner._h5_transport}")
         return f"{text}（{'，'.join(detail)}）"
 
     @staticmethod
@@ -143,11 +151,11 @@ class QzoneH5ErrorService(QzoneMethodSet):
     ) -> RuntimeError | None:
         if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
             return RuntimeError(
-                f"QQ 空间 H5 上传请求超时（{self._api_timeout_seconds()}秒）"
+                f"QQ 空间 H5 上传请求超时（{self.owner._api_timeout_seconds()}秒）"
             )
         if httpx is not None and isinstance(exc, httpx.TimeoutException):
             return RuntimeError(
-                f"QQ 空间 H5 上传请求超时（{self._api_timeout_seconds()}秒）"
+                f"QQ 空间 H5 上传请求超时（{self.owner._api_timeout_seconds()}秒）"
             )
         if httpx is not None and isinstance(exc, httpx.HTTPError):
             return RuntimeError(f"QQ 空间 H5 上传网络请求失败: {exc}")

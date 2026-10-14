@@ -4,6 +4,7 @@ from ...database.keys import QZONE_TARGET_ID
 from ...platform import parse_platform_session
 from ..contextbase import ContextComponent
 from .continuity import continuity_prompt
+from .facts import body_prompt
 
 
 class ContextLifePluginService(ContextComponent):
@@ -70,7 +71,9 @@ class ContextLifePluginService(ContextComponent):
         # 使用同一快照的公开投影，不能透传该私聊的共同活动。
         continuity = raw_data.get("continuity")
         public_continuity = ""
-        if isinstance(continuity, dict):
+        current_facts = raw_data.get("current_facts")
+        stale = isinstance(current_facts, dict) and current_facts.get("valid") is False
+        if not stale and isinstance(continuity, dict):
             public = continuity.get("public") if scoped else continuity
             if isinstance(public, dict):
                 public_continuity = continuity_prompt(
@@ -95,4 +98,7 @@ class ContextLifePluginService(ContextComponent):
         }
         if public_continuity:
             result["continuity_context"] = public_continuity
+        body = body_prompt(public_data)
+        if body:
+            result["body_context"] = body
         return result

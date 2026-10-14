@@ -1,14 +1,23 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 from ...config import ShareType
 from ...database.keys import MEDIA_IMAGE, MEDIA_TEXT, QZONE_TARGET_ID
 from ...space.errors import QzoneImageUploadError
 from ...toolkit import log_exception
-from .pipeline import TaskQzoneFlowService
+
+if TYPE_CHECKING:
+    from . import TaskQzoneService
 
 
-class TaskQzonePublishService(TaskQzoneFlowService):
+class TaskQzonePublishService:
     """QQ 空间发布与历史记录。"""
+
+    def __init__(self, owner: TaskQzoneService) -> None:
+        self.owner = owner
 
     async def _publish_qzone_best_effort(
         self,
@@ -20,7 +29,7 @@ class TaskQzonePublishService(TaskQzoneFlowService):
 
         if image_payloads:
             try:
-                await self.plugin.publish_qzone(text=text, images=image_payloads)
+                await self.owner.plugin.publish_qzone(text=text, images=image_payloads)
                 return MEDIA_IMAGE, False
             except QzoneImageUploadError as exc:
                 logger.warning("[日常分享] QQ 空间配图上传失败，改发纯文字说说")
@@ -31,7 +40,7 @@ class TaskQzonePublishService(TaskQzoneFlowService):
                     with_traceback=False,
                 )
 
-        await self.plugin.publish_qzone(text=text, images=[])
+        await self.owner.plugin.publish_qzone(text=text, images=[])
         return MEDIA_TEXT, bool(image_payloads)
 
     async def _publish_and_record_qzone_share(
@@ -46,20 +55,20 @@ class TaskQzonePublishService(TaskQzoneFlowService):
         news_snapshot_data: dict | None = None,
     ) -> str:
         logger.info("[日常分享] 正在登录 QQ 空间...")
-        self.services.progress.update_share_progress(
+        self.owner.services.progress.update_share_progress(
             progress_id, "send", message="正在登录 QQ 空间"
         )
-        sent_media_type, image_downgraded = await self._publish_qzone_best_effort(
+        sent_media_type, image_downgraded = await self.owner._publish_qzone_best_effort(
             text=content,
             images=qzone_images,
         )
         if image_downgraded:
-            self.services.progress.fail_share_progress_step(
+            self.owner.services.progress.fail_share_progress_step(
                 progress_id, "image", "配图发布失败，继续发送"
             )
         logger.info("[日常分享] 成功分享内容到 QQ 空间！")
 
-        await self.services.executor_helpers.record_share_history(
+        await self.owner.services.executor_helpers.records.record_share_history(
             target_id=QZONE_TARGET_ID,
             share_type=stype.value,
             content=content,
@@ -72,7 +81,7 @@ class TaskQzonePublishService(TaskQzoneFlowService):
             news_image_url=(
                 target_local_img if sent_media_type == MEDIA_IMAGE else None
             ),
-            degradation_reason=self.services.progress.share_progress_degradation_reason(
+            degradation_reason=self.owner.services.progress.share_progress_degradation_reason(
                 progress_id
             ),
         )

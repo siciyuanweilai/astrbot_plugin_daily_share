@@ -10,11 +10,17 @@ from ..platform import (
     get_platform_bindings,
 )
 from .common import _PAGE_CONF_SCHEMA_PATH
-from .panelcomponent import PanelComponent
+from .panelcomponent import PanelComponent, RuntimeField
 
 
 class DashboardConfigMetaService(PanelComponent):
     """仪表盘配置选项和结构元信息。"""
+
+    _page_config_schema_meta_cache = RuntimeField("_page_config_schema_meta_cache")
+    _page_config_schema_raw_cache = RuntimeField("_page_config_schema_raw_cache")
+    config = RuntimeField("config")
+    context = RuntimeField("context")
+    meta = RuntimeField("meta")
 
     @staticmethod
     def _read_page_config_schema_sync() -> dict:

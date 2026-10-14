@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import random
 
-from .stage import TaskDeliveryStatusService
+from ..taskbase import TaskServiceBase
 
 
-class TaskDeliveryDelayService(TaskDeliveryStatusService):
+class TaskDeliveryDelayService(TaskServiceBase):
+    """读取当前配置并控制分段发送间隔。"""
+
     def _separate_send_delay_seconds(self) -> float:
         delay_str = self.image_conf.get("separate_send_delay", "1.0-2.0")
         try:

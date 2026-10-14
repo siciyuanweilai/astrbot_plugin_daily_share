@@ -1,6 +1,7 @@
 """消费生活插件的有界分享投影，不直接读取生活数据库。"""
 
 import json
+import math
 
 
 def continuity_prompt(data: dict, *, max_items: int = 4, max_chars: int = 400) -> str:
@@ -21,6 +22,9 @@ def continuity_prompt(data: dict, *, max_items: int = 4, max_chars: int = 400) -
         "last_practiced_at",
         "delivery",
         "delivered_at",
+        "owner",
+        "unit",
+        "available_at",
     }
     for key, label in (
         ("corrections", "已确认纠正"),
@@ -41,6 +45,23 @@ def continuity_prompt(data: dict, *, max_items: int = 4, max_chars: int = 400) -
                 for k, v in row.items()
                 if k in fields and isinstance(v, str) and v
             }
+            if key == "objects":
+                quantity = row.get("quantity")
+                if (
+                    isinstance(quantity, (int, float))
+                    and not isinstance(quantity, bool)
+                    and math.isfinite(quantity)
+                    and quantity >= 0
+                    and item.get("unit")
+                ):
+                    item["quantity"] = quantity
+                version = row.get("artifact_version")
+                if (
+                    isinstance(version, int)
+                    and not isinstance(version, bool)
+                    and version > 0
+                ):
+                    item["artifact_version"] = version
             if key == "goals" and isinstance(row.get("steps"), list):
                 item["steps"] = [
                     {
@@ -62,6 +83,8 @@ def continuity_prompt(data: dict, *, max_items: int = 4, max_chars: int = 400) -
         "纠正优先于旧摘要；共同活动 preparing=准备、active=进行、paused=暂停、completed=结束、cancelled=取消。"
         "兴趣 paused=暂缓、retired=已放下，不当作当前爱好强推；目标 pending/needs_practice=仍需练习、awaiting_review=等待验收，不能写成掌握或完成。"
         "物品已生成不等于已发送，计划不等于经历；只采用与本次分享有关的信息，不逐项播报。\n"
+        "归属 user/shared 不写成自己独占，未知归属或数量不猜测；quantity=0、unavailable/in_use 或尚未到 available_at 不当作现成可用。"
+        "作品版本只代表已有成果，不代表目标已验收；备好饭菜或已下单不等于吃过，行动预期不当作实际结果。\n"
         + json.dumps(material, ensure_ascii=False, sort_keys=True)
     )
 

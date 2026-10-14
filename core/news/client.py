@@ -1,34 +1,30 @@
+from __future__ import annotations
+
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import aiohttp
-
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
+
+if TYPE_CHECKING:
+    from . import NewsService
 
 
 class NewsApiService:
     """新闻外部接口请求。"""
 
-    if TYPE_CHECKING:
-        conf: dict
-
-        async def http(self) -> aiohttp.ClientSession: ...
-
-        def _loads_json_payload(self, text: str) -> Any: ...
-
-        def _parse_news_payload(
-            self, text: str, limit: int | None = None
-        ) -> tuple[Any, list[dict] | None]: ...
+    def __init__(self, owner: NewsService) -> None:
+        self.owner = owner
 
     async def shorten_url(self, original_url: str) -> str | None:
         """使用柠柚短链接接口把原文链接转成短链。失败时返回空值。"""
-        if not self.conf.get("enable_news_api", True):
+        if not self.owner.conf.get("enable_news_api", True):
             return None
 
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
         original_url = str(original_url or "").strip()
         if not key or not original_url:
             return None
@@ -39,7 +35,7 @@ class NewsApiService:
             "apikey": key,
         }
         try:
-            session = await self.http()
+            session = await self.owner.http()
             async with session.get(
                 "https://api.nycnm.cn/api/v2/duan",
                 params=params,
@@ -49,7 +45,7 @@ class NewsApiService:
                     logger.debug(f"[短链接] 生成失败，状态码: {resp.status}")
                     return None
                 raw_text = await resp.text()
-                data = await asyncio.to_thread(self._loads_json_payload, raw_text)
+                data = await asyncio.to_thread(self.owner._loads_json_payload, raw_text)
 
             if not isinstance(data, dict):
                 return None
@@ -79,13 +75,13 @@ class NewsApiService:
         extra_params = NEWS_SOURCE_MAP[source].get("extra_params", "")
         full_url = f"{url}?format=json&apikey={key}{extra_params}"
 
-        timeout = self.conf.get("news_api_timeout", 30)
+        timeout = self.owner.conf.get("news_api_timeout", 30)
 
         logger.info(f"[新闻] 获取新闻: {source_name}")
         logger.debug(f"[新闻] 接口请求地址已生成，密钥参数已隐藏: {url}{extra_params}")
 
         try:
-            session = await self.http()
+            session = await self.owner.http()
             async with session.get(full_url, timeout=timeout) as resp:
                 if resp.status != 200:
                     logger.warning(f"[新闻] 接口返回状态码: {resp.status}")
@@ -95,7 +91,7 @@ class NewsApiService:
 
                 raw_text = await resp.text()
                 data, parsed = await asyncio.to_thread(
-                    self._parse_news_payload, raw_text, limit
+                    self.owner._parse_news_payload, raw_text, limit
                 )
 
                 if parsed:
@@ -117,9 +113,9 @@ class NewsApiService:
 
     async def get_baike_info(self, keyword: str) -> str | None:
         """通过柠柚接口获取百科词条简介。"""
-        if not self.conf.get("enable_news_api", True):
+        if not self.owner.conf.get("enable_news_api", True):
             return None
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
         if not key:
             return None
 
@@ -140,20 +136,22 @@ class NewsApiService:
         logger.debug(f"[百科] 查询: {keyword}")
 
         try:
-            session = await self.http()
+            session = await self.owner.http()
             async with session.get(url, params=params, timeout=10) as resp:
                 if resp.status != 200:
                     return None
 
                 try:
                     raw_text = await resp.text()
-                    data = await asyncio.to_thread(self._loads_json_payload, raw_text)
+                    data = await asyncio.to_thread(
+                        self.owner._loads_json_payload, raw_text
+                    )
                 except Exception as e:
                     logger.debug(f"[百科] 结构化数据解析失败: {e}")
                     return None
 
                     # 解析接口返回结构
-                return self._baike_response_text(data, keyword)
+                return self.owner._baike_response_text(data, keyword)
 
             return None
         except Exception as e:
@@ -182,14 +180,14 @@ class NewsApiService:
 
     async def get_ai_news_json(self) -> dict | None:
         """获取每日 AI 资讯结构化数据。"""
-        key = self.conf.get("nycnm_api_key", "").strip()
+        key = self.owner.conf.get("nycnm_api_key", "").strip()
         if not key:
             logger.error("[新闻] 未配置柠柚接口密钥")
             return None
 
         url = f"https://api.nycnm.cn/api/v2/aizixun?format=json&apikey={key}"
         try:
-            session = await self.http()
+            session = await self.owner.http()
             async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     raw_text = await resp.text()

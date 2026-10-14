@@ -73,8 +73,8 @@ class ContentService:
     def parse_category_config(self, categories):
         return self.support.parse_category_config(categories)
 
-    async def get_persona_info(self):
-        return await self.support.get_persona_info()
+    async def get_persona_info(self, target_umo: str | None = None):
+        return await self.support.get_persona_info(target_umo)
 
     async def get_qzone_chat_style_prompt(self, *, scene: str = "") -> str:
         return await self.daily_life_bridge.get_share_chat_style_prompt(scene=scene)
@@ -94,7 +94,7 @@ class ContentService:
     ) -> str | None:
         """统一生成入口"""
         # 获取人设信息
-        persona_info = await self.get_persona_info()
+        persona_info = await self.get_persona_info(target_id)
 
         # 区分【亲昵称呼】和【用户昵称】：
         # - 亲昵称呼只来自人设配置，避免把本地昵称映射写成第三人称。

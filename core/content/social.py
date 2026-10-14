@@ -41,34 +41,6 @@ class ContentSocialService(ContentComponent):
             public_label=public_label,
             include_time=False,
         )
-        greeting_constraint = ""
-        opening_rule = ""
-
-        # 清晨(6-9) -> 早间问候放开头
-        if period in [TimePeriod.MORNING]:
-            greeting_constraint = (
-                "4. 文案开头必须是自然的早间问候语，例如“早安”“早上好”“早呀”“早哦”"
-            )
-            opening_rule = f'- 早间问候开头："{"大家" if is_group else ""}早上好，" / "{"大家" if is_group else ""}早安，" / "{"大家" if is_group else ""}早呀，"'
-
-        # 深夜(22-24) 和 凌晨(0-6) -> 睡前祝福放结尾
-        elif period in [TimePeriod.LATE_NIGHT, TimePeriod.DAWN]:
-            greeting_constraint = "4. 文案不得以睡前祝福开头；必须在正文最后自然收束一句睡前祝福，例如“晚安”“安安”“好梦”“早点睡，做个好梦”"
-            opening_rule = "- 睡前问候：不要用“晚安/安安/好梦”开头，可从当前状态、环境或困意自然切入，最后再用睡前祝福收束。"
-
-        # 上午/下午/傍晚/晚上 -> 自然打招呼
-        else:
-            greeting_constraint = (
-                "4. 就像平常聊天一样自然打招呼即可，不需要刻意说早间问候或睡前祝福"
-            )
-            opening_rule = '- 自然切入："今天心情不错呢" / "刚忙完..." / "今天有点..."'
-
-        opening_prompt = (
-            f"【开头方式】\n{opening_rule}\n只引用已确认的状态，不照抄示例或编造经历。"
-        )
-        length_requirement = (
-            "5. 说清楚这次的招呼就停，不设最低字数，不为了温馨补一段祝愿或安排。"
-        )
         dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
@@ -83,14 +55,12 @@ class ContentSocialService(ContentComponent):
 - 可以参考生活状态、天气或正在做的事，让问候更像当下自然说出口的话。
 - 群聊请直接开启新问候，不评价群氛围；私聊可以更个人化；{public_label}写成自己的状态记录。
 
-{opening_prompt}
-
 要求：
 1. 以你的人设性格说话，真实自然
 2. 基于当前真实时间问候
 3. 忽略群聊历史，直接开启新问候
-{greeting_constraint}
-{length_requirement}
+4. 结合本次时段自然打招呼，开头和收尾由语意决定，只引用已确认的状态。
+5. 说清楚这次的招呼就停，不设最低字数，不为了温馨补一段祝愿或安排。
 6. 直接输出内容，不要解释
 """
         prompt = build_task_prompt(

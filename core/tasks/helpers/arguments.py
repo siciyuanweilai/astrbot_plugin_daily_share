@@ -3,10 +3,10 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import NEWS_SOURCE_MAP
 from ...constants import CMD_CN_MAP, SOURCE_CN_MAP
 from ...toolkit import log_exception
-from .material import TaskHelperContextService
+from ..taskbase import TaskServiceBase
 
 
-class TaskHelperArgsService(TaskHelperContextService):
+class TaskHelperArgsService(TaskServiceBase):
     """命令参数与事件目标解析。"""
 
     def event_history_target(self, event: AstrMessageEvent) -> str:

@@ -6,6 +6,7 @@ from urllib.parse import quote, unquote, urlencode, urlsplit, urlunsplit
 
 from astrbot.api import logger
 
+from ...host.providers import chat_model_defaults
 from .formatting import _clean_auto_comment_text, _qzone_post_plain_text
 from .tracker import QZONE_AUTO_COMMENT_STATE_KEY, QZONE_AUTO_REPLY_STATE_KEY
 
@@ -332,54 +333,17 @@ async def _qzone_session_provider_id(context, target_umo: str = "") -> str:
         return ""
 
 
-def _qzone_system_default_provider_id(context) -> str:
-    try:
-        cfg = context.get_config()
-    except Exception as exc:
-        logger.debug(f"[日常分享] QQ 空间说说配图识别读取默认模型配置失败: {exc}")
-        cfg = None
-    if isinstance(cfg, dict):
-        provider_settings = cfg.get("provider_settings", {})
-        if isinstance(provider_settings, dict):
-            provider_id = str(
-                provider_settings.get("default_provider_id") or ""
-            ).strip()
-            if provider_id:
-                return provider_id
-        for item in cfg.get("provider", []) or []:
-            if not isinstance(item, dict) or not item.get("enable", False):
-                continue
-            provider_type = str(item.get("provider_type", "chat") or "")
-            if "chat" in provider_type:
-                return str(item.get("id") or "").strip()
-    return ""
-
-
-def _qzone_runtime_provider_id(context) -> str:
-    try:
-        provider = context.get_using_provider()
-    except Exception:
-        provider = None
-    meta_call = getattr(provider, "meta", None)
-    if callable(meta_call):
-        try:
-            return str(getattr(meta_call(), "id", "") or "").strip()
-        except Exception:
-            return ""
-    return ""
-
-
 async def _qzone_vision_provider_candidates(
     owner, *, target_umo: str = ""
 ) -> list[tuple[str, str]]:
     _enabled, _limit, vision_provider_id = _qzone_image_vision_config(owner)
     context = owner.plugin.context
-    candidates: list[tuple[str, str]] = [
-        (vision_provider_id, "qzone_vision"),
-        (await _qzone_session_provider_id(context, target_umo), "session"),
-        (_qzone_system_default_provider_id(context), "default"),
-        (_qzone_runtime_provider_id(context), "default"),
-    ]
+    primary = (
+        (vision_provider_id, "qzone_vision")
+        if vision_provider_id
+        else (await _qzone_session_provider_id(context, target_umo), "session")
+    )
+    candidates = [primary, *chat_model_defaults(context, target_umo)]
     result: list[tuple[str, str]] = []
     seen: set[str] = set()
     for provider_id, source in candidates:
@@ -449,7 +413,12 @@ async def _describe_qzone_image(owner, image_url: str, *, target_umo: str = "") 
                     prompt=prompt,
                     image_urls=[image_url],
                 ),
-                timeout=min(remaining, QZONE_IMAGE_PROVIDER_TIMEOUT_SECONDS),
+                timeout=min(
+                    remaining / 2
+                    if index + 1 < len(provider_candidates)
+                    else remaining,
+                    QZONE_IMAGE_PROVIDER_TIMEOUT_SECONDS,
+                ),
             )
         except Exception as exc:
             next_item = (
@@ -629,7 +598,7 @@ async def _qzone_video_context(owner, post) -> str:
     describe = getattr(
         getattr(owner.plugin, "daily_life_bridge", None), "describe_video", None
     )
-    fallback = "【视频识别】未取得视频内容；只能回应正文，不推测视频画面或声音。"
+    fallback = "【视频识别】完整视频尚无可用摘要；封面仅代表静态画面，动作与声音未知。"
     if not callable(describe):
         return fallback
     # 每条动态最多理解一个视频；图片数量仍遵循原有独立设置。
@@ -638,7 +607,20 @@ async def _qzone_video_context(owner, post) -> str:
         if isinstance(result, dict) and result.get("status") == "ok":
             summary = str(result.get("summary") or "").strip()
             if summary:
-                return "【视频识别（第一段）】\n" + summary[:1000]
+                details = str(result.get("details") or "").strip()
+                return (
+                    "【视频识别（第一段，完整视频摘要）】\n"
+                    + summary[:1000]
+                    + ("\n" + details[:2000] if details else "")
+                )
+        if isinstance(result, dict):
+            if result.get("status") == "pending":
+                logger.debug("[日常分享] 视频理解仍在处理中，后续互动可复用任务或摘要")
+                return "【视频识别】完整视频仍在理解中，后续互动可复用结果；当前动作与声音未知，封面仅代表静态画面。"
+            logger.debug(
+                f"[日常分享] 视频识别暂不可用: status={result.get('status')}，"
+                f"reason={result.get('error') or '无可用视频摘要'}"
+            )
     except Exception as exc:
         logger.debug(f"[日常分享] 视频识别未完成，按文字互动：{type(exc).__name__}")
     return fallback
@@ -650,6 +632,7 @@ async def _qzone_auto_reply_image_context(
     state: dict | None = None,
     target_umo: str = "",
     thread: bool = False,
+    post=None,
 ) -> str:
     _enabled, limit, _provider_id = _qzone_image_vision_config(owner)
     if thread and len(comments) >= 2:
@@ -671,6 +654,34 @@ async def _qzone_auto_reply_image_context(
             else []
         )
         author = getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
+    if _enabled and post is not None:
+        # 仅共享视觉缓存，不混入评论/回评的已处理标记。
+        cache = {}
+        getter = getattr(getattr(owner, "db", None), "get_qzone_state", None)
+        if callable(getter):
+            for key in (QZONE_AUTO_COMMENT_STATE_KEY, QZONE_AUTO_REPLY_STATE_KEY):
+                try:
+                    cache.update(_qzone_image_vision_cache(await getter(key, {})))
+                except Exception as exc:
+                    logger.debug(
+                        f"[日常分享] 读取原动态视觉缓存失败: {type(exc).__name__}"
+                    )
+        cache.update(_qzone_image_vision_cache(state))
+        if not isinstance(state, dict):
+            state = {}
+        state[QZONE_AUTO_COMMENT_IMAGE_VISION_CACHE_KEY] = cache
+        seen = {url for _, _, url in refs}
+        for source, scope, url in _qzone_post_image_refs(post, limit=limit):
+            if len(refs) >= limit:
+                break
+            if url not in seen:
+                seen.add(url)
+                label = (
+                    "原动态视频封面"
+                    if getattr(post, "videos", None)
+                    else "原动态" + scope
+                )
+                refs.append((source, label, url))
     descriptions = await _qzone_image_refs_descriptions(
         owner,
         refs,
@@ -681,4 +692,15 @@ async def _qzone_auto_reply_image_context(
         author=author,
         log_missing=False,
     )
-    return _qzone_image_descriptions_context(descriptions, heading="评论配图识别")
+    video = (
+        await _qzone_video_context(owner, post) if _enabled and post is not None else ""
+    )
+    return "\n\n".join(
+        filter(
+            None,
+            (
+                _qzone_image_descriptions_context(descriptions, heading="评论配图识别"),
+                video,
+            ),
+        )
+    )

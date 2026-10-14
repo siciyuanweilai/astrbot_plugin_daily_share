@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from astrbot.api.event import AstrMessageEvent
 
-from ..supportcomponent import SupportComponent
+from ..supportcomponent import RuntimeField, SupportComponent
 
 
 class PluginShareBriefingRouteService(SupportComponent):
+    jobs = RuntimeField("jobs")
+    manual = RuntimeField("manual")
+    news_service = RuntimeField("news_service")
+    static_outbox = RuntimeField("static_outbox")
+
     async def _handle_manual_briefing_command(
         self,
         event: AstrMessageEvent,

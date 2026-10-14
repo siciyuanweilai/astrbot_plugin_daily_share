@@ -6,12 +6,16 @@ from ..config import ShareType, TimePeriod
 from ..constants import share_type_label
 from ..integrations.mediajob import current_share_job
 from ..toolkit import call_default_daily_life_media_tool
-from .composer import ImageVisualService
 from .motion import ImageVideoService
 from .result import GeneratedImage
+from .vision.extract import ImageVisualExtractService
+from .vision.frame import ImageVisualFrameService
+from .vision.instruction import ImageVisualPromptService
+from .vision.judge import ImageVisualJudgeService
+from .vision.persona import ImageVisualPersonaService
 
 
-class ImageService(ImageVisualService, ImageVideoService):
+class ImageService:
     def __init__(self, context, config, llm_func, daily_life_bridge=None):
         self.context = context
         self.config = config
@@ -20,8 +24,15 @@ class ImageService(ImageVisualService, ImageVideoService):
 
         # 获取配置引用
         self.img_conf = self.config.get("image_conf", {})
+        self.prompts = ImageVisualPromptService(self)
+        self.persona = ImageVisualPersonaService(self)
+        self.judge = ImageVisualJudgeService(self)
+        self.extract = ImageVisualExtractService(self)
+        self.frame = ImageVisualFrameService(self)
+        self.video = ImageVideoService(self)
 
     async def _call_llm(self, *args, target_umo: str | None = None, **kwargs):
+        kwargs.setdefault("purpose", "image_prompt")
         if target_umo:
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)
@@ -138,6 +149,104 @@ class ImageService(ImageVisualService, ImageVideoService):
             path=str(image_path),
             description=prompt,
             contains_character=involves_self,
+        )
+
+    async def _assemble_final_prompt(
+        self, content, share_type, involves_self, visuals, target_umo=None
+    ):
+        return await self.prompts._assemble_final_prompt(
+            content, share_type, involves_self, visuals, target_umo
+        )
+
+    async def _append_self_visual_prompts(self, prompts, visuals, target_umo):
+        return await self.prompts._append_self_visual_prompts(
+            prompts, visuals, target_umo
+        )
+
+    @staticmethod
+    def _format_current_appearance(visuals):
+        return ImageVisualPromptService._format_current_appearance(visuals)
+
+    @staticmethod
+    def _append_subject_visual_prompts(prompts, visuals):
+        return ImageVisualPromptService._append_subject_visual_prompts(prompts, visuals)
+
+    def _append_environment_prompts(self, prompts, visuals):
+        return self.prompts._append_environment_prompts(prompts, visuals)
+
+    async def _get_appearance_keywords(self, target_umo=None):
+        """获取人设外貌。"""
+        return await self.persona._get_appearance_keywords(target_umo)
+
+    async def _get_persona_figure_keywords(self, target_umo=None):
+        return await self.persona._get_persona_figure_keywords(target_umo)
+
+    async def _check_involves_self(self, content, share_type, target_umo=None):
+        """检测内容是否涉及“自己”。"""
+        return await self.judge._check_involves_self(content, share_type, target_umo)
+
+    def _format_visual_extraction_frame(self, share_type=None, involves_self=False):
+        return self.extract._format_visual_extraction_frame(share_type, involves_self)
+
+    def _visual_extraction_system_prompt(self):
+        return self.extract._visual_extraction_system_prompt()
+
+    async def _agent_extract_visuals(
+        self,
+        content,
+        life_context,
+        share_type=None,
+        involves_self=False,
+        target_umo=None,
+    ):
+        """使用智能体一次性提取：主体、环境、光影、场景、天气温感、穿搭、动作。"""
+        return await self.extract._agent_extract_visuals(
+            content, life_context, share_type, involves_self, target_umo
+        )
+
+    @staticmethod
+    def _has_visual_subject(visuals):
+        return ImageVisualFrameService._has_visual_subject(visuals)
+
+    def _resolve_visual_mode(self, visuals, contains_character):
+        return self.frame._resolve_visual_mode(visuals, contains_character)
+
+    def _enforce_visual_mode(self, visuals, contains_character):
+        """固定人物、静物或风景模式，避免模型构图覆盖上游决策。"""
+        return self.frame._enforce_visual_mode(visuals, contains_character)
+
+    def _resolve_composition(self, visuals, involves_self):
+        return self.frame._resolve_composition(visuals, involves_self)
+
+    def _format_outfit_consistency_hint(self, visuals, frame_hint=""):
+        return self.frame._format_outfit_consistency_hint(visuals, frame_hint)
+
+    @staticmethod
+    def _normalize_video_design_value(value, limit=None):
+        return ImageVideoService._normalize_video_design_value(value, limit)
+
+    @staticmethod
+    def _normalize_video_dialogue(value):
+        return ImageVideoService._normalize_video_dialogue(value)
+
+    @staticmethod
+    def _compose_video_sound(dialogue, ambience):
+        return ImageVideoService._compose_video_sound(dialogue, ambience)
+
+    async def _build_video_design_prompts(
+        self, image_description, content="", target_umo=None
+    ):
+        """根据画面描述和文案一次性生成匹配的动态与声音提示词。"""
+        return await self.video._build_video_design_prompts(
+            image_description, content, target_umo
+        )
+
+    async def generate_video_from_image(
+        self, image_path, content, image_description="", target_umo=None, event=None
+    ):
+        """图片转视频"""
+        return await self.video.generate_video_from_image(
+            image_path, content, image_description, target_umo, event
         )
 
 

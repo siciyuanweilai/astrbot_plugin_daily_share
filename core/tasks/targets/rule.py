@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 from ...config import CRON_TEMPLATES
 from ...constants import canonical_share_type_sequence, normalize_share_type_sequence
 from ...platform import parse_platform_session
-from .adapterio import TaskTargetPlatformService
+
+if TYPE_CHECKING:
+    from . import TaskTargetService
 
 
-class TaskTargetConfigService(TaskTargetPlatformService):
+class TaskTargetConfigService:
+    def __init__(self, owner: TaskTargetService) -> None:
+        self.owner = owner
+
     def is_full_umo(self, value: str) -> bool:
         """判断是否为框架运行时使用的统一消息来源标识。"""
         return parse_platform_session(value) is not None
@@ -40,8 +49,8 @@ class TaskTargetConfigService(TaskTargetPlatformService):
 
         parsed = parse_platform_session(raw)
         if parsed:
-            target = self.normalize_target_umo(raw, expected_group=expected_group)
-            binding = self.ensure_target_platform_routable(
+            target = self.owner.normalize_target_umo(raw, expected_group=expected_group)
+            binding = self.owner.ensure_target_platform_routable(
                 (
                     f"{selected}:{parsed.message_type}:{parsed.session_id}"
                     if selected
@@ -61,7 +70,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
 
         if selected:
             try:
-                binding = self.select_target_platform_binding(
+                binding = self.owner.select_target_platform_binding(
                     session_id=raw,
                     expected_group=expected_group,
                     route_id=selected,
@@ -77,7 +86,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
                     return str(original_session)
                 raise
         else:
-            binding = self.select_target_platform_binding(
+            binding = self.owner.select_target_platform_binding(
                 session_id=raw,
                 expected_group=expected_group,
             )
@@ -100,11 +109,11 @@ class TaskTargetConfigService(TaskTargetPlatformService):
         """判断字符串是否像定时表达式、预设名或 HH:MM 时间。"""
         if not value:
             return False
-        if self.services.schedule.clock_time_to_cron(value):
+        if self.owner.services.schedule.clock_time_to_cron(value):
             return True
         return (
             value in CRON_TEMPLATES
-            or self.services.schedule.parse_cron_to_kwargs(
+            or self.owner.services.schedule.parse_cron_to_kwargs(
                 CRON_TEMPLATES.get(value, value)
             )
             is not None
@@ -113,7 +122,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
     def normalize_cron_value(self, value: str) -> str:
         """把更友好的 HH:MM 时间转换成定时表达式，其他定时表达式/预设保持原样。"""
         raw = str(value or "").strip()
-        return self.services.schedule.clock_time_to_cron(raw) or raw
+        return self.owner.services.schedule.clock_time_to_cron(raw) or raw
 
     def get_target_conf(
         self, target_umo: str, is_group: bool, r_groups: dict, r_users: dict
@@ -126,7 +135,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
         self, target_umo: str, is_group: bool
     ) -> bool:
         """个人微信适配器基于 openclaw-weixin，只支持一对一私聊。"""
-        return bool(is_group and self.ctx_service.is_weixin_platform(target_umo))
+        return bool(is_group and self.owner.ctx_service.is_weixin_platform(target_umo))
 
     def parse_targets_config(self, conf_list, *, expected_group: bool | None = None):
         """解析完整统一消息来源标识、独立定时和类型序列。"""
@@ -135,7 +144,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
         res = {}
         if isinstance(conf_list, list):
             for item in conf_list:
-                parsed = self._parse_target_config_item(
+                parsed = self.owner._parse_target_config_item(
                     item, expected_group=expected_group
                 )
                 if parsed:
@@ -148,10 +157,12 @@ class TaskTargetConfigService(TaskTargetPlatformService):
         if not text:
             return None
         parts = [part.strip() for part in text.split(":")]
-        has_config_suffix = len(parts) > 3 and self.looks_like_share_sequence(parts[-1])
-        if not has_config_suffix and self.is_full_umo(text):
+        has_config_suffix = len(parts) > 3 and self.owner.looks_like_share_sequence(
+            parts[-1]
+        )
+        if not has_config_suffix and self.owner.is_full_umo(text):
             try:
-                target_umo = self.normalize_target_umo(
+                target_umo = self.owner.normalize_target_umo(
                     text, expected_group=expected_group
                 )
             except ValueError as exc:
@@ -164,17 +175,17 @@ class TaskTargetConfigService(TaskTargetPlatformService):
                 "请填写 /sid 输出的完整会话标识"
             )
             return None
-        if not self.looks_like_share_sequence(parts[-1]):
+        if not self.owner.looks_like_share_sequence(parts[-1]):
             logger.warning(
                 f"[日常分享] 目标配置类型序列无效，已跳过: {text}。"
                 "请使用中文类型：问候、新闻、心情、知识、推荐。"
             )
             return None
-        target_id, cron_str = self._target_id_and_cron(parts)
+        target_id, cron_str = self.owner._target_id_and_cron(parts)
         if not target_id:
             return None
         try:
-            target_umo = self.normalize_target_umo(
+            target_umo = self.owner.normalize_target_umo(
                 target_id, expected_group=expected_group
             )
         except ValueError as exc:
@@ -182,15 +193,19 @@ class TaskTargetConfigService(TaskTargetPlatformService):
             return None
         return target_umo, {
             "cron": cron_str,
-            "seq": self.normalize_share_sequence(parts[-1]),
+            "seq": self.owner.normalize_share_sequence(parts[-1]),
         }
 
     def _target_id_and_cron(self, parts: list[str]) -> tuple[str, str | None]:
         clock_time = f"{parts[-3]}:{parts[-2]}" if len(parts) >= 4 else ""
-        if clock_time and self.services.schedule.clock_time_to_cron(clock_time):
-            return ":".join(parts[:-3]).strip(), self.normalize_cron_value(clock_time)
-        if len(parts) >= 3 and self.looks_like_cron(parts[-2]):
-            return ":".join(parts[:-2]).strip(), self.normalize_cron_value(parts[-2])
+        if clock_time and self.owner.services.schedule.clock_time_to_cron(clock_time):
+            return ":".join(parts[:-3]).strip(), self.owner.normalize_cron_value(
+                clock_time
+            )
+        if len(parts) >= 3 and self.owner.looks_like_cron(parts[-2]):
+            return ":".join(parts[:-2]).strip(), self.owner.normalize_cron_value(
+                parts[-2]
+            )
         return ":".join(parts[:-1]).strip(), None
 
     def get_broadcast_targets(
@@ -201,20 +216,24 @@ class TaskTargetConfigService(TaskTargetPlatformService):
         include_groups = scope in {"all", "groups", "group"}
         include_users = scope in {"all", "users", "user", "private"}
 
-        r_groups = self.parse_targets_config(
-            self.receiver_conf.get("groups", []), expected_group=True
+        r_groups = self.owner.parse_targets_config(
+            self.owner.receiver_conf.get("groups", []), expected_group=True
         )
-        r_users = self.parse_targets_config(
-            self.receiver_conf.get("users", []), expected_group=False
+        r_users = self.owner.parse_targets_config(
+            self.owner.receiver_conf.get("users", []), expected_group=False
         )
         targets = []
         if include_groups:
             targets.extend(
-                self._broadcast_target_entries(r_groups, True, exclude_custom_cron)
+                self.owner._broadcast_target_entries(
+                    r_groups, True, exclude_custom_cron
+                )
             )
         if include_users:
             targets.extend(
-                self._broadcast_target_entries(r_users, False, exclude_custom_cron)
+                self.owner._broadcast_target_entries(
+                    r_users, False, exclude_custom_cron
+                )
             )
         return targets
 
@@ -227,7 +246,7 @@ class TaskTargetConfigService(TaskTargetPlatformService):
                 exclude_custom_cron and isinstance(conf, dict) and conf.get("cron")
             ):
                 continue
-            if self.is_unsupported_weixin_group_target(target_id, is_group):
+            if self.owner.is_unsupported_weixin_group_target(target_id, is_group):
                 logger.warning(
                     f"[日常分享] 个人微信平台不支持群聊，已跳过广播目标: {target_id}"
                 )
@@ -238,14 +257,14 @@ class TaskTargetConfigService(TaskTargetPlatformService):
     def get_briefing_targets(self):
         """获取早报的独立广播目标，不填则不发"""
         targets = []
-        b_groups = self.parse_targets_config(
-            self.extra_shares_conf.get("briefing_groups", []), expected_group=True
+        b_groups = self.owner.parse_targets_config(
+            self.owner.extra_shares_conf.get("briefing_groups", []), expected_group=True
         )
-        b_users = self.parse_targets_config(
-            self.extra_shares_conf.get("briefing_users", []), expected_group=False
+        b_users = self.owner.parse_targets_config(
+            self.owner.extra_shares_conf.get("briefing_users", []), expected_group=False
         )
         for target_umo in b_groups:
-            if self.is_unsupported_weixin_group_target(target_umo, True):
+            if self.owner.is_unsupported_weixin_group_target(target_umo, True):
                 logger.warning(
                     f"[日常分享] 个人微信平台不支持群聊，已跳过早报群聊目标: {target_umo}"
                 )
