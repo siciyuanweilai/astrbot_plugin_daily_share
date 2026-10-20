@@ -24,6 +24,7 @@ from .sight import (
     _qzone_image_refs_descriptions,
     _qzone_image_vision_config,
 )
+from .tracker import QZONE_ACTION_COMMENTED, _post_alias_keys
 
 if TYPE_CHECKING:
     from ..qinteract import TaskQzoneAutoCommentService
@@ -277,6 +278,21 @@ class QzoneAutoPromptService:
                 post, comment, as_post_owner=as_post_owner, self_uin=self_uin
             ),
         ]
+        if not as_post_owner and isinstance(state, dict):
+            processed = state.get("processed")
+            if isinstance(processed, dict):
+                for key in _post_alias_keys(post):
+                    item = processed.get(key)
+                    if (
+                        isinstance(item, dict)
+                        and item.get("action") == QZONE_ACTION_COMMENTED
+                        and not item.get("submission_unknown")
+                        and (content := str(item.get("content") or "").strip())
+                    ):
+                        prompt_parts.insert(
+                            2, f"【Bot 已发送的主体评论】\n{content[:500]}"
+                        )
+                        break
         image_context = await _qzone_auto_reply_image_context(
             self.owner, comment, state=state, target_umo=target_umo, post=post
         )

@@ -5,7 +5,7 @@ from dataclasses import replace
 from astrbot.api import logger
 
 from ..candidate import _qzone_friend_thread_comment_candidates
-from ..comments import QzoneCommentIndex
+from ..comments import QzoneCommentIndex, _post_has_self_comment
 from ..errors import QzoneAutoInteractionRateLimited
 from ..receipt import record_qzone_interaction
 from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
@@ -248,6 +248,59 @@ async def _execute_qzone_auto_comment_thread_reply(
     return replied_post_keys
 
 
+async def _execute_qzone_auto_comment_replies(
+    owner,
+    posts: list,
+    ctx,
+    state: dict,
+    processed: dict,
+    result: dict,
+    *,
+    limit: int,
+    target_umo: str = "",
+    skip_post_keys: set[str],
+) -> None:
+    """概率回评独立扫描，不占用主体评论额度或修改其防重状态。"""
+    attempted: set[str] = set()
+    probability = _qzone_auto_config(owner).comment_reply_probability
+    for post in posts:
+        if result["commented"] >= limit:
+            break
+        batch_key = _photo_batch_key(post)
+        identity = batch_key or post.key
+        if (
+            identity in attempted
+            or post.comment_target_error
+            or (batch_key and not post.photo_batch_complete)
+        ):
+            continue
+        attempted.add(identity)
+        target = _qzone_auto_comment_reply_target(
+            owner,
+            _qzone_auto_comment_batch_posts(post, posts),
+            ctx,
+            processed,
+            probability=probability,
+            skip_post_keys=skip_post_keys,
+        )
+        if target is None:
+            continue
+        reply_post, reply_comment, item_key = target
+        result["scanned"] += 1
+        if await _execute_qzone_auto_comment_reply(
+            owner,
+            reply_post,
+            reply_comment,
+            item_key,
+            state,
+            processed,
+            result,
+            self_uin=ctx.uin,
+            target_umo=target_umo,
+        ):
+            break
+
+
 async def _submit_qzone_auto_comment(
     owner,
     post,
@@ -411,11 +464,7 @@ async def _execute_qzone_auto_comment_new_posts(
     engaged_batches = {
         _photo_batch_key(post)
         for post in posts
-        if _photo_batch_key(post)
-        and any(
-            int(getattr(comment, "uin", 0) or 0) == ctx.uin
-            for comment in getattr(post, "comments", []) or []
-        )
+        if _photo_batch_key(post) and _post_has_self_comment(post, ctx.uin)
     }
     attempted_batches: set[str] = set()
     for post in posts:
@@ -463,31 +512,6 @@ async def _execute_qzone_auto_comment_new_posts(
             continue
         if batch_key:
             attempted_batches.add(batch_key)
-        if not pending_comment:
-            target = _qzone_auto_comment_reply_target(
-                owner,
-                _qzone_auto_comment_batch_posts(post, posts),
-                ctx,
-                processed,
-                probability=_qzone_auto_config(owner).comment_reply_probability,
-                skip_post_keys=skip_post_keys,
-            )
-            if target:
-                reply_post, reply_comment, item_key = target
-                paused = await _execute_qzone_auto_comment_reply(
-                    owner,
-                    reply_post,
-                    reply_comment,
-                    item_key,
-                    state,
-                    processed,
-                    result,
-                    self_uin=ctx.uin,
-                    target_umo=target_umo,
-                )
-                if paused:
-                    break
-                continue
         if batch_key and batch_key in engaged_batches:
             result["skipped"] += 1
             continue
@@ -548,6 +572,7 @@ async def execute_qzone_auto_comment_task(
     )
     if not ready:
         return result
+    state["processed"] = processed
 
     try:
         ctx = await owner.plugin.qzone_service.context()
@@ -586,6 +611,7 @@ async def execute_qzone_auto_comment_task(
         target_umo=target_umo,
     )
 
+    thread_reply_count = result["commented"]
     if not _qzone_result_rate_limited(result):
         await _execute_qzone_auto_comment_new_posts(
             owner,
@@ -594,7 +620,22 @@ async def execute_qzone_auto_comment_task(
             state,
             processed,
             result,
-            limit=limit,
+            limit=thread_reply_count + limit,
+            target_umo=target_umo,
+            skip_post_keys=thread_replied_post_keys,
+        )
+
+    if not _qzone_result_rate_limited(result):
+        # 主体评论先发送；概率回评可读取本轮已确认发送的正文。
+        main_comment_count = result["commented"] - thread_reply_count
+        await _execute_qzone_auto_comment_replies(
+            owner,
+            posts,
+            ctx,
+            state,
+            processed,
+            result,
+            limit=main_comment_count + limit,
             target_umo=target_umo,
             skip_post_keys=thread_replied_post_keys,
         )

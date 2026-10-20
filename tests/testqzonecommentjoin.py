@@ -5,7 +5,7 @@ import time
 import types
 import unittest
 from dataclasses import replace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 
 from .testqzonecomment import _interaction_args, _load_auto_comment_module
 
@@ -83,7 +83,11 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
         self.service.reply_comment.assert_awaited_once_with(
             self.post.key, self.comment, "我也想去看看", parent_comment=None
         )
-        self.assertEqual(self.processed[self.post.key]["action"], "comment_replied")
+        self.assertEqual(self.processed[self.post.key]["action"], "commented")
+        self.assertEqual(
+            self.processed[f"comment-reply:{self.post.key}"]["action"],
+            "comment_replied",
+        )
         self.assertEqual(self.processed["3:new:42"]["action"], "comment_replied")
         self.assertFalse(
             self.manager._generate_qzone_auto_reply.call_args.kwargs["as_post_owner"]
@@ -169,23 +173,117 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
         self.service.reply_comment.assert_not_awaited()
         self.manager._generate_qzone_auto_reply.assert_not_awaited()
 
-    async def test_probability_hit_uses_one_reply_within_comment_limit(self):
+    async def test_probability_hit_keeps_main_comment_with_independent_limits(self):
         self.manager.config.qzone["qzone_auto_comment_reply_probability"] = 30
         self.service.query_recent_posts.return_value.append(
             replace(self.post, tid="another")
         )
         with patch.object(self.discuss.random, "random", return_value=0.29):
             result = await self.run_task()
-        self.assertEqual(result["commented"], 1)
+        self.assertEqual(result["commented"], 2)
         self.service.reply_comment.assert_awaited_once()
-        self.service.comment.assert_not_awaited()
+        self.service.comment.assert_awaited_once_with(self.post.key, "听起来不错")
+        self.assertEqual(self.service.reply_comment.call_args.args[0], self.post.key)
+        self.assertEqual(self.processed[self.post.key]["action"], "commented")
+        self.assertEqual(
+            self.processed[f"comment-reply:{self.post.key}"]["action"],
+            "comment_replied",
+        )
+
+    async def test_same_post_main_comment_and_reply_deduplicate_independently(self):
+        first = await self.run_task()
+        second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (2, 0))
+        self.service.comment.assert_awaited_once()
+        self.service.reply_comment.assert_awaited_once()
+
+    async def test_main_comment_is_sent_before_reply_generation_and_submission(self):
+        actions = Mock()
+        actions.attach_mock(self.service.comment, "comment")
+        actions.attach_mock(self.manager._generate_qzone_auto_reply, "generate_reply")
+        actions.attach_mock(self.service.reply_comment, "reply")
+        await self.run_task()
+        self.assertEqual(
+            [item[0] for item in actions.mock_calls],
+            ["comment", "generate_reply", "reply"],
+        )
+
+    async def test_reply_prompt_uses_confirmed_main_comment_after_punctuation_cleanup(
+        self,
+    ):
+        self.manager._generate_qzone_auto_reply = (
+            self.manager.dialogue._generate_qzone_auto_reply
+        )
+        self.manager._qzone_auto_life_context_prompt = AsyncMock(return_value="")
+        self.manager.plugin.daily_life_bridge = types.SimpleNamespace(
+            clean_expression_punctuation=AsyncMock(return_value="听起来不错呀")
+        )
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 2)
+        self.service.comment.assert_awaited_once_with(self.post.key, "听起来不错呀")
+        prompt = self.manager.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("【Bot 已发送的主体评论】\n听起来不错呀", prompt)
+        self.assertIn(self.post.text, prompt)
+        self.assertIn(self.comment.content, prompt)
+
+    async def test_failed_main_comment_is_not_presented_as_sent_in_reply_prompt(self):
+        self.manager._generate_qzone_auto_reply = (
+            self.manager.dialogue._generate_qzone_auto_reply
+        )
+        self.manager._qzone_auto_life_context_prompt = AsyncMock(return_value="")
+        self.service.comment.side_effect = RuntimeError("提交失败")
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        prompt = self.manager.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertNotIn("【Bot 已发送的主体评论】", prompt)
+
+    async def test_reply_generation_failure_does_not_cancel_main_comment(self):
+        self.manager._generate_qzone_auto_reply.side_effect = RuntimeError("生成失败")
+        result = await self.run_task()
+        self.assertEqual((result["commented"], result["generation_failed"]), (1, 1))
+        self.service.comment.assert_awaited_once_with(self.post.key, "听起来不错")
+        self.service.reply_comment.assert_not_awaited()
+
+    async def test_empty_reply_does_not_mark_main_comment_processed(self):
+        self.manager._generate_qzone_auto_reply.return_value = ""
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        self.service.comment.assert_awaited_once()
+        self.assertEqual(self.processed[self.post.key]["action"], "commented")
+
+    async def test_main_comment_failure_retries_without_repeating_successful_reply(
+        self,
+    ):
+        self.service.comment.side_effect = RuntimeError("提交失败")
+        first = await self.run_task()
+        self.service.comment.side_effect = None
+        second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (1, 1))
+        self.assertEqual(self.service.comment.await_count, 2)
+        self.service.reply_comment.assert_awaited_once()
+
+    async def test_legacy_reply_record_allows_missing_main_comment_without_rejoining(
+        self,
+    ):
+        self.manager.db.state[self.module.QZONE_AUTO_COMMENT_STATE_KEY] = {
+            "processed": {
+                self.post.key: {"at": int(time.time()), "action": "comment_replied"}
+            }
+        }
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        self.post.comments.append(replace(self.comment, tid="43", uin=5))
+        second = await self.run_task()
+        self.assertEqual(second["commented"], 0)
+        self.service.comment.assert_awaited_once()
+        self.service.reply_comment.assert_not_awaited()
 
     async def test_rate_limit_reuses_cached_reply_and_target_without_reroll(self):
         self.service.reply_comment.side_effect = RuntimeError(
             "操作过于频繁，请稍后再试"
         )
         first = await self.run_task()
-        self.assertEqual(first["commented"], 0)
+        self.assertEqual(first["commented"], 1)
         self.assertEqual(self.processed["3:new:42"]["action"], "retry_later")
         self.manager.config.qzone["qzone_auto_comment_reply_probability"] = 0
         self.post.comments.append(
@@ -200,7 +298,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
         self.manager._generate_qzone_auto_reply.assert_awaited_once()
         self.assertEqual(self.service.reply_comment.await_count, 2)
         self.assertIs(self.service.reply_comment.call_args.args[1], self.comment)
-        self.service.comment.assert_not_awaited()
+        self.service.comment.assert_awaited_once_with(self.post.key, "听起来不错")
 
     async def test_nested_self_missing_id_and_replied_comments_are_excluded(self):
         cases = [
@@ -293,6 +391,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
             replace(self.post, tid="another", comments=[self.comment])
         )
         self.service.reply_comment.reset_mock()
+        self.service.comment.reset_mock()
         self.manager._generate_qzone_auto_reply.reset_mock()
         self.service.reply_comment.side_effect = RuntimeError(
             "操作过于频繁，请稍后再试"
@@ -320,6 +419,65 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
             )
             for number in (1, 2)
         ]
+
+    async def test_album_batch_can_comment_and_reply_to_second_photo_in_same_run(self):
+        posts = self.album_posts()
+        self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
+        actions = Mock()
+        actions.attach_mock(self.service.comment, "comment")
+        actions.attach_mock(self.service.reply_comment, "reply")
+        first = await self.run_task()
+        second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (2, 0))
+        self.service.comment.assert_awaited_once_with(posts[0].key, "这组照片不错")
+        self.service.reply_comment.assert_awaited_once_with(
+            posts[1].key, self.comment, "我也想去看看", parent_comment=None
+        )
+        self.assertEqual(
+            actions.mock_calls,
+            [
+                call.comment(posts[0].key, "这组照片不错"),
+                call.reply(
+                    posts[1].key, self.comment, "我也想去看看", parent_comment=None
+                ),
+            ],
+        )
+
+    async def test_album_reply_prompt_includes_main_comment_on_another_photo(self):
+        posts = self.album_posts()
+        self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
+        self.manager._generate_qzone_auto_reply = (
+            self.manager.dialogue._generate_qzone_auto_reply
+        )
+        self.manager._qzone_auto_life_context_prompt = AsyncMock(return_value="")
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 2)
+        self.assertIn(
+            "【Bot 已发送的主体评论】\n这组照片不错",
+            self.manager.plugin.call_llm.await_args.kwargs["prompt"],
+        )
+
+    async def test_album_existing_bot_thread_reply_does_not_block_main_comment(self):
+        posts = self.album_posts()
+        posts[1].comments.append(
+            self.models.QzoneComment(
+                uin=1, tid="bot", parent_tid="42", content="答过了"
+            )
+        )
+        self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        self.service.comment.assert_awaited_once_with(posts[0].key, "这组照片不错")
+        self.service.reply_comment.assert_not_awaited()
 
     async def test_album_second_photo_comment_uses_real_photo_reply_transport(self):
         from .testqzone import _load_qzone_service, _new_qzone_service
@@ -358,15 +516,18 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
     async def test_album_unknown_submission_stops_entire_batch_retry(self):
         posts = self.album_posts()
         self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
         error = RuntimeError("提交状态未知")
         error.submission_unknown = True
         self.service.reply_comment.side_effect = error
         first = await self.run_task()
         posts[0].comments.append(replace(self.comment, tid="43", uin=5))
         second = await self.run_task()
-        self.assertEqual((first["commented"], second["commented"]), (0, 0))
+        self.assertEqual((first["commented"], second["commented"]), (1, 0))
         self.service.reply_comment.assert_awaited_once()
-        self.service.comment.assert_not_awaited()
+        self.service.comment.assert_awaited_once_with(posts[0].key, "这组照片不错")
 
     def test_album_private_or_wrong_photo_comments_are_excluded(self):
         post = self.album_posts()[1]

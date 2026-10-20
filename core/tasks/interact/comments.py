@@ -93,7 +93,7 @@ class QzoneCommentIndex:
                 by_reply_to_tid.setdefault(reply_to_tid, []).append(comment)
                 if self_uin and uin == self_uin:
                     self_replies_by_target.setdefault(reply_to_tid, []).append(comment)
-            elif self_uin and uin == self_uin:
+            elif not parent_tid and self_uin and uin == self_uin:
                 self_comments.append(comment)
 
         return cls(

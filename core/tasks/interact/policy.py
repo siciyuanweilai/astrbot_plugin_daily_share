@@ -18,13 +18,11 @@ from .formatting import _qzone_post_plain_text
 from .tracker import (
     QZONE_ACTION_COMMENT_REPLIED,
     QZONE_ACTION_RETRY_LATER,
-    QZONE_ACTION_SKIPPED,
     _comment_key,
-    _post_alias_keys,
     _post_key,
+    _qzone_comment_reply_post_action,
     _qzone_like_post_processed_action,
     _qzone_post_processed_action,
-    _qzone_processed_action,
     _qzone_processed_thread_has_self_reply,
 )
 
@@ -90,7 +88,9 @@ class QzoneAutoPolicyService:
         post_key = str(getattr(post, "key", "") or "").strip()
         processed_action = _qzone_post_processed_action(processed, post)
         if not post_key or (
-            processed_action and processed_action != QZONE_ACTION_RETRY_LATER
+            processed_action
+            and processed_action
+            not in {QZONE_ACTION_RETRY_LATER, QZONE_ACTION_COMMENT_REPLIED}
         ):
             return False
         if not self.owner._qzone_auto_post_in_active_window(post):
@@ -131,11 +131,7 @@ class QzoneAutoPolicyService:
             return False
         if int(getattr(post, "uin", 0) or 0) in {0, int(self_uin or 0)}:
             return False
-        if any(
-            _qzone_processed_action(processed, key)
-            in {QZONE_ACTION_COMMENT_REPLIED, QZONE_ACTION_SKIPPED}
-            for key in _post_alias_keys(post)
-        ):
+        if _qzone_comment_reply_post_action(processed, post):
             return False
         if (
             str(getattr(comment, "parent_tid", "") or "").strip()

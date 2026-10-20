@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.9-ef6f8f" alt="版本 1.1.9"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.0-ef6f8f" alt="版本 1.2.0"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.1.9 版本更新**：新增概率直接回复好友说说、相册中其他用户的评论，并结合动态与评论上下文接话，完善图片与视频任务恢复。详见 [更新日志](./CHANGELOG.md)。
+> **v1.2.0 版本更新**：QQ 空间主体评论与概率回评独立运行，先发主体评论，再结合实际已发送内容和评论楼上下文接话；完善两类动作的独立计数、防重与旧记录兼容。详见 [更新日志](./CHANGELOG.md)。
 
 ---
 
@@ -182,7 +182,7 @@
 | 语音 | 适用于问候、心情等允许类型，可配置仅发送语音 |
 | 个人微信图片 | 使用独立发送副本，适配个人微信发送要求 |
 
-媒体生成失败时继续发送其余可用内容；已受理的异步任务会等待原任务结果，超时或重载后可续接。只有确认送达后才记入成功历史并回传活动与记忆，详见[媒体任务与恢复]。
+媒体生成失败时继续发送其余可用内容；已受理的异步任务会等待原任务结果，超时或重载后可续接。只有确认送达后才记入成功历史并回传活动与记忆，详见[与 daily_life 联动](#daily-life)。
 
 ## 🧭 平台与目标
 
@@ -214,11 +214,11 @@
 
 - **先看内容再接话**：带图动态可使用视觉模型识别，已识别内容可供后续回评复用。
 - **多图不刷屏**：同批照片通常综合生成一条评论，内容聚焦某张照片时提交到对应照片。
-- **概率回复其他用户**：支持 0–100%，默认 0% 关闭；命中时回复有效一级评论，本轮不再另发主体评论，并计入评论数量上限。
+- **概率回复其他用户**：支持 0–100%，0% 关闭；与主体评论独立判断、防重和计数。同一条说说或相册动态需要两者时，先发表主体评论，再结合已发送的主体评论与动态、楼层上下文生成回评。两类动作分别受“评论数量”上限约束，设为 1 时最多各发 1 条。
 - **延续已有交流**：好友明确回复或 @ 机器人后可继续接话，按动态、照片和评论楼层防重。
 - **谨慎处理不确定结果**：目标、权限、楼层或提交结果无法确认时跳过或停止自动重试。
 
-daily_life 可提供公开场景的表达习惯与对象称呼，不导入私聊摘要、备忘录或约定。GIF 与完整视频识别条件、相册评论规则及排障见 [QQ 空间使用说明]。
+daily_life 可提供公开场景的表达习惯与对象称呼，不导入私聊摘要、备忘录或约定。
 
 ## 🪄 自然语言工具
 
@@ -341,7 +341,7 @@ python -m ruff format --check .
 
 测试覆盖配置、指令、新闻、调度、多平台路由、权限、媒体、QQ 空间、仪表盘和生命周期。测试模块隔离运行，`python -m tests` 汇总实际用例数，`pytest` 每个模块显示一个测试项。
 
-可用 `python -m tests tests.testauditfixes` 单独运行缺陷回归；跨插件媒体、缓存和目标隔离验证见[开发验证说明]。测试中的模型请求和最终消息传输使用替身，不产生实际调用或消息。
+可用 `python -m tests tests.testauditfixes` 单独运行缺陷回归，或用 `python -m tests tests.testqzonecommentjoin` 验证概率回评、执行顺序与独立防重。测试中的模型请求和最终消息传输使用替身，不产生实际调用或消息。
 
 ## 📜 许可证
 

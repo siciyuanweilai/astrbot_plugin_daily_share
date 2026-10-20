@@ -21,6 +21,7 @@ QZONE_AUTO_REPLY_DEFAULT_COOLDOWN_HOURS = 168
 QZONE_ACTION_SKIPPED = "skipped"
 QZONE_ACTION_COMMENTED = "commented"
 QZONE_ACTION_COMMENT_REPLIED = "comment_replied"
+QZONE_COMMENT_REPLY_POST_PREFIX = "comment-reply:"
 QZONE_ACTION_THREAD_COMMENTED = "thread_commented"
 QZONE_ACTION_LIKED = "liked"
 QZONE_ACTION_REPLIED = "replied"
@@ -120,11 +121,21 @@ def _mark_qzone_processed(
 
 
 def _mark_qzone_post_processed(
-    processed: dict, post, action: str, **fields: Any
+    processed: dict, post, action: str, *, key_prefix: str = "", **fields: Any
 ) -> None:
-    keys = _post_alias_keys(post)
+    keys = [key_prefix + key for key in _post_alias_keys(post)]
     if not keys:
         return
+    if not key_prefix:
+        for key in keys:
+            previous = processed.get(key)
+            if (
+                isinstance(previous, dict)
+                and previous.get("action") == QZONE_ACTION_COMMENT_REPLIED
+            ):
+                processed.setdefault(
+                    QZONE_COMMENT_REPLY_POST_PREFIX + key, dict(previous)
+                )
     primary_key = keys[0]
     alias_keys = keys[1:]
     payload_fields = {"post_alias_keys": alias_keys, **fields}
@@ -147,6 +158,22 @@ def _qzone_post_processed_action(processed: dict, post) -> str:
         action = _qzone_processed_action(processed, key)
         if action:
             return action
+    return ""
+
+
+def _qzone_comment_reply_post_action(processed: dict, post) -> str:
+    for key in _post_alias_keys(post):
+        action = _qzone_processed_action(
+            processed, QZONE_COMMENT_REPLY_POST_PREFIX + key
+        )
+        if action:
+            return action
+        # 兼容此前与主体评论共用的回评记录，防止升级后重复参与。
+        if _qzone_processed_action(processed, key) == QZONE_ACTION_COMMENT_REPLIED:
+            return QZONE_ACTION_COMMENT_REPLIED
+        item = processed.get(key)
+        if isinstance(item, dict) and item.get("submission_unknown"):
+            return QZONE_ACTION_SKIPPED
     return ""
 
 

@@ -51,6 +51,7 @@ from .interact.totals import (
 from .interact.tracker import (
     QZONE_ACTION_RETRY_LATER,
     QZONE_ACTION_SKIPPED,
+    QZONE_COMMENT_REPLY_POST_PREFIX,
     _mark_qzone_post_processed,
     _mark_qzone_processed,
 )
@@ -186,6 +187,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
                     processed,
                     post,
                     action,
+                    key_prefix=QZONE_COMMENT_REPLY_POST_PREFIX,
                     comment_id=str(getattr(comment, "tid", "") or ""),
                 )
 
@@ -235,6 +237,10 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
                     **fields,
                 )
                 mark_post(QZONE_ACTION_SKIPPED)
+                if processed_post_action:
+                    _mark_qzone_post_processed(
+                        processed, post, QZONE_ACTION_SKIPPED, submission_unknown=True
+                    )
                 result["skipped"] += 1
                 await checkpoint_qzone_action(self, state_key, state, processed, result)
                 logger.warning(

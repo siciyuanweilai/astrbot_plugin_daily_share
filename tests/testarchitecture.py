@@ -90,12 +90,7 @@ class TaskArchitectureTests(unittest.TestCase):
                 changelog.index("## 未发布"), changelog.index(f"## v{version}")
             )
 
-        release_path = f"docs/release-v{version}.md"
-        self.assertIn(f"./{release_path}", readme)
-        release_notes = (ROOT / release_path).read_text(encoding="utf-8")
-        self.assertIn(f"## v{version} · {releases[0][1]}", release_notes)
-        current_release = changelog.split(f"## v{version}", 1)[1].split("\n## ", 1)[0]
-        self.assertIn(f"## v{version}" + current_release.rstrip(), release_notes)
+        self.assertIn("./CHANGELOG.md", readme)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")

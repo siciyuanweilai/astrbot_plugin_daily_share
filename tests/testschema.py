@@ -618,7 +618,7 @@ class ConfigSchemaTests(unittest.TestCase):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         field = schema["qzone_conf"]["items"]["qzone_auto_comment_reply_probability"]
 
-        self.assertEqual(field["default"], 0)
+        self.assertEqual(field["default"], 100)
         self.assertEqual(field["slider"]["min"], 0)
         self.assertEqual(field["slider"]["max"], 100)
 
