@@ -45,7 +45,7 @@ function createRelationItem(item = {}) {
   link.href = text(item.home).trim() || `https://user.qzone.qq.com/${encodeURIComponent(text(item.uin).trim())}`;
   link.target = "_blank";
   link.rel = "noreferrer";
-  link.title = `${friendName(item)} (${text(item.uin).trim()})`;
+  link.setAttribute("aria-label", `${friendName(item)} (${text(item.uin).trim()})`);
 
   const avatar = document.createElement("span");
   avatar.className = "qzone-relation-avatar";

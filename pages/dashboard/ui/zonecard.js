@@ -53,7 +53,6 @@ function createSocialButton({ action, postId: id, icon, label, count = 0, active
   button.dataset.qzoneAction = action;
   button.dataset.postId = id;
   button.setAttribute("aria-label", label);
-  button.title = label;
   button.append(qzoneIcon(icon));
   const value = document.createElement("span");
   value.className = "qzone-social-count";

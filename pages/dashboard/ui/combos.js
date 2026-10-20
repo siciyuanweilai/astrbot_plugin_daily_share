@@ -89,7 +89,6 @@ export function createSweetComboControls({
     item.role = "option";
     item.tabIndex = -1;
     item.setAttribute("aria-selected", option.value === input.value ? "true" : "false");
-    item.title = subtitle ? `${label}\n${subtitle}` : label;
     item.classList.toggle("is-selected", option.value === input.value);
     item.classList.toggle("is-clear", !option.value);
     title.textContent = label;
