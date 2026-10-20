@@ -385,6 +385,25 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 async def generate_life_video_asset(self, event, prompt, reference_image=''):
                     return types.SimpleNamespace(url=f'video://{{prompt}}')
 
+                async def generate_share_image_task(self, event, prompt, *, task_key, contains_character=False, target_umo=''):
+                    assert target_umo == 'bot-test:FriendMessage:user-test-a'
+                    assert task_key == 'contract:image'
+                    return {{'status': 'ready', 'path': 'original.png'}}
+
+                async def generate_share_video_task(self, event, prompt, *, task_key, reference_image='', target_umo=''):
+                    assert target_umo == 'bot-test:FriendMessage:user-test-a'
+                    assert task_key == 'contract:video'
+                    assert reference_image == 'original.png'
+                    return {{'status': 'pending'}}
+
+                async def get_share_image_task(self, task_key):
+                    assert task_key == 'contract:image'
+                    return {{'status': 'failed', 'error': '原通道已确认失败'}}
+
+                async def get_share_video_task(self, task_key):
+                    assert task_key == 'contract:video'
+                    return {{'status': 'ready', 'url': 'original.mp4'}}
+
             async def run():
                 plugin = DailyLifePlugin(types.SimpleNamespace(), {{}})
                 plugin.runtime = Runtime()
@@ -469,6 +488,27 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     emotion='自然讲述',
                     emotion_category='neutral',
                 ) == 'voice://语音文本'
+                from daily_share_contract.core.integrations.mediajob import current_share_job, ShareMediaPending
+
+                async def save(job):
+                    pass
+
+                job = {{'id': 'contract', 'params': {{'uid': target}}, 'service': types.SimpleNamespace(save=save)}}
+                token = current_share_job.set(job)
+                try:
+                    assert await bridge.generate_image(None, '原图') == 'original.png'
+                    try:
+                        await bridge.generate_video(None, '原视频', reference_image='original.png')
+                    except ShareMediaPending:
+                        pass
+                    else:
+                        raise AssertionError('pending video must wait')
+                    assert await bridge.generate_video(None, '不应重提') == 'original.mp4'
+                    assert bridge.media_result('video') == ('ok', '')
+                    assert (await bridge.get_image_task('contract:image'))['error'] == '原通道已确认失败'
+                    assert plugin._external_users == 0
+                finally:
+                    current_share_job.reset(token)
 
             asyncio.run(run())
             """

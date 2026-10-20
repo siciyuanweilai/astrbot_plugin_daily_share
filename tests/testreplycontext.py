@@ -75,7 +75,11 @@ class ReplyContextTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reply_and_thread_reuse_original_image_without_calling_vision(self):
         keys = self.sight._qzone_image_vision_cache_keys(
-            self.post, self.post.images[0], index=1, total=1, scope="正文配图"
+            self.post,
+            self.post.images[0],
+            index=1,
+            total=1,
+            scope="正文配图",
         )
         self.owner.db.state[self.sight.QZONE_AUTO_COMMENT_STATE_KEY] = {
             "processed": {"unrelated": "must not copy"},
@@ -137,6 +141,211 @@ class ReplyContextTests(unittest.IsolatedAsyncioTestCase):
         await self.owner._generate_qzone_auto_reply(self.post, self.question, state={})
         self.context.llm_generate.assert_not_awaited()
         self.owner.plugin.daily_life_bridge.describe_video.assert_not_awaited()
+
+    async def test_join_root_keeps_post_own_floor_and_bots_previous_conversation(self):
+        comment = self.models.QzoneComment
+        target = comment(
+            uin=89761500,
+            nickname="四次元未来",
+            tid="1",
+            raw_tid="1",
+            raw_reply_to_tid="1",
+            content="没啥好吃的，建议别吃了，还能省钱",
+            create_time=100,
+        )
+        owner_reply = comment(
+            uin=897537513,
+            nickname="会好起来的",
+            tid="1_r_1_897537513",
+            raw_tid="1",
+            parent_tid="1",
+            reply_to_nickname="四次元未来",
+            content="@{uin:89761500,nick:四次元未来,auto:1} 测试",
+            create_time=500,
+        )
+        bot_root = comment(
+            uin=188852752,
+            nickname="李知恬",
+            tid="2",
+            raw_tid="2",
+            raw_reply_to_tid="2",
+            content="路口那家转角肠粉好像还没收摊 要不去看一眼",
+            create_time=200,
+        )
+        visitor_reply = comment(
+            uin=89761500,
+            nickname="四次元未来",
+            tid="2_r_1_89761500",
+            raw_tid="1",
+            parent_tid="2",
+            reply_to_nickname="李知恬",
+            content="@{uin:188852752,nick:李知恬,auto:1}你请我吃的话，我就去看下",
+            create_time=300,
+        )
+        bot_reply = comment(
+            uin=188852752,
+            nickname="李知恬",
+            tid="2_r_2_188852752",
+            raw_tid="2",
+            parent_tid="2",
+            reply_to_nickname="四次元未来",
+            content="@{uin:89761500,nick:四次元未来,auto:1} 想得倒美 肠粉没有 白开水管够",
+            create_time=400,
+        )
+        unrelated = comment(uin=5, tid="3", content="这条不相关的楼不应混入")
+        post = self.models.QzonePost(
+            uin=897537513,
+            name="会好起来的",
+            tid="post",
+            text="今晚吃啥好呢？大家有推荐吗？",
+            comments=[
+                target,
+                owner_reply,
+                bot_root,
+                visitor_reply,
+                bot_reply,
+                unrelated,
+            ],
+        )
+        await self.owner._generate_qzone_auto_reply(
+            post, target, as_post_owner=False, self_uin=188852752
+        )
+        request = self.owner.plugin.call_llm.await_args.kwargs
+        prompt = request["prompt"]
+        for text in (
+            post.text,
+            "目标评论楼中已有对话",
+            "回复 四次元未来",
+            "测试",
+            "同一动态的其他相关评论楼",
+            "路口那家转角肠粉好像还没收摊",
+            "你请我吃的话，我就去看下",
+            "想得倒美",
+            "肠粉没有",
+            "白开水管够",
+            "你（Bot）· 李知恬",
+            f"对方评论：{target.content}",
+        ):
+            self.assertIn(text, prompt)
+        self.assertNotIn(unrelated.content, prompt)
+        self.assertNotIn("@{", prompt)
+        own_floor, other_floors = prompt.split("同一动态的其他相关评论楼", 1)
+        self.assertNotIn("转角肠粉", own_floor)
+        self.assertIn("转角肠粉", other_floors)
+        self.assertLess(prompt.index("白开水管够"), prompt.index("对方评论："))
+        self.owner.plugin.call_llm.assert_awaited_once()
+        self.context.llm_generate.assert_not_awaited()
+
+    async def test_reply_context_bounds_history_and_prioritizes_bot_with_target_user(
+        self,
+    ):
+        comment = self.models.QzoneComment
+        target = comment(uin=2, tid="target", content="目标问题")
+        own_floor = [
+            comment(
+                uin=3,
+                tid=f"reply{i}",
+                parent_tid="target",
+                content=f"同楼{i}：" + "长" * 300,
+                create_time=i,
+            )
+            for i in range(10)
+        ]
+        bot_roots = [
+            comment(uin=1, tid=f"bot{i}", content=f"本人楼{i}", create_time=i)
+            for i in range(5)
+        ]
+        actor_reply = comment(
+            uin=2, tid="actor", parent_tid="bot0", content="与目标用户的旧对话"
+        )
+        post = self.models.QzonePost(
+            uin=9, tid="post", comments=[target, *own_floor, *bot_roots, actor_reply]
+        )
+        await self.owner._generate_qzone_auto_reply(
+            post, target, as_post_owner=False, self_uin=1
+        )
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertNotIn("同楼3：", prompt)
+        self.assertIn("同楼4：", prompt)
+        self.assertIn("同楼9：", prompt)
+        self.assertNotIn("长" * 121, prompt)
+        self.assertEqual(prompt.count("同一动态的其他相关评论楼"), 2)
+        self.assertIn("本人楼0", prompt)
+        self.assertIn("与目标用户的旧对话", prompt)
+        self.assertIn("本人楼4", prompt)
+        self.assertNotIn("本人楼3", prompt)
+
+    async def test_own_post_reply_infers_bot_identity_without_extra_queries(self):
+        self.post.images = []
+        self.post.uin = 1
+        self.root.uin = 2
+        self.question.uin = 1
+        self.question.nickname = "Bot"
+        self.post.comments = [self.root, self.question]
+        await self.owner._generate_qzone_auto_reply(self.post, self.root)
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("我的说说", prompt)
+        self.assertIn("你（Bot）· Bot", prompt)
+        self.owner.plugin.call_llm.assert_awaited_once()
+
+    async def test_album_reply_context_keeps_private_comments_out(self):
+        comment = self.models.QzoneComment
+        target = comment(uin=2, tid="42", content="照片中的这家店在哪里")
+        private_root = comment(
+            uin=1, tid="43", content="私密楼内容", raw_fields={"photo_private": 1}
+        )
+        private_child = comment(
+            uin=3,
+            tid="44",
+            parent_tid="42",
+            content="私密回复内容",
+            raw_fields={"photo_private": "1"},
+        )
+        public_child = comment(
+            uin=1, tid="45", parent_tid="42", content="之前发过的店名"
+        )
+        post = self.models.QzonePost(
+            uin=9,
+            tid="album",
+            appid=4,
+            comments=[target, private_root, private_child, public_child],
+        )
+        await self.owner._generate_qzone_auto_reply(
+            post, target, as_post_owner=False, self_uin=1
+        )
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("相册照片", prompt)
+        self.assertIn(public_child.content, prompt)
+        self.assertNotIn(private_root.content, prompt)
+        self.assertNotIn(private_child.content, prompt)
+
+    def test_thread_context_resolves_stable_ids_before_colliding_short_aliases(self):
+        lineage = importlib.import_module(
+            f"{CORE_PACKAGE_NAME}.tasks.interact.text.lineage"
+        )
+        comment = self.models.QzoneComment
+        root1 = comment(tid="1", raw_tid="1", raw_reply_to_tid="1")
+        root2 = comment(tid="2", raw_tid="2", raw_reply_to_tid="2")
+        child1 = comment(tid="1_r_2_3", raw_tid="2", parent_tid="1")
+        child2 = comment(tid="2_r_1_3", raw_tid="1", parent_tid="2")
+        nested = comment(tid="nested", parent_tid=child1.tid)
+        comments = [root1, child1, root2, child2, nested]
+        result = lineage._qzone_same_thread_comments(comments, root1)
+        self.assertEqual(
+            [item.tid for _index, item in result], [child1.tid, nested.tid]
+        )
+
+    def test_thread_context_omits_ambiguous_aliases(self):
+        lineage = importlib.import_module(
+            f"{CORE_PACKAGE_NAME}.tasks.interact.text.lineage"
+        )
+        comment = self.models.QzoneComment
+        root = comment(tid="root", raw_tid="1")
+        other = comment(tid="other", raw_tid="1")
+        unknown = comment(tid="child", parent_tid="1")
+        self.assertEqual(
+            lineage._qzone_same_thread_comments([root, other, unknown], root), []
+        )
 
     async def test_model_failure_order_for_transient_permanent_and_empty_results(self):
         for error in (

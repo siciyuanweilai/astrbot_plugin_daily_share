@@ -70,6 +70,7 @@ class TaskNewsCacheStoreService:
                 f"{record['source_name']} {len(record['items'])} 条 "
                 f"(#{snapshot.get('snapshot_id')})"
             )
+            self.owner.invalidate_news_context_prompt(target)
             return True
         except Exception as e:
             logger.warning(f"[日常分享] 提交已发送新闻快照失败: {e}")

@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 
 from ..constants import TYPE_CN_MAP
 from ..database.keys import (
@@ -6,6 +7,7 @@ from ..database.keys import (
     GLOBAL_TARGET_ID,
     QZONE_TARGET_ID,
 )
+from ..integrations.mediajob import current_share_job
 from .taskbase import TaskServiceBase
 
 
@@ -110,7 +112,7 @@ class TaskProgressService(TaskServiceBase):
     ) -> str:
         seq = self.state.share_progress_seq + 1
         self.state.share_progress_seq = seq
-        job_id = f"share-{seq}"
+        job_id = f"share-{seq}-{uuid4().hex}"
         now = self._progress_now()
         progress = {
             "id": job_id,
@@ -261,10 +263,9 @@ class TaskProgressService(TaskServiceBase):
 
     def share_progress_degradation_reason(self, job_id: str) -> str:
         progress = self._active_share_progress(job_id)
-        if progress is None:
-            return ""
         reasons = []
-        for step in progress.get("steps", []):
+        failed_kinds = set()
+        for step in (progress or {}).get("steps", []):
             if step.get("status") != "error":
                 continue
             label = str(step.get("label") or step.get("key") or "媒体").strip()
@@ -274,6 +275,16 @@ class TaskProgressService(TaskServiceBase):
                 reason = f"{label}：{reason}"
             if reason not in reasons:
                 reasons.append(reason)
+            failed_kinds.add(step.get("key"))
+        # The dashboard snapshot is transient and may belong to a newer share.
+        # Retain the original media failure in history even after a restart.
+        job = current_share_job.get()
+        for kind, (status, reason) in (job or {}).get("media_results", {}).items():
+            if kind in failed_kinds or status not in {"error", "empty", "unavailable"}:
+                continue
+            if reason:
+                label = self._PROGRESS_STEP_LABELS.get(kind, "媒体")
+                reasons.append(f"{label}：{reason}")
         return "；".join(reasons)
 
     def finish_share_progress(

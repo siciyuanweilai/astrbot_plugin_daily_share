@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING
 
 import aiohttp
+
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP

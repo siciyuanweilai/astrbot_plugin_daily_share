@@ -14,7 +14,6 @@ class ContentSupportService(ContentComponent):
     """内容生成支撑能力。"""
 
     async def _call_llm(self, *args, target_umo: str | None = None, **kwargs):
-        kwargs.setdefault("purpose", "share_content")
         if target_umo:
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)

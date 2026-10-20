@@ -46,6 +46,15 @@ class TaskNewsCacheService(TaskServiceBase):
     def prepare_news_snapshot_record(self, snapshot_data, image_url=None):
         return self.store.prepare_news_snapshot_record(snapshot_data, image_url)
 
+    def invalidate_news_context_prompt(self, target_uid) -> None:
+        """让新闻快照写入和焦点更新立即刷新工具动态上下文。"""
+        support = getattr(self.plugin, "support_service", None)
+        operations = getattr(support, "operations", None)
+        tool_context = getattr(operations, "tool_context", None)
+        invalidate = getattr(tool_context, "invalidate_context_prompt", None)
+        if callable(invalidate):
+            invalidate("news", target_uid)
+
     async def commit_sent_news_snapshot(
         self, target_uid, snapshot_data=None, image_url=None
     ):

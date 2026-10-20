@@ -16,10 +16,15 @@ class DatabaseStateService(DatabaseRepository):
         return domain
 
     def _sync_get_domain_state(
-        self, domain: str, key: str, default: Any | None = None
+        self,
+        domain: str,
+        key: str,
+        default: Any | None = None,
+        *,
+        connection_timeout: float | None = None,
     ) -> Any:
         domain = self._state_domain(domain)
-        with self._connection() as conn:
+        with self._connection(timeout=connection_timeout) as conn:
             row = conn.execute(
                 "SELECT value FROM plugin_state WHERE domain = ? AND key = ?",
                 (domain, key),
@@ -152,7 +157,13 @@ class DatabaseStateService(DatabaseRepository):
         return await self._update_domain_state("qzone", key, updates)
 
     async def get_context_state(self, key: str, default: Any | None = None) -> Any:
-        return await self._get_domain_state("context", key, default)
+        return await self._execute_context(
+            self._sync_get_domain_state,
+            "context",
+            key,
+            default,
+            connection_timeout=self.manager.CONTEXT_READ_TIMEOUT_SECONDS,
+        )
 
     async def set_context_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("context", key, value)

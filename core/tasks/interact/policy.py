@@ -3,9 +3,11 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+from ...space.photos import photo_reply_target_error
 from .comments import (
     QzoneCommentIndex,
     _comment_has_self_reply,
+    _comment_replies_to_self,
     _comment_thread_has_later_nonself_reply,
     _comment_thread_has_self_reply_to,
     _comment_thread_has_timed_self_reply,
@@ -14,11 +16,15 @@ from .comments import (
 )
 from .formatting import _qzone_post_plain_text
 from .tracker import (
+    QZONE_ACTION_COMMENT_REPLIED,
     QZONE_ACTION_RETRY_LATER,
+    QZONE_ACTION_SKIPPED,
     _comment_key,
+    _post_alias_keys,
     _post_key,
     _qzone_like_post_processed_action,
     _qzone_post_processed_action,
+    _qzone_processed_action,
     _qzone_processed_thread_has_self_reply,
 )
 
@@ -105,6 +111,84 @@ class QzoneAutoPolicyService:
             or getattr(post, "rt_images", None)
             or getattr(post, "videos", None)
         )
+
+    def _qzone_auto_comment_reply_candidate(
+        self,
+        post,
+        comment,
+        *,
+        self_uin: int,
+        processed: dict,
+        index: QzoneCommentIndex | None = None,
+    ) -> bool:
+        appid = int(getattr(post, "appid", 311) or 311)
+        if appid not in {311, 4}:
+            return False
+        post_key = str(getattr(post, "key", "") or "").strip()
+        if not post_key or not self.owner._qzone_auto_post_in_active_window(post):
+            return False
+        if self.owner._qzone_is_official_qzone_post(post):
+            return False
+        if int(getattr(post, "uin", 0) or 0) in {0, int(self_uin or 0)}:
+            return False
+        if any(
+            _qzone_processed_action(processed, key)
+            in {QZONE_ACTION_COMMENT_REPLIED, QZONE_ACTION_SKIPPED}
+            for key in _post_alias_keys(post)
+        ):
+            return False
+        if (
+            str(getattr(comment, "parent_tid", "") or "").strip()
+            or str(getattr(comment, "reply_to_tid", "") or "").strip()
+        ):
+            return False
+        comment_id = str(
+            getattr(comment, "tid", "") or getattr(comment, "submit_tid", "") or ""
+        ).strip()
+        if not comment_id:
+            return False
+        if int(getattr(comment, "uin", 0) or 0) in {0, int(self_uin or 0)}:
+            return False
+        if not str(getattr(comment, "content", "") or "").strip():
+            return False
+        if not self.owner._qzone_auto_comment_in_active_window(post, comment):
+            return False
+
+        item_key = _comment_key(post, comment)
+        processed_item = (
+            processed.get(item_key) if isinstance(processed, dict) else None
+        )
+        processed_action = (
+            str(processed_item.get("action") or "")
+            if isinstance(processed_item, dict)
+            else ""
+        )
+        if processed_action and processed_action != QZONE_ACTION_RETRY_LATER:
+            return False
+
+        comment_index = index or QzoneCommentIndex.build(post, self_uin)
+        target_ids = {
+            str(getattr(comment, name, "") or "").strip()
+            for name in ("tid", "submit_tid", "raw_tid")
+        }
+        target_ids.discard("")
+        if any(
+            comment_index.has_self_reply(target_id)
+            or comment_index.has_self_reply_to(target_id)
+            for target_id in target_ids
+        ):
+            return False
+
+        if appid == 4:
+            photos = getattr(post, "photo_targets", []) or []
+            if len(photos) != 1:
+                return False
+            return not photo_reply_target_error(
+                comment,
+                topic=photos[0].feed_comment_topic_id,
+                parent_comment=None,
+            )
+        return True
 
     def _qzone_auto_like_candidate(
         self,
@@ -317,7 +401,23 @@ class QzoneAutoPolicyService:
         if parent_comment is None:
             return "missing_parent"
         if int(getattr(parent_comment, "uin", 0) or 0) != int(self_uin or 0):
-            return "parent_not_self"
+            if not _comment_replies_to_self(comment, self_uin, index=index):
+                return "reply_not_to_bot"
+            if not (
+                _comment_has_self_reply(post, parent_comment, self_uin, index=index)
+                or _qzone_processed_thread_has_self_reply(
+                    post, parent_comment, processed
+                )
+            ):
+                return "missing_self_thread_reply"
+            if _comment_thread_has_timed_self_reply(
+                post, parent_comment, self_uin, index=index
+            ):
+                has_before, _has_after = _comment_thread_self_reply_bounds(
+                    post, parent_comment, comment, self_uin, index=index
+                )
+                if not has_before:
+                    return "missing_self_thread_reply"
         if int(getattr(comment, "uin", 0) or 0) == int(self_uin or 0):
             return "self_comment"
         if _comment_thread_has_self_reply_to(post, comment, self_uin, index=index):

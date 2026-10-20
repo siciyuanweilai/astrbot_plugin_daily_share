@@ -55,10 +55,9 @@ export function createSweetComboControls({
   }
 
   function comboFilteredOptions(controller) {
-    const query = text(controller.input.value).trim().toLowerCase();
+    const query = text(controller.searchQuery).trim().toLowerCase();
     const options = comboListOptions(controller);
-    const exactValueSelected = options.some((option) => option.value && option.value.toLowerCase() === query);
-    if (!query || exactValueSelected) return options;
+    if (!query) return options;
     return options.filter((option) => (
       option.value.toLowerCase().includes(query)
       || option.label.toLowerCase().includes(query)
@@ -168,6 +167,8 @@ export function createSweetComboControls({
     if (!controller || input.disabled) return;
     closeSweetSelects();
     closeSweetCombos(input);
+    // Only text entered while the menu is open filters the available options.
+    controller.searchQuery = "";
     renderSweetCombo(input);
     controller.wrapper.classList.add("is-open");
     controller.panel?.classList.add("has-open-select");
@@ -193,8 +194,8 @@ export function createSweetComboControls({
     const previous = input.value;
     input.value = option.value;
     renderSweetCombo(input);
-    closeSweetCombo(input);
     input.focus({ preventScroll: true });
+    closeSweetCombo(input);
     if (input.value !== previous) {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -279,6 +280,7 @@ export function createSweetComboControls({
       overlayHost,
       options: [],
       activeIndex: -1,
+      searchQuery: "",
       pointerDownOpen: false,
       pointerDown: false,
     });
@@ -304,7 +306,12 @@ export function createSweetComboControls({
       controller.pointerDown = false;
       controller.pointerDownOpen = false;
     });
-    input.addEventListener("input", () => syncSweetCombo(input));
+    input.addEventListener("input", () => {
+      const controller = sweetComboControllers.get(input);
+      if (!controller?.wrapper.classList.contains("is-open")) return;
+      controller.searchQuery = input.value;
+      syncSweetCombo(input);
+    });
     input.addEventListener("keydown", (event) => handleSweetComboKeydown(input, event));
     return sweetComboControllers.get(input);
   }

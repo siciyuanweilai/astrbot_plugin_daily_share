@@ -13,7 +13,12 @@ from pathlib import Path
 from astrbot.api import logger
 
 from ..config import ShareType, TimePeriod
-from ..integrations.mediajob import ShareMediaPending, current_share_job
+from ..integrations.mediajob import (
+    ShareMediaPending,
+    current_share_job,
+    normalize_media_task_result,
+    remember_media_task_result,
+)
 from ..schedule import normalize_schedule_mode
 
 _STATE_KEY = "share_media_continuations"
@@ -75,12 +80,7 @@ def preserve_share(kind: str):
             except ShareMediaPending:
                 job["status"] = "pending"
                 await service.save(job)
-                progress_id = str(params.get("progress_id") or "")
-                self.services.progress.update_share_progress(
-                    progress_id,
-                    "video" if job.get("pending_media") == "video" else "image",
-                    message="媒体任务已受理，等待原任务成品",
-                )
+                service.update_waiting_progress(job)
                 logger.info(
                     "[日常分享] 媒体任务已受理，原文案和发布目标已保存，稍后继续分享"
                 )
@@ -120,6 +120,38 @@ class ShareContinuationService:
         payload = {key: value for key, value in job.items() if key != "service"}
         async with self._write_lock:
             await self.plugin.db.update_share_state(_STATE_KEY, {job["id"]: payload})
+
+    def update_waiting_progress(self, job: dict) -> None:
+        kind = job.get("pending_media") or "image"
+        status, reason = job.get("media_results", {}).get(kind, ("pending", ""))
+        age = max(
+            0,
+            int(
+                datetime.now().timestamp()
+                - job.get("created_at", datetime.now().timestamp())
+            ),
+        )
+        elapsed = f"已等待 {age // 60} 分钟" if age >= 60 else "等待不足 1 分钟"
+        message = (
+            f"{reason or '生活插件暂时无法查询'}；{elapsed}，保留原任务等待恢复"
+            if status == "unavailable"
+            else f"媒体任务已受理，{elapsed}，等待原任务成品"
+        )
+        self.plugin.task_manager.progress.update_share_progress(
+            str((job.get("params") or {}).get("progress_id") or ""),
+            kind,
+            message=message,
+            mark_previous_done=False,
+        )
+
+    async def finish(self, job: dict, *, status: str, reason: str) -> None:
+        job.update(status=status, reason=reason)
+        await self.save(job)
+        self.plugin.task_manager.progress.finish_share_progress(
+            str((job.get("params") or {}).get("progress_id") or ""),
+            success=False,
+            message=reason,
+        )
 
     async def mark_submitting(self) -> None:
         job = current_share_job.get()
@@ -209,6 +241,11 @@ class ShareContinuationService:
                         f"[日常分享] 分享提交结果不明（任务 {key}），"
                         "已停止自动重发，请核对原发布目标"
                     )
+                    self.plugin.task_manager.progress.finish_share_progress(
+                        str((payload.get("params") or {}).get("progress_id") or ""),
+                        success=False,
+                        message="分享提交结果不明，已停止自动重发，请核对原发布目标",
+                    )
                 if (
                     key in self.active
                     or not isinstance(payload, dict)
@@ -219,13 +256,10 @@ class ShareContinuationService:
                 allowed, cancelled = self.recovery_allowed(payload)
                 if not allowed:
                     if cancelled:
-                        await self.save(
-                            dict(
-                                payload,
-                                service=self,
-                                status="cancelled",
-                                reason="原分享任务已过时或自动发布已关闭，保留媒体成品，不补发",
-                            )
+                        await self.finish(
+                            dict(payload, service=self),
+                            status="cancelled",
+                            reason="原分享任务已过时或自动发布已关闭，保留媒体成品，不补发",
                         )
                     continue
                 target = (
@@ -239,37 +273,43 @@ class ShareContinuationService:
                     if kind == "video"
                     else self.plugin.daily_life_bridge.get_image_task
                 )
-                result = await query(f"{key}:{kind}")
-                if result.get("status") in {"pending", "unavailable"}:
-                    continue
+                result = normalize_media_task_result(await query(f"{key}:{kind}"), kind)
                 job = dict(payload, service=self)
-                if result.get("status") == "missing":
-                    job.update(status="failed", reason="原媒体任务未登记，未重新提交")
-                    await self.save(job)
+                if result.get("status") in {"pending", "unavailable"}:
+                    previous = job.get("media_results", {}).get(kind)
+                    remember_media_task_result(job, kind, result)
+                    if previous != job["media_results"][kind]:
+                        await self.save(job)
+                    self.update_waiting_progress(job)
                     continue
+                if result.get("status") == "missing":
+                    await self.finish(job, status="failed", reason=result["error"])
+                    continue
+                remember_media_task_result(job, kind, result)
                 if kind == "video":
-                    job["video_url"] = (
-                        str(result.get("url") or "")
-                        if result.get("status") == "ready"
-                        else ""
-                    )
-                    job["pending_media"] = ""
+                    value = job["video_url"]
+                    if (
+                        value
+                        and not value.startswith(("https://", "http://"))
+                        and not await asyncio.to_thread(Path(value).is_file)
+                    ):
+                        await self.finish(
+                            job,
+                            status="failed",
+                            reason="原视频成品文件不存在，未重新生成",
+                        )
+                        continue
                     await self.resume(job)
                     continue
-                if result.get("status") != "ready" or not result.get("path"):
-                    if result.get("status") == "failed":
-                        job.update(image_failed=True, pending_media="")
-                        await self.resume(job)
-                        continue
-                    job.update(status="failed", reason="原图片任务无法恢复，未重新提交")
-                    await self.save(job)
+                if result.get("status") == "failed":
+                    await self.resume(job)
                     continue
-                job["image_path"] = str(result["path"])
                 if not job["image_path"].startswith(
                     ("https://", "http://")
                 ) and not await asyncio.to_thread(Path(job["image_path"]).is_file):
-                    job.update(status="failed", reason="原成品文件不存在，未重新生成")
-                    await self.save(job)
+                    await self.finish(
+                        job, status="failed", reason="原成品文件不存在，未重新生成"
+                    )
                     continue
                 await self.resume(job)
             # Keep unfinished and ambiguous submissions; bound only finished journals.
@@ -297,6 +337,9 @@ class ShareContinuationService:
         }
         handler = handlers.get(job["kind"])
         if handler is None:
+            await self.finish(
+                job, status="failed", reason="原分享类型无法恢复，未重新提交"
+            )
             return
         self.active.add(job["id"])
         token = current_share_job.set(job)
@@ -310,11 +353,15 @@ class ShareContinuationService:
                 if not allowed:
                     if cancelled:
                         job["status"] = "cancelled"
+                        job["reason"] = (
+                            "原分享任务已过时或自动发布已关闭，保留媒体成品，不补发"
+                        )
                     return
                 result = await handler(**params, event=None)
                 job["status"] = "completed" if result else "failed"
         except ShareMediaPending:
             job["status"] = "pending"
+            self.update_waiting_progress(job)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -325,9 +372,26 @@ class ShareContinuationService:
                 f"[日常分享] 原分享任务续接失败，未自动重发：{type(exc).__name__}"
             )
         finally:
-            await self.save(job)
-            current_share_job.reset(token)
-            self.active.discard(job["id"])
+            try:
+                if job["status"] in {"failed", "cancelled"}:
+                    reason = job.get("reason")
+                    if not reason:
+                        progress = manager.progress.get_share_progress_snapshot()
+                        if (
+                            progress.get("id") == params.get("progress_id")
+                            and progress.get("status") == "error"
+                        ):
+                            reason = progress.get("message")
+                    await self.finish(
+                        job,
+                        status=job["status"],
+                        reason=reason or "原分享续接失败，未自动重发",
+                    )
+                else:
+                    await self.save(job)
+            finally:
+                current_share_job.reset(token)
+                self.active.discard(job["id"])
 
     async def run(self) -> None:
         while not self.plugin._is_terminated:

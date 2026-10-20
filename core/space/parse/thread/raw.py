@@ -137,6 +137,11 @@ def _comment_from_raw(item: dict[str, Any], *, parent_tid: str = "") -> QzoneCom
     user = _comment_user(item)
     submit_tid = _first_text(_mapping_first(item, COMMENT_ID_KEYS))
     raw_tid = _first_text(item.get("tid"), submit_tid)
+    parent_tid = _first_text(parent_tid, _mapping_first(item, COMMENT_PARENT_KEYS))
+    uin = _safe_int(
+        _mapping_first(item, COMMENT_UIN_KEYS)
+        or _mapping_first(user, COMMENT_USER_UIN_KEYS)
+    )
     reply_to_tid, reply_to_tid_source = _first_named_text(item, *COMMENT_REPLY_TID_KEYS)
     if not reply_to_tid:
         reply_to_tid = _comment_param(item, "t2_tid")
@@ -153,11 +158,22 @@ def _comment_from_raw(item: dict[str, Any], *, parent_tid: str = "") -> QzoneCom
         _mapping_first(item, COMMENT_REPLY_NICKNAME_KEYS),
         _comment_mention_param(item, "nick"),
     )
+    raw_reply_to_tid = reply_to_tid
+    raw_reply_to_uin = reply_to_uin
+    # 一级评论的“回复”按钮携带自身 t2 标识，不能据此将它解析为楼中楼。
+    if (
+        not parent_tid
+        and reply_to_tid
+        and reply_to_tid in {raw_tid, submit_tid}
+        and reply_to_uin in {0, uin}
+        and reply_to_tid_source in {"param:t2_tid", "t2_tid"}
+    ):
+        reply_to_tid = ""
+        reply_to_uin = 0
+        reply_to_nickname = ""
+        reply_to_tid_source = ""
     return QzoneComment(
-        uin=_safe_int(
-            _mapping_first(item, COMMENT_UIN_KEYS)
-            or _mapping_first(user, COMMENT_USER_UIN_KEYS)
-        ),
+        uin=uin,
         nickname=_first_text(
             _mapping_first(user, COMMENT_USER_NICKNAME_KEYS),
             _mapping_first(item, COMMENT_NICKNAME_KEYS),
@@ -167,11 +183,11 @@ def _comment_from_raw(item: dict[str, Any], *, parent_tid: str = "") -> QzoneCom
         tid=raw_tid,
         submit_tid=submit_tid,
         raw_tid=raw_tid,
-        parent_tid=_first_text(parent_tid, _mapping_first(item, COMMENT_PARENT_KEYS)),
+        parent_tid=parent_tid,
         reply_to_tid=reply_to_tid,
-        raw_reply_to_tid=reply_to_tid,
+        raw_reply_to_tid=raw_reply_to_tid,
         reply_to_uin=reply_to_uin,
-        raw_reply_to_uin=reply_to_uin,
+        raw_reply_to_uin=raw_reply_to_uin,
         reply_to_nickname=reply_to_nickname,
         reply_to_tid_source=reply_to_tid_source,
         images=_comment_images(item),

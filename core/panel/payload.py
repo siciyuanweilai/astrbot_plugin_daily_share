@@ -69,6 +69,7 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("qzone_auto_like_limit", "int", 3, zero_as_default=True),
     _field("qzone_enable_auto_comment", "bool", False),
     _field("qzone_auto_comment_limit", "int", 3, zero_as_default=True),
+    _field("qzone_auto_comment_reply_probability", "int", 0),
     _field("qzone_enable_auto_comment_image_vision", "bool", False),
     _field("qzone_auto_comment_image_vision_limit", "int", 1, zero_as_default=True),
     _field("qzone_auto_comment_image_vision_provider", "str", ""),

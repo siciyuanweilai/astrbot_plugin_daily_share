@@ -69,129 +69,33 @@ class TaskArchitectureTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertRegex(metadata, r"(?m)^version: 1\.1\.8$")
-        self.assertIn("version-1.1.8", readme)
-        self.assertIn('alt="版本 1.1.8"', readme)
-        self.assertIn("v1.1.8 版本更新", readme)
-        self.assertIn("daily_life v1.4.5", readme)
-        self.assertIn("移除小红书功能", changelog)
-        self.assertIn("v1.0.9 · 2026-08-15", changelog)
-        self.assertIn("v1.0.8 · 2026-08-15", changelog)
-        release_headers = re.findall(
+        version_match = re.search(r"(?m)^version: (\d+\.\d+\.\d+)$", metadata)
+        self.assertIsNotNone(version_match)
+        version = version_match.group(1)
+        self.assertIn(f"version-{version}", readme)
+        self.assertIn(f'alt="版本 {version}"', readme)
+        self.assertIn(f"v{version} 版本更新", readme)
+
+        releases = re.findall(
             r"(?m)^## .*v(\d+\.\d+\.\d+) · (\d{4}-\d{2}-\d{2})$", changelog
         )
-        self.assertEqual(release_headers[0], ("1.1.8", "2026-10-14"))
+        self.assertTrue(releases)
+        self.assertEqual(releases[0][0], version)
+        versions = [tuple(map(int, item[0].split("."))) for item in releases]
+        self.assertEqual(versions, sorted(set(versions), reverse=True))
         pending_headers = re.findall(r"(?m)^## 未发布$", changelog)
         self.assertLessEqual(len(pending_headers), 1)
         if pending_headers:
-            self.assertLess(changelog.index("## 未发布"), changelog.index("## v1.1.8"))
-        self.assertLess(changelog.index("## v1.1.8"), changelog.index("## v1.1.7"))
-        self.assertLess(changelog.index("## v1.1.7"), changelog.index("## v1.1.6"))
-        self.assertLess(changelog.index("## v1.1.6"), changelog.index("## v1.1.5"))
-        self.assertLess(changelog.index("v1.1.5"), changelog.index("## 🌐 v1.1.4"))
-        self.assertLess(changelog.index("v1.1.4"), changelog.index("v1.1.3"))
-        self.assertLess(changelog.index("v1.1.3"), changelog.index("v1.1.2"))
-        self.assertLess(changelog.index("v1.1.2"), changelog.index("v1.1.1"))
-        self.assertLess(changelog.index("v1.1.1"), changelog.index("v1.1.0"))
-        self.assertLess(changelog.index("v1.1.0"), changelog.index("v1.0.9"))
-        self.assertLess(changelog.index("v1.0.9"), changelog.index("v1.0.8"))
-        current_release = changelog.split("## v1.1.8", 1)[1].split("## v1.1.7", 1)[0]
-        for feature in (
-            "组件结构与内部契约",
-            "Mixin",
-            "daily_life v1.4.5",
-            "QQ 空间点赞、相册与面板",
-            "文案",
-            "防重",
-            "model_usage",
-            "数据库结构保持 v2",
-            "不包含 daily_life 端改动",
-        ):
-            self.assertIn(feature, current_release)
-        release_notes = (ROOT / "docs" / "release-v1.1.8.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("v1.1.8 · 2026-10-14", release_notes)
-        self.assertIn("v1.1.7 标签", release_notes)
-        self.assertIn("不包含 daily_life 端改动", release_notes)
-        self.assertIn("target_umo", release_notes)
-        self.assertIn("数据库结构保持 v2", release_notes)
-        current_release = changelog.split("## v1.1.7", 1)[1].split("## v1.1.6", 1)[0]
-        for feature in (
-            "普通分享表达与标点清洗",
-            "生活连续性",
-            "发送回执",
-            "GIF",
-            "视频理解",
-            "数据库结构保持 v2",
-            "daily_life v1.4.4",
-            "不包含 daily_life 端改动",
-        ):
-            self.assertIn(feature, current_release)
-        release_notes = (ROOT / "docs" / "release-v1.1.7.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("v1.1.7 · 2026-10-11", release_notes)
-        self.assertIn("不包含 daily_life 端改动", release_notes)
-        self.assertIn("v1.1.6...v1.1.7", release_notes)
+            self.assertLess(
+                changelog.index("## 未发布"), changelog.index(f"## v{version}")
+            )
 
-        current_release = changelog.split("## v1.1.6", 1)[1].split("## v1.1.5", 1)[0]
-        self.assertIn("QQ 空间自然表达", current_release)
-        self.assertIn("daily_life", current_release)
-        self.assertIn("综合已识别图片生成一条评论", current_release)
-        self.assertIn("第三张时提交到第三张", current_release)
-        self.assertIn("媒体任务恢复", current_release)
-        self.assertIn("模型缓存", current_release)
-        self.assertIn("缓存 token", current_release)
-        self.assertIn("未知提交", current_release)
-        self.assertIn("移除小红书功能", current_release)
-        self.assertIn("数据库结构保持 v2", current_release)
-        self.assertIn("重载", current_release)
-        release_notes = (ROOT / "docs" / "release-v1.1.6.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("v1.1.6 · 2026-10-08", release_notes)
-        self.assertIn("不包含 daily_life 端改动", release_notes)
-
-        album_release = changelog.split("## v1.1.5", 1)[1].split("## 🌐 v1.1.4", 1)[0]
-        self.assertIn("QQ 空间", album_release)
-        self.assertIn("photo_comment", album_release)
-        self.assertIn("cgi_add_piccomment_v2", album_release)
-        self.assertIn("cgi_add_reply_v2", album_release)
-        self.assertIn("ref=photo", album_release)
-        self.assertIn("batchId", album_release)
-        self.assertIn("platformSubId", album_release)
-        self.assertIn("单条动态最多识别图片数", album_release)
-        self.assertIn("生成一条评论", album_release)
-        self.assertIn("多人", album_release)
-        self.assertNotIn("qzone_follow_life_chat_style", album_release)
-
-        relationship_release = changelog.split("## 🌐 v1.1.4", 1)[1].split(
-            "## 🛡️ v1.1.3", 1
-        )[0]
-        self.assertIn("QQ 空间关系识别", relationship_release)
-        self.assertIn("context_conf.enable_life_context", relationship_release)
-        self.assertIn("公开互动上下文", relationship_release)
-        self.assertNotIn("photo_comment", relationship_release)
-        self.assertNotIn("相册评论与回评", relationship_release)
-
-        hardening_release = changelog.split("## 🛡️ v1.1.3", 1)[1].split(
-            "## 🚀 v1.1.2", 1
-        )[0]
-        self.assertIn("桥接", hardening_release)
-        self.assertIn("数据库结构保持 v2", hardening_release)
-
-        previous_release = changelog.split("## 🛡️ v1.1.0", 1)[1].split(
-            "## 🎨 v1.0.9", 1
-        )[0]
-        self.assertIn("数据库结构保持 v2", previous_release)
-        self.assertIn("person", previous_release)
-        self.assertIn("object", previous_release)
-        self.assertIn("landscape", previous_release)
-        self.assertIn("角色参考图身份锚点", previous_release)
-        self.assertIn("总等待时间", previous_release)
-        self.assertIn("DEBUG", previous_release)
-        self.assertIn("568 项", previous_release)
+        release_path = f"docs/release-v{version}.md"
+        self.assertIn(f"./{release_path}", readme)
+        release_notes = (ROOT / release_path).read_text(encoding="utf-8")
+        self.assertIn(f"## v{version} · {releases[0][1]}", release_notes)
+        current_release = changelog.split(f"## v{version}", 1)[1].split("\n## ", 1)[0]
+        self.assertIn(f"## v{version}" + current_release.rstrip(), release_notes)
 
     def test_plugin_supports_astrbot_426_and_later(self):
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")

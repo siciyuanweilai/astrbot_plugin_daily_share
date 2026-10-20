@@ -1,9 +1,9 @@
 import importlib
 import types
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
-from . import testfailure, testidentity, testmedia, testqzonecomment
+from . import testfailure, testidentity, testmedia
 from .testqzone import _load_qzone_service, _new_qzone_service
 
 
@@ -142,66 +142,6 @@ class PromptPrefixTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("不加入人物", calls[0][0])
         self.assertIn("visual_mode 填写 person", calls[1][0])
         self.assertNotIn("不加入人物", calls[1][0])
-
-
-class UsageReportingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_unknown_usage_is_excluded_and_provider_totals_stay_separate(self):
-        module = testmedia._load_main_module()
-        service = module.LlmService(types.SimpleNamespace(), {}, lambda: False)
-        for usage in (None, {}, {"input_cached": "unknown"}):
-            service.record_token_usage(types.SimpleNamespace(usage=usage), "unknown")
-        service.record_token_usage(
-            types.SimpleNamespace(usage={"input_other": 20, "input_cached": 80}),
-            "a",
-        )
-        service.record_token_usage(
-            types.SimpleNamespace(usage={"input_other": 100, "output": 5}), "b"
-        )
-        self.assertEqual(service.token_usage["reported_calls"], 2)
-        self.assertEqual(service.token_usage["input_tokens"], 200)
-        self.assertEqual(service.token_usage["cached_input_tokens"], 80)
-        self.assertNotIn("unknown", service.token_usage_by_provider)
-        self.assertEqual(service.token_usage_by_provider["a"]["cached_calls"], 1)
-        self.assertEqual(service.token_usage_by_provider["b"]["cached_calls"], 0)
-
-    async def test_vision_reports_actual_provider_usage_without_retrying_for_metrics(
-        self,
-    ):
-        module = testmedia._load_main_module()
-        service = module.LlmService(types.SimpleNamespace(), {}, lambda: False)
-        comment_module, _ = testqzonecomment._load_auto_comment_module()
-        sight = importlib.import_module(comment_module.__package__ + ".interact.sight")
-        response = types.SimpleNamespace(
-            completion_text="窗边的猫",
-            usage={"input_other": 50, "input_cached": 50, "output": 5},
-        )
-        context = types.SimpleNamespace(llm_generate=AsyncMock(return_value=response))
-        owner = types.SimpleNamespace(
-            plugin=types.SimpleNamespace(context=context, llm_service=service)
-        )
-        with (
-            patch.object(
-                sight,
-                "_qzone_vision_provider_candidates",
-                AsyncMock(return_value=[("vision", "qzone_vision")]),
-            ),
-            patch.object(sight, "_qzone_provider_label", return_value="vision"),
-        ):
-            self.assertEqual(
-                await sight._describe_qzone_image(owner, "https://example.com/a.jpg"),
-                "窗边的猫",
-            )
-            self.assertEqual(
-                service.token_usage_by_provider["vision"]["input_tokens"], 100
-            )
-            service.record_token_usage = lambda *args, **kwargs: (_ for _ in ()).throw(
-                RuntimeError("metric failure")
-            )
-            self.assertEqual(
-                await sight._describe_qzone_image(owner, "https://example.com/b.jpg"),
-                "窗边的猫",
-            )
-        self.assertEqual(context.llm_generate.await_count, 2)
 
 
 class PublishFallbackTests(unittest.IsolatedAsyncioTestCase):

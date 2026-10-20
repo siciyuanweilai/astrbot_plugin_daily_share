@@ -1,5 +1,5 @@
-from ..prompt import build_task_prompt, build_topic_category_boundary
 from ..context.daily.continuity import topic_continuity
+from ..prompt import build_task_prompt, build_topic_category_boundary
 from .contentbase import ContentComponent
 
 

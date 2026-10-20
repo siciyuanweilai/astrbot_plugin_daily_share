@@ -1,6 +1,7 @@
 import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
@@ -221,7 +222,6 @@ class DailySharePlugin(Star):
         max_retries: int = 2,
         tools: list | None = None,
         umo: str | None = None,
-        purpose: str = "text",
     ):
         return await self.llm_service.call(
             prompt=prompt,
@@ -230,7 +230,6 @@ class DailySharePlugin(Star):
             max_retries=max_retries,
             tools=tools,
             umo=umo,
-            purpose=purpose,
         )
 
     @filter.llm_tool(name="daily_share")

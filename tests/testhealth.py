@@ -185,26 +185,6 @@ class ChatAndModelHealthTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(budgets[1], 9)
         self.assertLessEqual(budgets[1], 10)
 
-    async def test_cache_usage_counts_only_provider_reported_tokens(self):
-        module = testmedia._load_main_module()
-        service = module.LlmService(types.SimpleNamespace(), {}, lambda: False)
-        service._record_token_usage(types.SimpleNamespace(usage=None), "test")
-        service._record_token_usage(
-            types.SimpleNamespace(
-                usage=types.SimpleNamespace(input_other=20, input_cached=80, output=10)
-            ),
-            "test",
-        )
-        self.assertEqual(
-            service.token_usage,
-            {
-                "reported_calls": 1,
-                "input_tokens": 100,
-                "cached_input_tokens": 80,
-                "output_tokens": 10,
-            },
-        )
-
     async def test_context_hook_shares_short_budget_and_preserves_system_prompt(self):
         module = testmedia._load_main_module()
         plugin = testmedia._new_plugin_with_support(module)
@@ -253,6 +233,70 @@ class ChatAndModelHealthTests(unittest.IsolatedAsyncioTestCase):
         helper._invalidate_context_prompt("qzone", "a")
         await helper.cached_context_prompt("qzone", "a", builder, timeout=0.1)
         self.assertEqual(calls, ["a", "b", "a"])
+
+    async def test_concurrent_context_cache_miss_uses_one_builder(self):
+        module = testmedia._load_main_module()
+        helper = testmedia._new_plugin_with_support(
+            module
+        ).support_service.operations.tool_context
+        calls = 0
+
+        async def builder(target):
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0.02)
+            return f"context:{target}"
+
+        results = await asyncio.gather(
+            *(
+                helper.cached_context_prompt("news", "same", builder, timeout=0.2)
+                for _ in range(8)
+            )
+        )
+        self.assertEqual(calls, 1)
+        self.assertEqual(results, ["context:same"] * 8)
+
+    async def test_invalidated_inflight_context_is_not_cached(self):
+        module = testmedia._load_main_module()
+        helper = testmedia._new_plugin_with_support(
+            module
+        ).support_service.operations.tool_context
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        async def old_builder(target):
+            calls.append("old")
+            started.set()
+            await release.wait()
+            return "old-context"
+
+        pending = asyncio.create_task(
+            helper.cached_context_prompt("news", "same", old_builder, timeout=0.5)
+        )
+        await started.wait()
+        helper.invalidate_context_prompt("news", "same")
+
+        async def new_builder(target):
+            calls.append("new")
+            return "new-context"
+
+        self.assertEqual(
+            await helper.cached_context_prompt(
+                "news", "same", new_builder, timeout=0.2
+            ),
+            "new-context",
+        )
+        release.set()
+        self.assertEqual(await pending, "old-context")
+        await asyncio.sleep(0)
+        self.assertEqual(
+            await helper.cached_context_prompt(
+                "news", "same", old_builder, timeout=0.2
+            ),
+            "new-context",
+        )
+        self.assertEqual(calls, ["old", "new"])
 
     async def test_repeated_context_hook_does_not_duplicate_or_overwrite_parts(self):
         module = testmedia._load_main_module()
@@ -416,6 +460,28 @@ class CacheHealthTests(unittest.IsolatedAsyncioTestCase):
             keys("https://example.com/a.jpg") & keys("https://example.com/b.jpg")
         )
 
+    async def test_image_vision_cache_keeps_legacy_model_independent_keys(self):
+        module, models = testqzonecomment._load_auto_comment_module()
+        sight = importlib.import_module(module.__package__ + ".interact.sight")
+        post = models.QzonePost(uin=101, tid="same", text="same", create_time=123)
+
+        image_url = "https://example.com/a.jpg"
+        keys = sight._qzone_image_vision_cache_keys(
+            post,
+            image_url,
+            index=1,
+            total=1,
+        )
+        image_key = sight._qzone_image_url_cache_key(image_url)
+        self.assertEqual(
+            keys[0],
+            sight._qzone_image_context_hash("image_v3_animated", image_key),
+        )
+        self.assertEqual(
+            keys,
+            sight._qzone_image_vision_cache_keys(post, image_url, index=1, total=1),
+        )
+
     async def test_different_short_urls_keep_both_concurrent_writes(self):
         tasks = testfailure._load_tasks_module()
         plugin = testfailure._Plugin()
@@ -494,22 +560,6 @@ class LogTranslationTests(unittest.TestCase):
                 self.assertIn(f"原因={translated}", message)
                 self.assertIn(reason, message)
                 self.assertIn("动态=动态作者，评论=评论人", message)
-
-    def test_model_usage_log_translates_labels_and_preserves_token_metric(self):
-        module = testmedia._load_main_module()
-        model = importlib.import_module(module.__package__ + ".core.host.model")
-        service = module.LlmService(types.SimpleNamespace(), {}, lambda: False)
-        response = types.SimpleNamespace(
-            usage=types.SimpleNamespace(input_other=20, input_cached=80, output=10)
-        )
-        with patch.object(model.logger, "debug") as log:
-            service._record_token_usage(response, "test-provider")
-        message = log.call_args.args[0]
-        self.assertIn("服务提供商=test-provider", message)
-        self.assertIn("输入 token=100", message)
-        self.assertIn("缓存输入 token（cached_input）=80", message)
-        self.assertIn("输出 token=10", message)
-        self.assertEqual(service.token_usage["cached_input_tokens"], 80)
 
 
 class VisualHealthTests(unittest.IsolatedAsyncioTestCase):

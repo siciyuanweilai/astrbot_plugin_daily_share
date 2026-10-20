@@ -229,11 +229,17 @@ def _qzone_image_context_cache_key(
 
 
 def _qzone_image_vision_cache_keys(
-    post, image_url: str, *, index: int, total: int, scope: str = ""
+    post,
+    image_url: str,
+    *,
+    index: int,
+    total: int,
+    scope: str = "",
 ) -> list[str]:
     image_key = _qzone_image_url_cache_key(image_url)
-    # 为所有缓存键增加版本标识，避免复用已被位置别名污染的摘要。
-    url_key = _qzone_image_context_hash("image_v3_animated", image_key)
+    # 保持旧缓存命名空间，使模型切换和插件升级继续复用已有识图结果。
+    cache_version = "image_v3_animated"
+    url_key = _qzone_image_context_hash(cache_version, image_key)
     keys = [url_key]
     keys.extend(
         _qzone_image_context_cache_keys(post, index=index, total=total, scope=scope)
@@ -241,10 +247,7 @@ def _qzone_image_vision_cache_keys(
     keys = list(dict.fromkeys(key for key in keys if key))
     return [
         keys[0],
-        *[
-            _qzone_image_context_hash("image_v3_animated", image_key, key)
-            for key in keys[1:]
-        ],
+        *[_qzone_image_context_hash(cache_version, image_key, key) for key in keys[1:]],
     ]
 
 
@@ -434,16 +437,6 @@ async def _describe_qzone_image(owner, image_url: str, *, target_umo: str = "") 
             logger.debug(f"[日常分享] QQ 空间说说配图识别跳过: {exc}")
             return ""
 
-        recorder = getattr(
-            getattr(getattr(owner, "plugin", None), "llm_service", None),
-            "record_token_usage",
-            None,
-        )
-        if callable(recorder):
-            try:
-                recorder(result, provider_id, purpose="qzone_vision")
-            except Exception as exc:
-                logger.debug(f"[日常分享] 识图用量统计未完成: {type(exc).__name__}")
         description = _clean_auto_comment_text(
             _qzone_completion_text(result), max_bytes=180
         )
@@ -487,7 +480,11 @@ async def _qzone_image_refs_descriptions(
     cache_updates = {}
     for index, (source, scope, image_url) in enumerate(image_refs, start=1):
         cache_keys = _qzone_image_vision_cache_keys(
-            source, image_url, index=index, total=len(image_refs), scope=scope
+            source,
+            image_url,
+            index=index,
+            total=len(image_refs),
+            scope=scope,
         )
         cached = next(
             (str(cache.get(key) or "").strip() for key in cache_keys if cache.get(key)),

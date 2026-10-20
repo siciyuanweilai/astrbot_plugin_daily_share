@@ -1999,6 +1999,36 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(snapshot["items"]), 1)
         self.assertEqual(snapshot["source_key"], "zhihu")
 
+    async def test_news_history_commit_invalidates_tool_context(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        invalidations = []
+        plugin.support_service = types.SimpleNamespace(
+            operations=types.SimpleNamespace(
+                tool_context=types.SimpleNamespace(
+                    invalidate_context_prompt=lambda kind, target: invalidations.append(
+                        (kind, target)
+                    )
+                )
+            )
+        )
+        manager = _new_manager(mod, plugin)
+        target = GROUP_TARGET_1
+
+        await manager.executor_helpers.records.record_share_history(
+            target_id=target,
+            share_type=mod.ShareType.NEWS,
+            content="新闻内容",
+            success=True,
+            source_type="scheduled",
+            news_snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [{"title": "新闻", "url": "https://example.com/news"}],
+                "yicai",
+            ),
+        )
+
+        self.assertEqual(invalidations, [("news", target)])
+
     async def test_load_execute_share_news_does_not_publish_snapshot_before_send(self):
         mod = _load_tasks_module()
         plugin = _Plugin()

@@ -3,7 +3,7 @@ import copy
 import time
 import types
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from astrbot_plugin_daily_share.core.config import ShareType
 from astrbot_plugin_daily_share.core.context.daily.parser import ContextLifeParseService
@@ -124,6 +124,7 @@ class ShareLinkTests(unittest.IsolatedAsyncioTestCase):
         owner = Owner()
         owner.plugin = plugin
         plugin.task_manager = types.SimpleNamespace(
+            progress=Mock(),
             qzone_share=owner,
             share=types.SimpleNamespace(send_prepared_chat_share=None),
             command_share=types.SimpleNamespace(send_prepared_command_share=None),
@@ -165,6 +166,7 @@ class ShareLinkTests(unittest.IsolatedAsyncioTestCase):
         plugin = types.SimpleNamespace(
             db=_Database(),
             daily_life_bridge=types.SimpleNamespace(get_image_task=AsyncMock()),
+            task_manager=types.SimpleNamespace(progress=Mock()),
         )
         service = ShareContinuationService(plugin)
         await service.save(

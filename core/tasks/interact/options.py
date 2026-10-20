@@ -25,6 +25,7 @@ class QzoneAutoInteractionConfig:
     enable_reply: bool = False
     like_limit: int = QZONE_AUTO_LIKE_DEFAULT_LIMIT
     comment_limit: int = QZONE_AUTO_COMMENT_DEFAULT_LIMIT
+    comment_reply_probability: int = 0
     reply_limit: int = QZONE_AUTO_REPLY_DEFAULT_LIMIT
     active_window_hours: int = 24
     comment_image_vision_enabled: bool = False
@@ -53,6 +54,12 @@ class QzoneAutoInteractionConfig:
                 QZONE_AUTO_COMMENT_DEFAULT_LIMIT,
                 min_value=1,
                 max_value=10,
+            ),
+            comment_reply_probability=_int_between(
+                source.get("qzone_auto_comment_reply_probability", 0),
+                0,
+                min_value=0,
+                max_value=100,
             ),
             reply_limit=_int_between(
                 source.get("qzone_auto_reply_limit", QZONE_AUTO_REPLY_DEFAULT_LIMIT),

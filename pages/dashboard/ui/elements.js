@@ -95,6 +95,7 @@ export function getDashboardElements() {
     cfgQzoneAutoLikeLimit: document.getElementById("cfgQzoneAutoLikeLimit"),
     cfgQzoneAutoComment: document.getElementById("cfgQzoneAutoComment"),
     cfgQzoneAutoCommentLimit: document.getElementById("cfgQzoneAutoCommentLimit"),
+    cfgQzoneAutoCommentReplyProbability: document.getElementById("cfgQzoneAutoCommentReplyProbability"),
     cfgQzoneAutoReply: document.getElementById("cfgQzoneAutoReply"),
     cfgQzoneAutoReplyLimit: document.getElementById("cfgQzoneAutoReplyLimit"),
     cfgQzoneDawnSequence: document.getElementById("cfgQzoneDawnSequence"),

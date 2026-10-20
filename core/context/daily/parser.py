@@ -270,9 +270,9 @@ class ContextLifeParseService(ContextComponent):
                 parts.append(f"【今日完整时间轴及计划】\n{schedule}")
 
             return "\n\n".join(parts)
-        except Exception as e:
-            logger.error(f"[上下文] 解析生活数据失败: {e}")
-            return str(data)
+        except Exception as exc:
+            logger.warning(f"[上下文] 已跳过异常生活快照：{type(exc).__name__}")
+            return ""
 
     @staticmethod
     def _append_life_overview(parts: list[str], data: dict) -> None:

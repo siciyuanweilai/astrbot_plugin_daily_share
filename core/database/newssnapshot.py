@@ -86,7 +86,9 @@ class DatabaseNewsSnapshotService(DatabaseRepository):
         target_id: str,
         focus_key: str,
     ) -> tuple[dict[str, Any] | None, Any]:
-        with self._connection() as conn:
+        with self._connection(
+            timeout=self.manager.CONTEXT_READ_TIMEOUT_SECONDS
+        ) as conn:
             snapshot_row = conn.execute(
                 """
                 SELECT id, target_id, source_key, source_name, image_url, items, created_at
@@ -159,7 +161,7 @@ class DatabaseNewsSnapshotService(DatabaseRepository):
         target_id: str,
         focus_key: str,
     ) -> tuple[dict[str, Any] | None, Any]:
-        return await self._execute(
+        return await self._execute_context(
             self._sync_get_latest_news_snapshot_with_focus,
             target_id,
             focus_key,

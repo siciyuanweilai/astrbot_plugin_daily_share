@@ -18,7 +18,7 @@ _QZONE_SKIP_REASON_LABELS = {
     "already_replied": "已回复该评论",
     "empty_comment": "评论内容为空",
     "parent_is_self": "原一级评论来自机器人自己",
-    "parent_not_self": "原一级评论不是机器人发布的",
+    "reply_not_to_bot": "回复未明确指向机器人",
     "missing_parent": "缺少原一级评论",
     "already_replied_to_target": "已回复当前对象",
     "has_later_nonself_reply": "已有更新的非机器人回复",

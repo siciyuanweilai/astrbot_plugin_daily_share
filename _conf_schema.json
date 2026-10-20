@@ -1042,7 +1042,7 @@
         "description": "启用好友动态自动评论",
         "type": "bool",
         "default": false,
-        "hint": "开启后，会定时查询好友动态，由 LLM 生成自然短评论；如果好友在 Bot 已评论的楼层下回评，也会继续在该楼层续评。会跳过自己的动态和已处理动态。"
+        "hint": "开启后定时评论好友动态，并接续已参与评论楼中回复 Bot 的评论。主体评论跳过自己的动态和已处理动态；概率回评可参与已有 Bot 评论的动态。"
       },
       "qzone_auto_comment_limit": {
         "description": "单次最多评论数量",
@@ -1054,6 +1054,17 @@
           "step": 1
         },
         "hint": "一次查询最多实际发送几条评论。建议 1-3 条，越小越自然。"
+      },
+      "qzone_auto_comment_reply_probability": {
+        "description": "回复其他用户评论概率",
+        "type": "int",
+        "default": 100,
+        "slider": {
+          "min": 0,
+          "max": 100,
+          "step": 5
+        },
+        "hint": "好友说说或相册已有其他用户的顶层评论时，按此概率将本次自动评论改为直接回评该用户；命中后不再同时发布主体评论。0% 表示关闭，回评计入自动评论数量上限。"
       },
       "qzone_enable_auto_comment_image_vision": {
         "description": "启用好友动态配图识别",

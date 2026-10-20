@@ -20,6 +20,7 @@ QZONE_AUTO_REPLY_DEFAULT_LIMIT = 3
 QZONE_AUTO_REPLY_DEFAULT_COOLDOWN_HOURS = 168
 QZONE_ACTION_SKIPPED = "skipped"
 QZONE_ACTION_COMMENTED = "commented"
+QZONE_ACTION_COMMENT_REPLIED = "comment_replied"
 QZONE_ACTION_THREAD_COMMENTED = "thread_commented"
 QZONE_ACTION_LIKED = "liked"
 QZONE_ACTION_REPLIED = "replied"
@@ -186,10 +187,10 @@ def _qzone_processed_thread_has_self_reply(
         return False
     parent_key = _comment_key(post, parent_comment)
     parent_item = processed.get(parent_key)
-    if (
-        isinstance(parent_item, dict)
-        and str(parent_item.get("action") or "") == QZONE_ACTION_REPLIED
-    ):
+    if isinstance(parent_item, dict) and str(parent_item.get("action") or "") in {
+        QZONE_ACTION_REPLIED,
+        QZONE_ACTION_COMMENT_REPLIED,
+    }:
         return True
 
     parent_tid = str(getattr(parent_comment, "tid", "") or "").strip()

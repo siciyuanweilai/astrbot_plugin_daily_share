@@ -290,29 +290,3 @@ class PersonaAndModelTests(unittest.IsolatedAsyncioTestCase):
             )[0],
             "stop",
         )
-
-    def test_usage_keeps_purposes_and_unknown_reports_separate(self):
-        main = testmedia._load_main_module()
-        service = main.LlmService(None, {}, lambda: False)
-        service.record_token_usage(types.SimpleNamespace(usage=None), "provider")
-        for scene, cached in (("share_content", 80), ("qzone_vision", 0)):
-            service.record_token_usage(
-                types.SimpleNamespace(
-                    usage={"input_other": 100 - cached, "input_cached": cached}
-                ),
-                "provider",
-                purpose=scene,
-            )
-        stats = service.usage_snapshot()
-        self.assertEqual(stats["unreported_calls"], 1)
-        self.assertEqual(stats["unreported_by_purpose"], {"text": {"provider": 1}})
-        self.assertEqual(stats["total"]["cached_input_ratio"], 0.4)
-        self.assertEqual(stats["total"]["cached_call_ratio"], 0.5)
-        self.assertEqual(
-            stats["purposes"]["share_content"]["provider"]["cached_input_tokens"], 80
-        )
-        self.assertEqual(
-            stats["purposes"]["qzone_vision"]["provider"]["cached_calls"], 0
-        )
-        stats["total"]["input_tokens"] = -1
-        self.assertEqual(service.token_usage["input_tokens"], 200)

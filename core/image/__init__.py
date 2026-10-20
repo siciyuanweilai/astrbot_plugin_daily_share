@@ -32,7 +32,6 @@ class ImageService:
         self.video = ImageVideoService(self)
 
     async def _call_llm(self, *args, target_umo: str | None = None, **kwargs):
-        kwargs.setdefault("purpose", "image_prompt")
         if target_umo:
             kwargs["umo"] = target_umo
         return await self.call_llm(*args, **kwargs)

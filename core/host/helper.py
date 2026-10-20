@@ -25,6 +25,46 @@ class PluginToolContextService(SupportComponent):
     def __init__(self, runtime) -> None:
         super().__init__(runtime)
         self._prompt_cache = OrderedDict()
+        self._prompt_inflight = {}
+
+    async def _run_context_builder(self, builder, target: str) -> str:
+        """Run one builder so concurrent callers can share its result safely."""
+        try:
+            return str(await builder(target) or "")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug(f"[日常分享] 工具上下文构建失败: {type(exc).__name__}")
+            return ""
+
+    def _store_context_prompt(self, key, prompt: str) -> None:
+        ttl = (
+            self._PROMPT_CACHE_TTL_SECONDS
+            if prompt
+            else self._EMPTY_PROMPT_CACHE_TTL_SECONDS
+        )
+        self._prompt_cache[key] = (time.monotonic() + ttl, prompt)
+        self._prompt_cache.move_to_end(key)
+        while len(self._prompt_cache) > self._PROMPT_CACHE_MAX_ITEMS:
+            self._prompt_cache.popitem(last=False)
+
+    def _finish_context_prompt(self, key, task) -> None:
+        if self._prompt_inflight.get(key) is not task:
+            if not task.cancelled():
+                try:
+                    task.result()
+                except Exception:
+                    pass
+            return
+        self._prompt_inflight.pop(key, None)
+        if task.cancelled():
+            return
+        try:
+            prompt = str(task.result() or "")
+        except Exception as exc:
+            logger.debug(f"[日常分享] 工具上下文任务结束异常: {type(exc).__name__}")
+            return
+        self._store_context_prompt(key, prompt)
 
     async def cached_context_prompt(
         self, kind: str, target_uid: str, builder, *, timeout: float
@@ -41,23 +81,30 @@ class PluginToolContextService(SupportComponent):
         self._prompt_cache.pop(key, None)
         if timeout <= 0:
             return ""
+        task = self._prompt_inflight.get(key)
+        if task is None:
+            task = asyncio.create_task(self._run_context_builder(builder, target))
+            self._prompt_inflight[key] = task
+            task.add_done_callback(
+                lambda completed: self._finish_context_prompt(key, completed)
+            )
         try:
-            prompt = str(await asyncio.wait_for(builder(target), timeout) or "")
+            prompt = str(await asyncio.wait_for(asyncio.shield(task), timeout) or "")
         except asyncio.TimeoutError:
             logger.debug("[日常分享] 工具上下文读取超时，跳过本次注入")
-            prompt = ""
-        ttl = (
-            self._PROMPT_CACHE_TTL_SECONDS
-            if prompt
-            else self._EMPTY_PROMPT_CACHE_TTL_SECONDS
-        )
-        self._prompt_cache[key] = (time.monotonic() + ttl, prompt)
-        while len(self._prompt_cache) > self._PROMPT_CACHE_MAX_ITEMS:
-            self._prompt_cache.popitem(last=False)
+            return ""
+        if task.done():
+            self._finish_context_prompt(key, task)
         return prompt
 
     def _invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
-        self._prompt_cache.pop((kind, str(target_uid or "").strip()), None)
+        key = (kind, str(target_uid or "").strip())
+        self._prompt_cache.pop(key, None)
+        self._prompt_inflight.pop(key, None)
+
+    def invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
+        """Invalidate one dynamic prompt and suppress an older in-flight result."""
+        self._invalidate_context_prompt(kind, target_uid)
 
     def _strip_news_link_reference_tail(self, text: str) -> str:
         """移除 news_link 自然回复末尾由模型补出的参考链接列表。"""

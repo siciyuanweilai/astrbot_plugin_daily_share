@@ -136,7 +136,6 @@ class QzoneAutoPromptService:
             prompt=prompt,
             system_prompt=system_prompt,
             umo=target_umo or None,
-            purpose="qzone_interaction",
         )
         text = _clean_auto_comment_text(result, max_bytes=max_bytes)
         if not text:
@@ -251,7 +250,6 @@ class QzoneAutoPromptService:
             prompt=prompt,
             system_prompt=system_prompt,
             umo=target_umo or None,
-            purpose="qzone_photo_comment",
         )
         index, content = _parse_qzone_photo_comment(raw, allowed_indices)
         selected = image_refs[index - 1][0]
@@ -269,11 +267,15 @@ class QzoneAutoPromptService:
         *,
         state: dict | None = None,
         target_umo: str = "",
+        as_post_owner: bool = True,
+        self_uin: int = 0,
     ) -> str:
         prompt_parts = [
-            "回复对象：下列评论。",
+            "回复对象：最后列出的‘对方评论’；结合动态正文和已有对话接话，其他评论楼仅作背景。",
             _qzone_auto_interaction_time_context(),
-            _qzone_auto_reply_comment_summary(post, comment),
+            _qzone_auto_reply_comment_summary(
+                post, comment, as_post_owner=as_post_owner, self_uin=self_uin
+            ),
         ]
         image_context = await _qzone_auto_reply_image_context(
             self.owner, comment, state=state, target_umo=target_umo, post=post
@@ -287,7 +289,11 @@ class QzoneAutoPromptService:
             prompt_parts.append(life_context)
         prompt = "\n\n".join(part for part in prompt_parts if part)
         system_prompt = await self.owner._qzone_auto_interaction_system_prompt(
-            "以空间主人的身份回复这条评论。",
+            (
+                "以空间主人的身份回复这条评论。"
+                if as_post_owner
+                else "以评论参与者的身份，回复这条好友动态中的评论。"
+            ),
             scene="qzone_reply",
         )
         return await self.owner._qzone_auto_interaction_llm(

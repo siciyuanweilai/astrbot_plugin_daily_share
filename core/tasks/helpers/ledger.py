@@ -71,6 +71,10 @@ class TaskHelperRecordService(TaskServiceBase):
                 await self.db.add_sent_history_with_news_snapshot(history, records[0])
             else:
                 await self.db.add_sent_history_with_news_snapshots(history, records)
+            for record in records:
+                self.services.snapshots.invalidate_news_context_prompt(
+                    record["target_id"]
+                )
             return
         await self.db.add_sent_history(
             target_id=target_id,

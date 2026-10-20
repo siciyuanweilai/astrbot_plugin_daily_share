@@ -253,6 +253,21 @@ def _service(history=None, context_conf=None, platform_records=None, stars=None)
 
 
 class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
+    def test_invalid_life_snapshot_never_falls_back_to_raw_private_fields(self):
+        _, service = _service()
+        snapshot = {
+            "weather": "晴",
+            "timeline": [None],
+            "meta": {"continuous_kernel": "PRIVATE_KERNEL_SENTINEL"},
+            "unknown_private_field": "PRIVATE_FIELD_SENTINEL",
+        }
+
+        context = service.life_parse._parse_life_data(snapshot)
+
+        self.assertEqual(context, "")
+        self.assertNotIn("PRIVATE_KERNEL_SENTINEL", context)
+        self.assertNotIn("PRIVATE_FIELD_SENTINEL", context)
+
     def test_onebot_history_skips_invalid_time_without_dropping_valid_messages(self):
         _, service = _service()
         output = []

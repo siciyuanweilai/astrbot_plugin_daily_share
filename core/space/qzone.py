@@ -1191,6 +1191,7 @@ class QzoneService:
         detail_by_tid,
         detail_by_submit_tid,
         used_detail,
+        parent_aliases=None,
     ):
         return QzoneFeedMergeService._match_detail_comment(
             base_comment,
@@ -1198,6 +1199,7 @@ class QzoneService:
             detail_by_tid=detail_by_tid,
             detail_by_submit_tid=detail_by_submit_tid,
             used_detail=used_detail,
+            parent_aliases=parent_aliases,
         )
 
     @staticmethod

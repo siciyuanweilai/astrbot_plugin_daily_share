@@ -8,7 +8,13 @@ from typing import Any
 from astrbot.api import logger
 
 from .delivery import ShareDeliveryBridge
-from .mediajob import ShareMediaPending, current_share_job, save_share_job
+from .mediajob import (
+    ShareMediaPending,
+    current_share_job,
+    normalize_media_task_result,
+    remember_media_task_result,
+    save_share_job,
+)
 
 DAILY_LIFE_PLUGIN_ID = "astrbot_plugin_daily_life"
 _MEDIA_METHODS = {
@@ -135,6 +141,10 @@ class DailyLifeBridge:
         """读取当前任务最近一次媒体调用的状态与用户可读原因。"""
 
         key = str(media_kind or "").strip().lower()
+        job = current_share_job.get()
+        if job is not None:
+            status, reason = job.get("media_results", {}).get(key, ("", ""))
+            return status, reason
         return self._media_results.get().get(key, ("", ""))
 
     def _set_media_result(self, media_kind: str, status: str, reason: str = "") -> None:
@@ -144,6 +154,9 @@ class DailyLifeBridge:
         results = dict(self._media_results.get())
         results[key] = (str(status or "").strip(), str(reason or "").strip())
         self._media_results.set(results)
+        job = current_share_job.get()
+        if job is not None:
+            job.setdefault("media_results", {})[key] = list(results[key])
 
     def _log_search_notice(
         self, key: str, message: str, *, warning: bool = False
@@ -231,6 +244,19 @@ class DailyLifeBridge:
         contains_character: bool = False,
     ) -> str:
         job = current_share_job.get()
+        if job is not None and job.get("pending_media") == "image":
+            return await self._accept_media_task_result(
+                job, "image", await self.get_image_task(f"{job['id']}:image")
+            )
+        if job is not None and (job.get("image_path") or job.get("image_failed")):
+            value = str(job.get("image_path") or "")
+            status, reason = self.media_result("image")
+            self._set_media_result(
+                "image",
+                "ok" if value else (status or "error"),
+                "" if value else (reason or "原图片任务失败，未重新提交"),
+            )
+            return value
         plugin = self._plugin()
         task_method = getattr(plugin, "generate_share_image_task", None)
         if job is not None and not callable(task_method):
@@ -239,29 +265,23 @@ class DailyLifeBridge:
             )
             return ""
         if job is not None and callable(task_method):
-            job.update(image_description=prompt, contains_character=contains_character)
-            await save_share_job(job)
-            result = await task_method(
-                event,
-                prompt,
-                task_key=f"{job['id']}:image",
+            job.update(
+                image_description=prompt,
                 contains_character=contains_character,
-                target_umo=self.share_target(job),
+                pending_media="image",
             )
-            if not isinstance(result, dict):
-                raise RuntimeError("分享生图任务返回格式无效")
-            if result.get("status") == "pending":
-                job["pending_media"] = "image"
-                self._set_media_result("image", "pending", "原图片任务仍在处理")
-                raise ShareMediaPending("原图片任务仍在处理")
-            if result.get("status") == "ready":
-                path = str(result.get("path") or "")
-                job["image_path"] = path
-                await save_share_job(job)
-                self._set_media_result("image", "ok")
-                return path
-            self._set_media_result("image", "error", "原图片任务失败，未重新提交")
-            return ""
+            await save_share_job(job)
+            try:
+                result = await task_method(
+                    event,
+                    prompt,
+                    task_key=f"{job['id']}:image",
+                    contains_character=contains_character,
+                    target_umo=self.share_target(job),
+                )
+            except Exception as exc:
+                result = self._unconfirmed_media_result("图片", exc)
+            return await self._accept_media_task_result(job, "image", result)
         return await self._call_media(
             "generate_share_image",
             "配图",
@@ -280,12 +300,33 @@ class DailyLifeBridge:
         plugin = self._plugin()
         method = getattr(plugin, f"get_share_{kind}_task", None)
         if not callable(method):
-            return {"status": "unavailable"}
+            return {
+                "status": "unavailable",
+                "error": "生活插件未就绪或缺少持久媒体查询接口，等待恢复",
+            }
         try:
             result = await method(task_key)
-            return result if isinstance(result, dict) else {"status": "failed"}
-        except Exception:
-            return {"status": "unavailable"}
+            return normalize_media_task_result(result, kind)
+        except Exception as exc:
+            return self._unconfirmed_media_result("媒体查询", exc)
+
+    @staticmethod
+    def _unconfirmed_media_result(label: str, exc: Exception) -> dict:
+        return {
+            "status": "unavailable",
+            "error": f"生活插件{label}暂时无法确认（{type(exc).__name__}），等待查询原任务",
+        }
+
+    async def _accept_media_task_result(
+        self, job: dict, kind: str, result: object
+    ) -> str:
+        payload = normalize_media_task_result(result, kind)
+        remember_media_task_result(job, kind, payload)
+        self._set_media_result(kind, *job["media_results"][kind])
+        await save_share_job(job)
+        if payload["status"] in {"pending", "unavailable"}:
+            raise ShareMediaPending(payload.get("error") or "原媒体任务仍在处理")
+        return payload.get("path" if kind == "image" else "url", "")
 
     async def generate_video(
         self,
@@ -297,7 +338,18 @@ class DailyLifeBridge:
         job = current_share_job.get()
         if job is not None:
             if job.get("video_started"):
-                return str(job.get("video_url") or "")
+                if job.get("pending_media") == "video":
+                    return await self._accept_media_task_result(
+                        job, "video", await self.get_video_task(f"{job['id']}:video")
+                    )
+                value = str(job.get("video_url") or "")
+                status, reason = self.media_result("video")
+                self._set_media_result(
+                    "video",
+                    "ok" if value else (status or "error"),
+                    "" if value else (reason or "原视频任务未返回有效成品，未重新提交"),
+                )
+                return value
             job["video_started"] = True
             await save_share_job(job)
             plugin = self._plugin()
@@ -305,24 +357,17 @@ class DailyLifeBridge:
             if callable(method):
                 job["pending_media"] = "video"
                 await save_share_job(job)
-                result = await method(
-                    event,
-                    prompt,
-                    task_key=f"{job['id']}:video",
-                    reference_image=reference_image,
-                    target_umo=self.share_target(job),
-                )
-                if result.get("status") == "pending":
-                    self._set_media_result("video", "pending", "原视频任务仍在处理")
-                    raise ShareMediaPending("原视频任务仍在处理")
-                value = (
-                    str(result.get("url") or "")
-                    if result.get("status") == "ready"
-                    else ""
-                )
-                job.update(video_url=value, pending_media="")
-                await save_share_job(job)
-                return value
+                try:
+                    result = await method(
+                        event,
+                        prompt,
+                        task_key=f"{job['id']}:video",
+                        reference_image=reference_image,
+                        target_umo=self.share_target(job),
+                    )
+                except Exception as exc:
+                    result = self._unconfirmed_media_result("视频", exc)
+                return await self._accept_media_task_result(job, "video", result)
             self._set_media_result(
                 "video", "unavailable", "生活插件缺少持久视频任务接口"
             )

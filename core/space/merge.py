@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .models import QzoneComment, QzonePost
@@ -71,10 +72,12 @@ class QzoneFeedMergeService:
             for comment in detail
             if str(comment.submit_tid or "").strip()
         }
-        merged: list[QzoneComment] = []
+        merged_by_id: dict[int, QzoneComment] = {}
+        parent_aliases: dict[str, str] = {}
         seen: set[str] = set()
         used_detail: set[int] = set()
-        for comment in base:
+        # 先合并一级评论，建立详情接口真实编号到原楼层编号的映射。
+        for comment in sorted(base, key=lambda item: bool(item.parent_tid)):
             tid = str(comment.tid or "").strip()
             matched = QzoneService._match_detail_comment(
                 comment,
@@ -82,19 +85,36 @@ class QzoneFeedMergeService:
                 detail_by_tid=detail_by_tid,
                 detail_by_submit_tid=detail_by_submit_tid,
                 used_detail=used_detail,
+                parent_aliases=parent_aliases,
             )
             if matched is not None:
-                merged.append(QzoneService._merge_comment(comment, matched))
+                merged_by_id[id(comment)] = QzoneService._merge_comment(
+                    comment, matched
+                )
+                if not comment.parent_tid:
+                    for alias in (matched.tid, matched.submit_tid, matched.raw_tid):
+                        if alias:
+                            parent_aliases[str(alias)] = tid
             else:
-                merged.append(comment)
+                merged_by_id[id(comment)] = comment
             if tid:
                 seen.add(tid)
 
+        merged = [merged_by_id[id(comment)] for comment in base]
         for comment in detail:
             if id(comment) in used_detail:
                 continue
             tid = str(comment.tid or "").strip()
             if not tid or tid not in seen:
+                comment = replace(
+                    comment,
+                    parent_tid=parent_aliases.get(
+                        comment.parent_tid, comment.parent_tid
+                    ),
+                    reply_to_tid=parent_aliases.get(
+                        comment.reply_to_tid, comment.reply_to_tid
+                    ),
+                )
                 merged.append(comment)
                 if tid:
                     seen.add(tid)
@@ -109,6 +129,7 @@ class QzoneFeedMergeService:
         detail_by_tid: dict[str, QzoneComment],
         detail_by_submit_tid: dict[str, QzoneComment],
         used_detail: set[int],
+        parent_aliases: dict[str, str] | None = None,
     ) -> QzoneComment | None:
         from .qzone import QzoneService
 
@@ -117,17 +138,47 @@ class QzoneFeedMergeService:
             detail_by_submit_tid.get(str(base_comment.submit_tid or "").strip()),
         )
         for candidate in direct_matches:
-            if candidate is not None and id(candidate) not in used_detail:
-                used_detail.add(id(candidate))
-                return candidate
+            if candidate is None or id(candidate) in used_detail:
+                continue
+            if not cls._comment_identity_compatible(
+                base_comment, candidate, parent_aliases
+            ):
+                continue
+            if (
+                str(base_comment.tid or "") != str(candidate.tid or "")
+                and QzoneService._comment_submit_tid_rank(
+                    str(base_comment.submit_tid or "")
+                )
+                < 2
+                and not QzoneService._comments_equivalent(base_comment, candidate)
+            ):
+                continue
+            used_detail.add(id(candidate))
+            return candidate
 
         for candidate in detail_comments:
             if id(candidate) in used_detail:
                 continue
-            if QzoneService._comments_equivalent(base_comment, candidate):
+            if cls._comment_identity_compatible(
+                base_comment, candidate, parent_aliases
+            ) and QzoneService._comments_equivalent(base_comment, candidate):
                 used_detail.add(id(candidate))
                 return candidate
         return None
+
+    @staticmethod
+    def _comment_identity_compatible(
+        left: QzoneComment,
+        right: QzoneComment,
+        parent_aliases: dict[str, str] | None,
+    ) -> bool:
+        if left.uin and right.uin and int(left.uin) != int(right.uin):
+            return False
+        left_parent = str(left.parent_tid or "").strip()
+        right_parent = str(right.parent_tid or "").strip()
+        right_parent = (parent_aliases or {}).get(right_parent, right_parent)
+        # 短 submit_tid 只在自己的评论楼内有效，不可跨作者、跨楼或跨层级合并。
+        return left_parent == right_parent
 
     @staticmethod
     def _comments_equivalent(left: QzoneComment, right: QzoneComment) -> bool:

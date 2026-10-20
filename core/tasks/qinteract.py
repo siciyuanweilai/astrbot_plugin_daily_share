@@ -51,6 +51,7 @@ from .interact.totals import (
 from .interact.tracker import (
     QZONE_ACTION_RETRY_LATER,
     QZONE_ACTION_SKIPPED,
+    _mark_qzone_post_processed,
     _mark_qzone_processed,
 )
 from .interact.tracker import (
@@ -175,12 +176,28 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
         parent_comment_id: str = "",
         parent_comment=None,
         result_count_key: str = "replied",
+        processed_post_action: str = "",
     ) -> dict:
         submit_result = None
+
+        def mark_post(action: str) -> None:
+            if processed_post_action:
+                _mark_qzone_post_processed(
+                    processed,
+                    post,
+                    action,
+                    comment_id=str(getattr(comment, "tid", "") or ""),
+                )
+
         try:
             if not reply:
                 _mark_qzone_processed(processed, item_key, QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
+                if processed_post_action:
+                    mark_post(QZONE_ACTION_SKIPPED)
+                    await checkpoint_qzone_action(
+                        self, state_key, state, processed, result
+                    )
                 logger.debug(
                     f"[日常分享] QQ 空间自动回评跳过: 生成结果为空，"
                     f"目标={getattr(comment, 'nickname', '') or getattr(comment, 'uin', '')}"
@@ -217,6 +234,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
                     submission_unknown=True,
                     **fields,
                 )
+                mark_post(QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
                 await checkpoint_qzone_action(self, state_key, state, processed, result)
                 logger.warning(
@@ -236,6 +254,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
                     reason=exc_text,
                     **fields,
                 )
+                mark_post(QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
                 await checkpoint_qzone_action(self, state_key, state, processed, result)
                 logger.debug(
@@ -257,6 +276,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
                     reason=exc_text,
                     **fields,
                 )
+                mark_post(QZONE_ACTION_SKIPPED)
                 result["skipped"] += 1
                 logger.info(f"[日常分享] QQ 空间自动回评跳过不可用楼层: {exc}")
                 return _qzone_reply_skipped_payload(
@@ -289,6 +309,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
         )
 
         _mark_qzone_processed(processed, item_key, processed_action, **fields)
+        mark_post(processed_post_action)
         count_key = str(result_count_key or "replied")
         result[count_key] = int(result.get(count_key, 0) or 0) + 1
         await checkpoint_qzone_action(self, state_key, state, processed, result)
@@ -392,6 +413,17 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
     def _qzone_auto_comment_candidate(self, post, *, self_uin, processed, index=None):
         return self.policy._qzone_auto_comment_candidate(
             post, self_uin=self_uin, processed=processed, index=index
+        )
+
+    def _qzone_auto_comment_reply_candidate(
+        self, post, comment, *, self_uin, processed, index=None
+    ):
+        return self.policy._qzone_auto_comment_reply_candidate(
+            post,
+            comment,
+            self_uin=self_uin,
+            processed=processed,
+            index=index,
         )
 
     def _qzone_auto_like_candidate(self, post, *, self_uin, processed):
@@ -499,10 +531,22 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
         )
 
     async def _generate_qzone_auto_reply(
-        self, post, comment, *, state=None, target_umo=""
+        self,
+        post,
+        comment,
+        *,
+        state=None,
+        target_umo="",
+        as_post_owner=True,
+        self_uin=0,
     ):
         return await self.dialogue._generate_qzone_auto_reply(
-            post, comment, state=state, target_umo=target_umo
+            post,
+            comment,
+            state=state,
+            target_umo=target_umo,
+            as_post_owner=as_post_owner,
+            self_uin=self_uin,
         )
 
     async def _generate_qzone_auto_reply_thread(

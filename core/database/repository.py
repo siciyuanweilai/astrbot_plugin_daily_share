@@ -7,8 +7,8 @@ class DatabaseRepository:
     def __init__(self, manager):
         self.manager = manager
 
-    def _connection(self, *, write: bool = False):
-        return self.manager._connection(write=write)
+    def _connection(self, *, write: bool = False, timeout: float | None = None):
+        return self.manager._connection(write=write, timeout=timeout)
 
     def _fetch_one(self, sql: str, params=()):
         return self.manager._fetch_one(sql, params)
@@ -21,6 +21,9 @@ class DatabaseRepository:
 
     async def _execute(self, func, *args, **kwargs):
         return await self.manager._execute(func, *args, **kwargs)
+
+    async def _execute_context(self, func, *args, **kwargs):
+        return await self.manager._execute_context(func, *args, **kwargs)
 
 
 __all__ = ["DatabaseRepository"]

@@ -1,6 +1,7 @@
 import random
 
 import aiohttp
+
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP

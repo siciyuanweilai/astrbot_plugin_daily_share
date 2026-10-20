@@ -92,7 +92,10 @@ class DashboardApplyQzoneService(PanelComponent):
         self.fields._page_apply_int_fields(
             qzone,
             qzone_body,
-            (("qzone_auto_interaction_active_hours", 24, 0, 168),),
+            (
+                ("qzone_auto_interaction_active_hours", 24, 0, 168),
+                ("qzone_auto_comment_reply_probability", 0, 0, 100),
+            ),
         )
         self.qzone_apply._page_apply_qzone_auto_fields(
             qzone,

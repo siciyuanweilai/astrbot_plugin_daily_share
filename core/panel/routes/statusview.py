@@ -17,7 +17,6 @@ class DashboardRouteStatusService(PanelComponent):
     image_conf = RuntimeField("image_conf")
     jobs = RuntimeField("jobs")
     labels = RuntimeField("labels")
-    llm_service = RuntimeField("llm_service")
     media_page = RuntimeField("media_page")
     meta = RuntimeField("meta")
     plugin = RuntimeField("plugin")
@@ -61,7 +60,6 @@ class DashboardRouteStatusService(PanelComponent):
                 "enabled": bool(self.config.get("enable_auto_share", False)),
                 "terminated": self._is_terminated,
                 "runtime": runtime_status,
-                "model_usage": self.llm_service.usage_snapshot(),
                 "busy": self.is_share_busy(global_scope=True),
                 "preferences": preferences,
                 "scheduler": {

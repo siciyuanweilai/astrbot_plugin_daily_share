@@ -24,6 +24,7 @@ class TaskNewsCacheFocusService:
         await self.owner.db.set_cache_state(
             self.owner._news_snapshot_focus_key(target_uid), focus
         )
+        self.owner.invalidate_news_context_prompt(target_uid)
 
     async def _focused_news_index(
         self, target_uid: str, snapshot: dict, source_key: str | None

@@ -21,6 +21,8 @@ from .database.topics import DatabaseTopicService
 class DatabaseManager:
     """聚合数据库连接、建表和各类数据访问能力。"""
 
+    CONTEXT_READ_TIMEOUT_SECONDS = 0.2
+
     def __init__(self, data_dir: Path, *, initialize: bool = True):
         self.db_path = Path(data_dir) / "daily_share.db"
         self._initialized = False
@@ -31,6 +33,11 @@ class DatabaseManager:
             max_workers=2,
             thread_name_prefix="daily-share-db",
         )
+        # 动态工具上下文只读查询不能占满普通写入线程。
+        self._context_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="daily-share-context-db",
+        )
         self.history = DatabaseHistoryService(self)
         self.snapshots = DatabaseNewsSnapshotService(self)
         self.state = DatabaseStateService(self)
@@ -40,15 +47,19 @@ class DatabaseManager:
         if initialize:
             self._init_db()
 
-    def _get_conn(self):
-        conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)
-        conn.execute("PRAGMA busy_timeout = 10000")
+    def _get_conn(self, *, timeout: float | None = None):
+        timeout_seconds = 10.0 if timeout is None else max(0.01, float(timeout))
+        timeout_ms = max(1, int(timeout_seconds * 1000))
+        conn = sqlite3.connect(
+            self.db_path, timeout=timeout_seconds, check_same_thread=False
+        )
+        conn.execute(f"PRAGMA busy_timeout = {timeout_ms}")
         return conn
 
     @contextmanager
-    def _connection(self, *, write: bool = False):
+    def _connection(self, *, write: bool = False, timeout: float | None = None):
         """提供自动提交、回滚和关闭的数据库连接。"""
-        conn = self._get_conn()
+        conn = self._get_conn(timeout=timeout)
         try:
             yield conn
             if write:
@@ -260,10 +271,17 @@ class DatabaseManager:
             if self._closed:
                 return
             self._closed = True
-            await asyncio.to_thread(
-                self._executor.shutdown,
-                wait=True,
-                cancel_futures=False,
+            await asyncio.gather(
+                asyncio.to_thread(
+                    self._executor.shutdown,
+                    wait=True,
+                    cancel_futures=False,
+                ),
+                asyncio.to_thread(
+                    self._context_executor.shutdown,
+                    wait=True,
+                    cancel_futures=False,
+                ),
             )
 
     def _sync_add_sent_history_with_news_snapshots(
@@ -369,3 +387,12 @@ class DatabaseManager:
             raise RuntimeError("每日分享数据库已经关闭")
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._executor, func, *args, **kwargs)
+
+    async def _execute_context(self, func, *args, **kwargs):
+        """在独立线程中执行有严格时限的动态上下文只读查询。"""
+        if self._closed:
+            raise RuntimeError("每日分享数据库已经关闭")
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self._context_executor, lambda: func(*args, **kwargs)
+        )
