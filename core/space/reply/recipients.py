@@ -54,9 +54,7 @@ class QzoneReplyTargetService:
             or getattr(comment, "raw_reply_to_uin", 0)
             or 0
         )
-        known_self_uins = {uin for uin in (post_uin, parent_uin) if uin}
-        if reply_to_uin and reply_to_uin not in known_self_uins:
-            return False
+        # 被回复者也可能是后来加入此楼的参与者，须根据同楼记录确认。
         self_uin = reply_to_uin or post_uin
         if not self_uin:
             return False
@@ -209,7 +207,10 @@ class QzoneReplyTargetService:
         comment: QzoneComment,
         *,
         parent_comment: QzoneComment | None,
+        self_uin: int = 0,
     ) -> bool:
+        from .plans import QzoneReplyPlanService
+
         if parent_comment is None:
             return False
         try:
@@ -222,11 +223,18 @@ class QzoneReplyTargetService:
                 parent_comment=parent_comment,
                 targets=targets,
             )
-            return bool(
-                self.owner._thread_reply_payload_variants(
-                    post, comment, parent_comment, targets
-                )
+            _, variants = QzoneReplyPlanService._thread_reply_submit_variants(
+                post,
+                comment,
+                parent_comment,
+                targets,
+                self_uin=int(
+                    self_uin
+                    or getattr(getattr(self.owner, "_ctx", None), "uin", 0)
+                    or 0
+                ),
             )
+            return bool(variants)
         except Exception:
             return False
 

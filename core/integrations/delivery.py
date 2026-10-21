@@ -12,16 +12,15 @@ if TYPE_CHECKING:
     from .dailylife import DailyLifeBridge
 
 
-async def record_confirmed_share(
-    context_service, target: str, content: str, description: str, result: dict
-) -> None:
+def confirmed_share_payload(content: str, description: str, result: dict) -> dict:
+    """历史与生活回传共用实际送达事实，不把生成或可能送达当成成功。"""
     confirmed = {
         stage
         for stage in ("text", "audio", "image", "video")
         if result.get(f"{stage}_sent") and not result.get(f"{stage}_probable_sent")
     }
     if not confirmed:
-        return
+        return {}
     kind = next(
         (stage for stage in ("video", "audio", "image") if stage in confirmed), ""
     )
@@ -30,13 +29,34 @@ async def record_confirmed_share(
         if confirmed.intersection({"text", "audio"})
         else f"[已分享{'视频' if kind == 'video' else '图片'}]"
     )
-    await context_service.record_external_share(
-        target,
-        text,
-        description if confirmed.intersection({"image", "video"}) else "",
-        image_sent="image" in confirmed,
-        media_kind=kind,
-    )
+    return {
+        "content": text,
+        "description": description if confirmed.intersection({"image", "video"}) else "",
+        "image_sent": "image" in confirmed,
+        "media_kind": kind,
+    }
+
+
+async def record_confirmed_history(context_service, target, content, description, result):
+    payload = confirmed_share_payload(content, description, result)
+    if not payload:
+        return
+    text = payload["content"]
+    image = payload["description"] if payload["image_sent"] else ""
+    if payload["description"] and not payload["image_sent"]:
+        text += f"\n[已分享视频: {payload['description']}]"
+    await context_service.record_bot_reply_to_history(target, text, image_desc=image)
+
+
+async def record_confirmed_share(
+    context_service, target: str, content: str, description: str, result: dict
+) -> None:
+    payload = confirmed_share_payload(content, description, result)
+    if payload:
+        await context_service.record_external_share(
+            target, payload["content"], payload["description"],
+            image_sent=payload["image_sent"], media_kind=payload["media_kind"],
+        )
 
 
 class ShareDeliveryBridge:

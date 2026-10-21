@@ -20,6 +20,7 @@ from ..integrations.mediajob import (
     remember_media_task_result,
 )
 from ..schedule import normalize_schedule_mode
+from ..integrations.contact import ShareContactChanged, contact, current_contact
 
 _STATE_KEY = "share_media_continuations"
 
@@ -68,15 +69,33 @@ def preserve_share(kind: str):
                 "created_at": datetime.now().timestamp(),
                 "service": service,
             }
+            ticket = current_contact.get()
+            if ticket:
+                job["contact_snapshot"] = ticket.get("snapshot")
+                job["contact_owner"] = ticket["owner"]
+            elif params.get("history_source") in {"scheduled", "smart"}:
+                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                job["contact_owner"] = "share:" + job["id"]
+                result = await contact(self.plugin, target, job["contact_owner"])
+                if not result.get("allowed"):
+                    await contact(self.plugin, target, job["contact_owner"], action="release")
+                    return False
+                job["contact_snapshot"] = result.get("snapshot")
             service.active.add(job["id"])
             try:
                 await service.save(job)
             except BaseException:
                 service.active.discard(job["id"])
+                if job.get("contact_owner") and not ticket:
+                    target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                    await contact(self.plugin, target, job["contact_owner"], action="release")
                 raise
             token = current_share_job.set(job)
             try:
                 result = await method(self, *args, **kwargs)
+            except ShareContactChanged as exc:
+                await service.finish(job, status="cancelled", reason=str(exc))
+                return False
             except ShareMediaPending:
                 job["status"] = "pending"
                 await service.save(job)
@@ -102,6 +121,9 @@ def preserve_share(kind: str):
             finally:
                 service.active.discard(job["id"])
                 current_share_job.reset(token)
+                if job.get("contact_owner") and not ticket:
+                    target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                    await contact(self.plugin, target, job["contact_owner"], action="release")
 
         return run
 
@@ -156,6 +178,13 @@ class ShareContinuationService:
     async def mark_submitting(self) -> None:
         job = current_share_job.get()
         if job is not None:
+            params = job.get("params") or {}
+            if params.get("history_source") in {"scheduled", "smart"}:
+                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                owner = job.setdefault("contact_owner", "share:" + job["id"])
+                result = await contact(self.plugin, target, owner, action="check", expected=job.get("contact_snapshot", ""))
+                if not result.get("allowed"):
+                    raise ShareContactChanged(result.get("reason") or "主动联系状态已变化，停止自动发送")
             job["status"] = "submitting"
             await self.save(job)
 
@@ -359,6 +388,9 @@ class ShareContinuationService:
                     return
                 result = await handler(**params, event=None)
                 job["status"] = "completed" if result else "failed"
+        except ShareContactChanged as exc:
+            job["status"] = "cancelled"
+            job["reason"] = str(exc)
         except ShareMediaPending:
             job["status"] = "pending"
             self.update_waiting_progress(job)
@@ -392,6 +424,8 @@ class ShareContinuationService:
             finally:
                 current_share_job.reset(token)
                 self.active.discard(job["id"])
+                if job.get("contact_owner"):
+                    await contact(self.plugin, target, job["contact_owner"], action="release")
 
     async def run(self) -> None:
         while not self.plugin._is_terminated:

@@ -51,7 +51,7 @@ from .interact.totals import (
 from .interact.tracker import (
     QZONE_ACTION_RETRY_LATER,
     QZONE_ACTION_SKIPPED,
-    QZONE_COMMENT_REPLY_POST_PREFIX,
+    _mark_qzone_comment_reply_post,
     _mark_qzone_post_processed,
     _mark_qzone_processed,
 )
@@ -183,13 +183,7 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
 
         def mark_post(action: str) -> None:
             if processed_post_action:
-                _mark_qzone_post_processed(
-                    processed,
-                    post,
-                    action,
-                    key_prefix=QZONE_COMMENT_REPLY_POST_PREFIX,
-                    comment_id=str(getattr(comment, "tid", "") or ""),
-                )
+                _mark_qzone_comment_reply_post(processed, post, comment, action)
 
         try:
             if not reply:
@@ -324,6 +318,8 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             post,
             reply,
             scene="qzone_reply",
+            target_comment=comment,
+            parent_comment=parent_comment,
             comment_id=str(getattr(comment, "tid", "") or ""),
             actor_id=str(getattr(comment, "uin", "") or ""),
         )
@@ -527,6 +523,16 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
     async def generate_qzone_auto_comment(self, post, *, state=None, target_umo=""):
         return await self.dialogue.generate_qzone_auto_comment(
             post, state=state, target_umo=target_umo
+        )
+
+    async def generate_qzone_self_comment(self, post, *, image_count=0):
+        return await self.dialogue.generate_qzone_self_comment(
+            post, image_count=image_count
+        )
+
+    async def record_qzone_self_comment(self, post, content):
+        await record_qzone_interaction(
+            self, post, content, scene="qzone_comment", actor_id=str(post.uin)
         )
 
     async def generate_qzone_auto_photo_comment(

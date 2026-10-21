@@ -236,6 +236,100 @@ class ReplyContextTests(unittest.IsolatedAsyncioTestCase):
         self.owner.plugin.call_llm.assert_awaited_once()
         self.context.llm_generate.assert_not_awaited()
 
+    async def test_join_reply_preserves_author_situation_and_comment_addressee(self):
+        comment = self.models.QzoneComment(
+            uin=3,
+            nickname="访客",
+            tid="visitor",
+            content="别睡了，建议直接通宵",
+        )
+        post = self.models.QzonePost(
+            uin=2, name="朋友", tid="night", text="睡不着，咋办？", comments=[comment]
+        )
+        for appid in (311, 4):
+            with self.subTest(appid=appid):
+                post.appid = appid
+                self.owner.plugin.call_llm.reset_mock()
+                await self.owner._generate_qzone_auto_reply(
+                    post,
+                    comment,
+                    as_post_owner=False,
+                    self_uin=1,
+                    state={
+                        "processed": {
+                            post.key: {
+                                "action": "commented",
+                                "content": "先躺一会儿，把手机放远点",
+                            }
+                        }
+                    },
+                )
+                request = self.owner.plugin.call_llm.await_args.kwargs
+                prompt = request["prompt"]
+                self.assertIn("你的身份：评论参与者（Bot，QQ：1）", prompt)
+                self.assertIn("原评论面向：动态作者 朋友（QQ：2）", prompt)
+                self.assertIn("评论人：访客（QQ：3）", prompt)
+                self.assertIn(post.text, prompt)
+                self.assertIn(comment.content, prompt)
+                self.assertIn("先躺一会儿，把手机放远点", prompt)
+                self.assertIn(
+                    "回应目标评论在当前话题中的意思", request["system_prompt"]
+                )
+                self.owner.plugin.call_llm.assert_awaited_once()
+        self.context.llm_generate.assert_not_awaited()
+
+    async def test_explicit_comment_addressee_overrides_default_post_author(self):
+        comment = self.models.QzoneComment(
+            uin=3,
+            tid="visitor",
+            content="你也还没睡？",
+        )
+        post = self.models.QzonePost(
+            uin=2,
+            name="朋友",
+            tid="night",
+            text="睡不着",
+            comments=[self.models.QzoneComment(uin=4, nickname="另一位访客")],
+        )
+        for uin, name, expected in (
+            (1, "Bot", "你（Bot，QQ：1）"),
+            (2, "", "动态作者 朋友（QQ：2）"),
+            (4, "", "另一位访客（QQ：4）"),
+            (5, "指定访客", "指定访客（QQ：5）"),
+            (0, "仅有昵称", "仅有昵称"),
+        ):
+            with self.subTest(uin=uin, name=name):
+                comment.reply_to_uin = uin
+                comment.reply_to_nickname = name
+                await self.owner._generate_qzone_auto_reply(
+                    post, comment, as_post_owner=False, self_uin=1
+                )
+                prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+                self.assertIn(f"原评论面向：{expected}", prompt)
+                self.assertNotIn("顶层评论，未指定其他回复对象", prompt)
+
+    async def test_post_authors_supplement_is_addressed_to_participants(self):
+        comment = self.models.QzoneComment(uin=2, tid="update", content="终于有点困了")
+        post = self.models.QzonePost(uin=2, name="朋友", tid="night", text="睡不着")
+        await self.owner._generate_qzone_auto_reply(
+            post, comment, as_post_owner=False, self_uin=1
+        )
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("原评论面向：评论区参与者（动态作者的补充发言", prompt)
+        self.assertNotIn("原评论面向：动态作者", prompt)
+
+    async def test_unknown_nested_addressee_does_not_default_to_post_author(self):
+        comment = self.models.QzoneComment(
+            uin=3, tid="visitor", parent_tid="missing", content="你也还没睡？"
+        )
+        post = self.models.QzonePost(uin=2, name="朋友", tid="night", text="睡不着")
+        await self.owner._generate_qzone_auto_reply(
+            post, comment, as_post_owner=False, self_uin=1
+        )
+        prompt = self.owner.plugin.call_llm.await_args.kwargs["prompt"]
+        self.assertIn("原评论面向：未确认，结合评论楼对话判断", prompt)
+        self.assertNotIn("原评论面向：动态作者", prompt)
+
     async def test_reply_context_bounds_history_and_prioritizes_bot_with_target_user(
         self,
     ):
@@ -466,5 +560,7 @@ class ReplyContextTests(unittest.IsolatedAsyncioTestCase):
                 target=target,
                 reply=reply,
                 content="@{uin:3,nick:昵称,auto:1} 湖面有栈道",
+                topic="album_pic_0_0",
+                payload={},
             )
             self.assertEqual(result["verification_status"], expected)

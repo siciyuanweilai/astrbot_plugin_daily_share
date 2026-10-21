@@ -62,6 +62,8 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("qzone_enable_image", "bool", False),
     _field("qzone_attach_hot_news_image", "bool", True),
     _field("qzone_image_enabled_types", "list", ["\u95ee\u5019", "\u5fc3\u60c5"]),
+    _field("qzone_auto_like_own_post", "bool", True),
+    _field("qzone_self_comment_probability", "int", 30),
     _field("qzone_enable_auto_interaction", "bool", False),
     _field("qzone_auto_interaction_cron", "raw", "0 */2 * * *"),
     _field("qzone_auto_interaction_active_hours", "int", 24),
@@ -70,6 +72,8 @@ _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("qzone_enable_auto_comment", "bool", False),
     _field("qzone_auto_comment_limit", "int", 3, zero_as_default=True),
     _field("qzone_auto_comment_reply_probability", "int", 0),
+    _field("qzone_auto_comment_reply_user_limit", "int", 1),
+    _field("qzone_auto_comment_photo_batch_probability", "int", 100),
     _field("qzone_enable_auto_comment_image_vision", "bool", False),
     _field("qzone_auto_comment_image_vision_limit", "int", 1, zero_as_default=True),
     _field("qzone_auto_comment_image_vision_provider", "str", ""),
@@ -106,6 +110,7 @@ _PAGE_WEIXIN_FIELDS: tuple[_FieldSpec, ...] = (
 
 _PAGE_TTS_FIELDS: tuple[_FieldSpec, ...] = (
     _field("enable_tts", "bool", False),
+    _field("follow_daily_life_voice", "bool", False),
     _field("tts_enabled_types", "list", ["\u95ee\u5019", "\u5fc3\u60c5"]),
     _field("prefer_audio_only", "bool", False),
 )

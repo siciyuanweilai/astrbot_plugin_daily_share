@@ -317,6 +317,8 @@ class ConfigSchemaTests(unittest.TestCase):
             const elements = {
                 cfgQzoneImage: { type: 'checkbox', checked: false },
                 cfgQzoneAutoCommentReplyProbability: { type: 'number', value: '' },
+                cfgQzoneAutoCommentReplyUserLimit: { type: 'number', value: '' },
+                cfgQzoneAutoCommentPhotoBatchProbability: { type: 'number', value: '' },
                 configForm: { querySelector: () => null, querySelectorAll: () => [] },
             };
             const data = {
@@ -325,12 +327,20 @@ class ConfigSchemaTests(unittest.TestCase):
                     qzone_auto_comment_reply_probability: {
                         type: 'int', default: 0, slider: { min: 0, max: 100 },
                     },
+                    qzone_auto_comment_reply_user_limit: {
+                        type: 'int', default: 1, slider: { min: 1, max: 10 },
+                    },
+                    qzone_auto_comment_photo_batch_probability: {
+                        type: 'int', default: 100, slider: { min: 0, max: 100 },
+                    },
                 } } } },
                 schema_values: { sections: { qzone_conf: {
                     qzone_share_output_format: '保存的旧格式',
                     qzone_follow_life_chat_style: true,
                     qzone_enable_image: true,
                     qzone_auto_comment_reply_probability: 35,
+                    qzone_auto_comment_reply_user_limit: 3,
+                    qzone_auto_comment_photo_batch_probability: 65,
                 } } },
             };
             const settings = createSettingsConfig({
@@ -343,6 +353,10 @@ class ConfigSchemaTests(unittest.TestCase):
             assert.equal(toggle.checked, true);
             assert.equal(Number(elements.cfgQzoneAutoCommentReplyProbability.value), 35);
             elements.cfgQzoneAutoCommentReplyProbability.value = '0';
+            assert.equal(Number(elements.cfgQzoneAutoCommentReplyUserLimit.value), 3);
+            elements.cfgQzoneAutoCommentReplyUserLimit.value = '5';
+            assert.equal(Number(elements.cfgQzoneAutoCommentPhotoBatchProbability.value), 65);
+            elements.cfgQzoneAutoCommentPhotoBatchProbability.value = '0';
             for (const id of ['cfgQzoneShareOutputFormat', 'cfgQzoneLifeChatStyle']) {
                 assert.equal(id in settingsSchemaBindings(), false);
                 assert.equal(settingsPayloadGroups.qzone.includes(id), false);
@@ -358,6 +372,8 @@ class ConfigSchemaTests(unittest.TestCase):
                 assert.equal('qzone_follow_life_chat_style' in payload.sections.qzone, false);
                 assert.equal(payload.sections.qzone.qzone_enable_image, enabled);
                 assert.equal(payload.sections.qzone.qzone_auto_comment_reply_probability, 0);
+                assert.equal(payload.sections.qzone.qzone_auto_comment_reply_user_limit, 5);
+                assert.equal(payload.sections.qzone.qzone_auto_comment_photo_batch_probability, 0);
             }
             assert.equal(state.configChangeSeq, 3);
             """
@@ -525,6 +541,15 @@ class ConfigSchemaTests(unittest.TestCase):
                 plugin.config["qzone_conf"]["qzone_auto_comment_reply_probability"],
                 expected,
             )
+            plugin._page_apply_qzone_section(
+                {"qzone": {"qzone_auto_comment_photo_batch_probability": value}}
+            )
+            self.assertEqual(
+                plugin.config["qzone_conf"][
+                    "qzone_auto_comment_photo_batch_probability"
+                ],
+                expected,
+            )
 
     def test_schedule_modes_use_current_qzone_auto_interaction_fields(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
@@ -618,9 +643,13 @@ class ConfigSchemaTests(unittest.TestCase):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         field = schema["qzone_conf"]["items"]["qzone_auto_comment_reply_probability"]
 
-        self.assertEqual(field["default"], 100)
+        self.assertEqual(field["default"], 30)
         self.assertEqual(field["slider"]["min"], 0)
         self.assertEqual(field["slider"]["max"], 100)
+        users = schema["qzone_conf"]["items"]["qzone_auto_comment_reply_user_limit"]
+        self.assertEqual(users["default"], 1)
+        self.assertEqual(users["slider"], {"min": 1, "max": 10, "step": 1})
+        self.assertTrue(users["obvious_hint"])
 
     def test_dashboard_payload_exposes_schema_values_for_extra_fields(self):
         config = _load_config_module()

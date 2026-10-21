@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from ..models import QzonePost
 from ..parse import parse_feed_item
 from ..parse.photo import photo_thread_comments
+from ..photobatch import refresh_batch_comments
 
 if TYPE_CHECKING:
     from ..qzone import QzoneService
@@ -22,7 +23,13 @@ class QzoneFeedDetailService:
         if cached is not None:
             return cached
         if int(post.appid or 311) != 311:
-            if int(post.appid) == 4 and not post.comment_target_error:
+            if int(post.appid) == 4 and post.photo_comment_scope == "batch":
+                return await refresh_batch_comments(self.owner, post)
+            if (
+                int(post.appid) == 4
+                and post.photo_comment_scope != "batch"
+                and not post.comment_target_error
+            ):
                 target = post.photo_targets[0]
                 photo = await self.owner.query_photo(
                     owner_uin=post.uin,

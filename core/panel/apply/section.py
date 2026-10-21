@@ -68,7 +68,7 @@ class DashboardApplySectionService(PanelComponent):
                 media_body.get("separate_send_delay"), "1.0-2.0"
             )
         self.fields._page_apply_bool_fields(
-            tts, media_body, ("enable_tts", "prefer_audio_only")
+            tts, media_body, ("enable_tts", "prefer_audio_only", "follow_daily_life_voice")
         )
         if "tts_enabled_types" in media_body:
             tts["tts_enabled_types"] = self.validation._page_type_list_value(

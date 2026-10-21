@@ -21,6 +21,19 @@ class QzoneCommentPostService:
             raise RuntimeError(post.comment_target_error)
         if int(post.appid or 311) == 4:
             photo = post.photo_targets[0]
+            if post.photo_comment_scope == "batch":
+                await self.owner.comment_photo_batch(
+                    owner_uin=post.uin,
+                    album_id=photo.album_id,
+                    pic_key=photo.pic_key,
+                    batch_id=photo.batch_id,
+                    topic_id=post.photo_batch_topic_id,
+                    content=content,
+                )
+                self.owner._invalidate_qzone_cache(
+                    post_id=post.key, target_id=str(post.uin)
+                )
+                return
             await self.owner.comment_photo(
                 owner_uin=post.uin,
                 album_id=photo.album_id,

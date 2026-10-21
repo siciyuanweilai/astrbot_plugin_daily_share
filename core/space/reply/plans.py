@@ -30,26 +30,8 @@ class QzoneReplyPlanService:
         prefer_h5: bool,
     ) -> list[dict[str, Any]]:
         if parent_comment is not None:
-            if int(getattr(post, "uin", 0) or 0) != int(ctx.uin or 0) and int(
-                getattr(parent_comment, "uin", 0) or 0
-            ) == int(ctx.uin or 0):
-                variants = self.owner._thread_reply_re_feeds_payload_variants(
-                    post, comment, parent_comment, reply_targets
-                )
-                if variants:
-                    return [
-                        self.owner._reply_submit_plan(
-                            ctx,
-                            post,
-                            comment,
-                            content=content,
-                            transport="h5_re_feeds_parent",
-                            variant=variant,
-                        )
-                        for variant in variants
-                    ]
-            variants = self.owner._thread_reply_payload_variants(
-                post, comment, parent_comment, reply_targets
+            transport, variants = self._thread_reply_submit_variants(
+                post, comment, parent_comment, reply_targets, self_uin=ctx.uin
             )
             return [
                 self.owner._reply_submit_plan(
@@ -57,7 +39,7 @@ class QzoneReplyPlanService:
                     post,
                     comment,
                     content=content,
-                    transport="addreply_ugc",
+                    transport=transport,
                     variant=variant,
                 )
                 for variant in variants
@@ -88,6 +70,31 @@ class QzoneReplyPlanService:
                     )
                 )
         return plans
+
+    @classmethod
+    def _thread_reply_submit_variants(
+        cls,
+        post: QzonePost,
+        comment: QzoneComment,
+        parent_comment: QzoneComment,
+        reply_targets: list[dict[str, Any]],
+        *,
+        self_uin: int,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """候选预检与实际提交共用方案选择，避免漏检 H5 楼层回复。"""
+        if (
+            self_uin
+            and int(getattr(post, "uin", 0) or 0) != self_uin
+            and int(getattr(parent_comment, "uin", 0) or 0) == self_uin
+        ):
+            variants = cls._thread_reply_re_feeds_payload_variants(
+                post, comment, parent_comment, reply_targets
+            )
+            if variants:
+                return "h5_re_feeds_parent", variants
+        return "addreply_ugc", cls._thread_reply_payload_variants(
+            post, comment, parent_comment, reply_targets
+        )
 
     @classmethod
     def _thread_reply_payload_variants(

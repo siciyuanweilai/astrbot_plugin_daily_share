@@ -1,4 +1,5 @@
 from ..toolkit import call_default_daily_life_media_tool
+from ..integrations.mediajob import current_share_job
 from .contextbase import ContextComponent
 from .shared import Optional, ShareType, TimePeriod, logger
 
@@ -51,9 +52,27 @@ class ContextTtsService(ContextComponent):
             share_type, period
         )
         voice_style = ""
-        prepare = getattr(self.service.daily_life_bridge, "prepare_expression", None)
-        if callable(prepare):
+        bridge = self.service.daily_life_bridge
+        job = current_share_job.get() or {}
+        automatic = (
+            self.tts_conf.get("follow_daily_life_voice", False)
+            and not self.tts_conf.get("prefer_audio_only", False)
+            and job.get("kind") != "command"
+            and event is None
+        )
+        expression = None
+        if automatic:
+            planner = getattr(bridge, "plan_voice", None)
+            expression = await planner(final_text, target_umo) if callable(planner) else {}
+            if not expression.get("valid") or expression.get("channel") != "voice":
+                marker = getattr(bridge, "_set_media_result", None)
+                if callable(marker):
+                    marker("audio", "skipped", "本轮跟随生活插件使用文字")
+                return None
+        prepare = getattr(bridge, "prepare_expression", None)
+        if expression is None and callable(prepare):
             expression = await prepare(final_text, scene="share_voice")
+        if expression is not None:
             target_emotion = str(expression.get("emotion") or "")
             target_category = str(expression.get("emotion_category") or "neutral")
             voice_style = str(expression.get("voice_style") or "neutral")

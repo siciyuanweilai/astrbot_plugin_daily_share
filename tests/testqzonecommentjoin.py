@@ -1,5 +1,6 @@
 """好友说说/相册中的第三方评论回评：概率、落点、防重和重试。"""
 
+import copy
 import importlib
 import time
 import types
@@ -63,6 +64,227 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
 
     async def run_task(self):
         return await self.manager.execute_qzone_auto_comment()
+
+    def use_multi_user_replies(self, *, user_limit=3, round_limit=10):
+        self.manager.config.qzone.update(
+            qzone_auto_comment_reply_user_limit=user_limit,
+            qzone_auto_comment_limit=round_limit,
+        )
+        self.post.comments = [
+            replace(self.comment, tid=str(40 + n), uin=uin, create_time=n)
+            for n, uin in enumerate((4, 5, 4, 6), 1)
+        ]
+
+    async def test_multiple_users_choose_latest_root_once_per_user_and_one_roll(self):
+        self.use_multi_user_replies()
+        actions = Mock()
+        actions.attach_mock(self.service.comment, "comment")
+        actions.attach_mock(self.service.reply_comment, "reply")
+        with patch.object(self.discuss.random, "random", return_value=0) as roll:
+            first = await self.run_task()
+            second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (4, 0))
+        roll.assert_called_once()
+        self.assertEqual(
+            [item[0] for item in actions.mock_calls],
+            ["comment", "reply", "reply", "reply"],
+        )
+        self.assertEqual(
+            [
+                (call.args[1].uin, call.args[1].tid)
+                for call in self.service.reply_comment.await_args_list
+            ],
+            [(6, "44"), (4, "43"), (5, "42")],
+        )
+        self.assertEqual(
+            self.processed[f"comment-reply:{self.post.key}"]["reply_users"], [4, 5, 6]
+        )
+
+    async def test_user_limit_is_cumulative_across_rounds_and_persisted_state(self):
+        self.use_multi_user_replies(user_limit=3, round_limit=1)
+        results = [(await self.run_task())["commented"]]
+        for _ in range(3):
+            self.manager.db.state = copy.deepcopy(self.manager.db.state)
+            results.append((await self.run_task())["commented"])
+        self.assertEqual(results, [2, 1, 1, 0])
+        self.assertEqual(self.service.reply_comment.await_count, 3)
+
+    async def test_probability_miss_does_not_roll_for_each_user(self):
+        self.use_multi_user_replies()
+        self.manager.config.qzone["qzone_auto_comment_reply_probability"] = 30
+        with patch.object(self.discuss.random, "random", return_value=0.3) as roll:
+            result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        roll.assert_called_once()
+        self.service.reply_comment.assert_not_awaited()
+
+    async def test_round_limit_is_shared_by_different_posts(self):
+        self.use_multi_user_replies(user_limit=3, round_limit=2)
+        other = replace(self.post, tid="another", comments=list(self.post.comments))
+        self.service.query_recent_posts.return_value.append(other)
+        first = await self.run_task()
+        self.assertEqual(first["commented"], 4)
+        self.assertEqual(self.service.comment.await_count, 2)
+        self.assertEqual(self.service.reply_comment.await_count, 2)
+        self.assertEqual(
+            {call.args[0] for call in self.service.reply_comment.await_args_list},
+            {self.post.key},
+        )
+        self.service.reply_comment.reset_mock()
+        second = await self.run_task()
+        self.assertEqual(second["commented"], 2)
+        self.assertEqual(
+            {call.args[0] for call in self.service.reply_comment.await_args_list},
+            {self.post.key, other.key},
+        )
+
+    async def test_increasing_limit_can_join_new_users_but_not_rejoin_old_user(self):
+        await self.run_task()
+        self.manager.config.qzone.update(
+            qzone_auto_comment_reply_user_limit=2, qzone_auto_comment_limit=10
+        )
+        self.post.comments.extend(
+            [
+                replace(self.comment, tid="new-same-user", create_time=3),
+                replace(self.comment, tid="new-other-user", uin=5, create_time=2),
+            ]
+        )
+        result = await self.run_task()
+        self.assertEqual(result["commented"], 1)
+        self.assertEqual(
+            [call.args[1].uin for call in self.service.reply_comment.await_args_list],
+            [4, 5],
+        )
+
+    async def test_legacy_known_user_consumes_one_slot_without_duplicate(self):
+        self.use_multi_user_replies(user_limit=2)
+        self.manager.db.state[self.module.QZONE_AUTO_COMMENT_STATE_KEY] = {
+            "processed": {
+                self.post.key: {"at": int(time.time()), "action": "commented"},
+                f"comment-reply:{self.post.key}": {
+                    "at": int(time.time()),
+                    "action": "comment_replied",
+                    "comment_id": "41",
+                },
+            }
+        }
+        first = await self.run_task()
+        self.post.comments = [replace(self.comment, tid="new", uin=7)]
+        second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (1, 0))
+        self.service.reply_comment.assert_awaited_once()
+        self.assertEqual(self.service.reply_comment.await_args.args[1].uin, 6)
+
+    async def test_legacy_unknown_user_reserves_one_slot(self):
+        self.use_multi_user_replies(user_limit=2)
+        self.manager.db.state[self.module.QZONE_AUTO_COMMENT_STATE_KEY] = {
+            "processed": {
+                self.post.key: {"at": int(time.time()), "action": "comment_replied"}
+            }
+        }
+        self.assertEqual((await self.run_task())["commented"], 2)
+        self.assertEqual((await self.run_task())["commented"], 0)
+        self.service.reply_comment.assert_awaited_once()
+
+    async def test_legacy_submission_restores_user_when_original_root_is_missing(self):
+        self.use_multi_user_replies(user_limit=2)
+        self.manager.db.state[self.module.QZONE_AUTO_COMMENT_STATE_KEY] = {
+            "processed": {
+                self.post.key: {"at": int(time.time()), "action": "commented"},
+                f"comment-reply:{self.post.key}": {
+                    "at": int(time.time()),
+                    "action": "comment_replied",
+                    "comment_id": "missing",
+                },
+                f"{self.post.key}:missing": {
+                    "at": int(time.time()),
+                    "action": "comment_replied",
+                    "submitted_comment_uin": 4,
+                },
+            }
+        }
+        self.assertEqual((await self.run_task())["commented"], 1)
+        self.assertEqual(self.service.reply_comment.await_args.args[1].uin, 6)
+        self.assertEqual((await self.run_task())["commented"], 0)
+
+    async def test_multi_user_rate_limit_stops_then_retries_original_user(self):
+        self.use_multi_user_replies()
+        self.service.reply_comment.side_effect = [
+            {},
+            RuntimeError("操作过于频繁，请稍后再试"),
+            {},
+            {},
+        ]
+        first = await self.run_task()
+        self.assertTrue(first["rate_limited"])
+        self.assertEqual(self.service.reply_comment.await_count, 2)
+        self.manager.config.qzone["qzone_auto_comment_reply_probability"] = 0
+        with patch.object(self.discuss.random, "random", side_effect=AssertionError):
+            second = await self.run_task()
+        self.assertEqual(second["commented"], 1)
+        self.assertEqual(self.service.reply_comment.await_args.args[1].uin, 4)
+        self.assertEqual(self.manager._generate_qzone_auto_reply.await_count, 2)
+        self.manager.config.qzone["qzone_auto_comment_reply_probability"] = 100
+        self.assertEqual((await self.run_task())["commented"], 1)
+
+    async def test_user_limit_does_not_block_followup(self):
+        await self.run_task()
+        self.manager._generate_qzone_auto_reply_thread = AsyncMock(return_value="好呀")
+        followup = replace(
+            self.comment,
+            tid="43",
+            submit_tid="43",
+            raw_tid="43",
+            parent_tid="42",
+            reply_to_uin=1,
+            content="@{uin:1,nick:Bot,auto:1} 一起去？",
+        )
+        self.post.comments.append(followup)
+        self.assertEqual((await self.run_task())["commented"], 1)
+        self.service.reply_comment.assert_awaited_with(
+            self.post.key, followup, "好呀", parent_comment=self.comment
+        )
+
+    async def test_multi_user_album_limit_shared_across_photos(self):
+        self.manager.config.qzone.update(
+            qzone_auto_comment_reply_user_limit=2, qzone_auto_comment_limit=10
+        )
+        posts = self.album_posts()
+        posts[0].comments = [replace(self.comment, tid="51", uin=5, create_time=1)]
+        posts[1].comments.extend(
+            [
+                replace(self.comment, tid="52", uin=5, create_time=2),
+                replace(self.comment, tid="53", uin=6, create_time=3),
+            ]
+        )
+        self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
+        first = await self.run_task()
+        second = await self.run_task()
+        self.assertEqual((first["commented"], second["commented"]), (3, 0))
+        self.assertEqual(
+            [call.args[1].uin for call in self.service.reply_comment.await_args_list],
+            [6, 5],
+        )
+
+    async def test_multi_user_unknown_album_submission_stops_remaining_users(self):
+        self.manager.config.qzone.update(
+            qzone_auto_comment_reply_user_limit=3, qzone_auto_comment_limit=10
+        )
+        posts = self.album_posts()
+        posts[1].comments.append(replace(self.comment, tid="43", uin=5))
+        self.service.query_recent_posts.return_value = posts
+        self.manager.generate_qzone_auto_photo_comment = AsyncMock(
+            return_value=(posts[0].photo_targets[0].key, "这组照片不错")
+        )
+        error = RuntimeError("提交状态未知")
+        error.submission_unknown = True
+        self.service.reply_comment.side_effect = error
+        await self.run_task()
+        await self.run_task()
+        self.service.reply_comment.assert_awaited_once()
 
     async def test_direct_reply_after_own_comment_and_dedup_on_next_scan(self):
         self.post.comments.insert(
@@ -377,6 +599,110 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
                 self.post, self.comment, followup, self_uin=1, processed={}
             ),
             "missing_self_thread_reply",
+        )
+
+    async def test_joined_third_party_thread_continues_with_short_json_ids(self):
+        await self.run_task()
+        parser = importlib.import_module(f"{self.models.__package__}.parser")
+        self.post.comments = parser.parse_comments(
+            [
+                {
+                    "uin": 4,
+                    "tid": 42,
+                    "content": "这家书店在哪？",
+                    "list_3": [
+                        {
+                            "uin": 1,
+                            "tid": 1,
+                            "content": "@{uin:4,nick:访客,auto:1} 我也想去看看",
+                            "create_time": 100,
+                        },
+                        {
+                            "uin": 4,
+                            "tid": 2,
+                            "content": "@{uin:1,nick:Bot,auto:1} 下次一起去？",
+                            "create_time": 200,
+                        },
+                    ],
+                }
+            ]
+        )
+        self.manager._generate_qzone_auto_reply_thread = AsyncMock(return_value="好呀")
+        followup = self.post.comments[-1]
+        self.assertEqual(followup.tid, "42_r_2_4")
+        self.assertEqual(followup.reply_to_uin, 1)
+
+        result = await self.run_task()
+
+        self.assertEqual(result["commented"], 1)
+        self.manager._generate_qzone_auto_reply_thread.assert_awaited_once()
+        self.service.reply_comment.assert_awaited_with(
+            self.post.key, followup, "好呀", parent_comment=self.post.comments[0]
+        )
+        self.assertEqual((await self.run_task())["commented"], 0)
+
+    async def test_joined_third_party_thread_continues_with_short_html_ids(self):
+        await self.run_task()
+        parser = importlib.import_module(f"{self.models.__package__}.parser")
+        post = parser.parse_feed_item(
+            {
+                "uin": self.post.uin,
+                "tid": self.post.tid,
+                "content": self.post.text,
+                "html": """
+                <li class="comments-item" data-type="commentroot"
+                    data-tid="42" data-uin="4" data-nick="访客">
+                  <div class="comments-content">这家书店在哪？</div>
+                  <div class="mod-comments-sub">
+                    <li class="comments-item" data-type="replyroot"
+                        data-tid="1" data-uin="1" data-nick="Bot">
+                      <div class="comments-content">我也想去看看</div>
+                      <a class="reply" data-param="t2_uin=4&amp;t2_tid=42">回复</a>
+                    </li>
+                    <li class="comments-item" data-type="replyroot"
+                        data-tid="2" data-uin="4" data-nick="访客">
+                      <div class="comments-content">下次一起去？</div>
+                      <a class="reply" data-param="t2_uin=1&amp;t2_tid=1">回复</a>
+                    </li>
+                  </div>
+                </li>
+                """,
+            }
+        )
+        self.post.comments = post.comments
+        self.manager._generate_qzone_auto_reply_thread = AsyncMock(return_value="好呀")
+        followup = self.post.comments[-1]
+        self.assertEqual(followup.reply_to_tid, "42_r_1_1")
+
+        result = await self.run_task()
+
+        self.assertEqual(result["commented"], 1)
+        self.manager._generate_qzone_auto_reply_thread.assert_awaited_once()
+        self.service.reply_comment.assert_awaited_with(
+            self.post.key, followup, "好呀", parent_comment=self.post.comments[0]
+        )
+
+    async def test_bot_parent_preflight_accepts_h5_plan_for_short_thread_id(self):
+        parent = replace(self.comment, uin=1, nickname="Bot")
+        followup = self.models.QzoneComment(
+            uin=4,
+            tid="42_r_2_4",
+            submit_tid="2",
+            raw_tid="2",
+            parent_tid="42",
+            reply_to_tid="unavailable-previous-reply",
+            reply_to_uin=1,
+            content="@{uin:1,nick:Bot,auto:1} 下次一起去？",
+        )
+        self.post.comments = [parent, followup]
+        self.manager._generate_qzone_auto_reply_thread = AsyncMock(return_value="好呀")
+
+        result = await self.run_task()
+
+        self.assertEqual(result["commented"], 1)
+        self.manager._generate_qzone_auto_reply_thread.assert_awaited_once()
+        self.service.reply_comment.assert_awaited_once_with(
+            self.post.key, followup, "好呀", parent_comment=parent
         )
 
     async def test_thread_rate_limit_stops_other_comment_submissions(self):

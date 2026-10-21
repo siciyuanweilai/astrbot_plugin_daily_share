@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import uuid
+import time
+from collections import OrderedDict
+from datetime import datetime
 from contextvars import ContextVar
 from typing import Any
 
@@ -32,6 +36,7 @@ class DailyLifeBridge:
         self.db = db
         self._receipt_lock = asyncio.Lock()
         self._search_notices: set[str] = set()
+        self._memory_cache = OrderedDict()
         self._media_results: ContextVar[dict[str, tuple[str, str]]] = ContextVar(
             f"daily_share_media_results_{id(self)}",
             default={},
@@ -67,6 +72,51 @@ class DailyLifeBridge:
         except Exception as exc:
             logger.warning(f"[上下文] 读取生活插件目标上下文失败: {exc}")
             return {}
+
+    async def plan_voice(self, text: str, target_umo: str) -> dict:
+        method = getattr(self._plugin(), "plan_share_voice", None)
+        if not callable(method):
+            return {"channel": "text", "valid": False}
+        try:
+            result = await method(text, target_umo)
+            return result if isinstance(result, dict) else {"channel": "text", "valid": False}
+        except Exception:
+            return {"channel": "text", "valid": False}
+
+    async def related_memory_prompt(self, query: str, target_umo: str = "qzone_broadcast") -> str:
+        query = str(query or "").strip()[:1200]
+        if not query:
+            return ""
+        method = getattr(self._plugin(), "search_share_memories", None)
+        if not callable(method):
+            return ""
+        key = (target_umo, query)
+        entry = self._memory_cache.get(key)
+        if entry and time.monotonic() < entry[0]:
+            self._memory_cache.move_to_end(key)
+            return entry[1]
+        try:
+            rows = await asyncio.wait_for(method(query, target_umo, limit=3), timeout=1.0)
+            lines = [f"- {str(row.get('occurred_at') or '')[:40]} {str(row.get('text') or '')[:400]}" for row in rows[:3] if isinstance(row, dict)]
+        except Exception:
+            return ""
+        prompt = "【本地相关记忆，仅作背景；纠正信息优先】\n" + "\n".join(lines) if lines else ""
+        self._memory_cache[key] = (time.monotonic() + 15, prompt)
+        self._memory_cache.move_to_end(key)
+        while len(self._memory_cache) > 64:
+            self._memory_cache.popitem(last=False)
+        return prompt
+
+    async def coordinate_contact(self, target_umo: str, **kwargs) -> dict:
+        method = getattr(self._plugin(), "coordinate_share_contact", None)
+        if not callable(method):
+            return {"allowed": True}
+        try:
+            result = await method(target_umo, **kwargs)
+            return result if isinstance(result, dict) else {"allowed": False}
+        except Exception as exc:
+            logger.debug(f"[日常分享] 主动联系状态暂不可用：{type(exc).__name__}")
+            return {"allowed": False, "reason": "生活插件暂不可用，稍后再联系"}
 
     async def prepare_image(self, source: str) -> dict:
         method = getattr(self._plugin(), "prepare_share_image", None)
@@ -436,6 +486,7 @@ class DailyLifeBridge:
             return text
 
     async def record_public_activity(self, receipt: dict) -> bool:
+        self._memory_cache.clear()
         event_id = str(receipt.get("event_id") or "")
         if not event_id:
             return False
@@ -454,6 +505,7 @@ class DailyLifeBridge:
 
     async def flush_public_receipts(self) -> None:
         await self.flush_delivery_receipts()
+        await self.flush_external_receipts()
         if self.db is None:
             return
         async with self._receipt_lock:
@@ -547,25 +599,62 @@ class DailyLifeBridge:
         reason: str,
         sync_memory: bool,
     ) -> bool:
+        self._memory_cache.clear()
         plugin = self._plugin()
-        method = getattr(plugin, "record_external_activity", None) if plugin else None
+        if not callable(getattr(plugin, "record_external_activity_receipt", None)):
+            legacy = getattr(plugin, "record_external_activity", None)
+            if callable(legacy):
+                try:
+                    return bool(await legacy(target_umo, content, image_description=image_description, image_sent=image_sent, media_kind=media_kind, reason=reason, sync_memory=sync_memory))
+                except Exception as exc:
+                    logger.debug(f"[日常分享] 旧版生活插件活动回传失败，未自动重试：{type(exc).__name__}")
+                    return False
+        job = current_share_job.get()
+        identity = f"{job['id']}:{target_umo}" if job else uuid.uuid4().hex
+        receipt = {
+            "event_id": f"daily_share:{identity}",
+            "occurred_at": datetime.now().astimezone().isoformat(),
+            "target_umo": str(target_umo or "").strip(),
+            "content": str(content or "").strip(),
+            "image_description": str(image_description or "").strip(),
+            "image_sent": bool(image_sent), "media_kind": str(media_kind or ""),
+            "reason": str(reason or ""), "sync_memory": bool(sync_memory),
+        }
+        key = hashlib.sha256(receipt["event_id"].encode()).hexdigest()
+        async with self._receipt_lock:
+            if job is not None:
+                receipts = job.setdefault("external_activity_receipts", {})
+                receipt = receipts.setdefault(key, receipt)
+            if self.db is not None:
+                pending = await self.db.get_context_state("external_activity_outbox", {})
+                receipt = (pending or {}).get(key) or receipt
+                await self.db.update_context_state("external_activity_outbox", {key: receipt})
+            sent = await self._send_external_receipt(receipt)
+            if sent and self.db is not None:
+                await self.db.update_context_state("external_activity_outbox", {key: None})
+            return sent
+
+    async def _send_external_receipt(self, receipt: dict) -> bool:
+        method = getattr(self._plugin(), "record_external_activity_receipt", None)
         if not callable(method):
             return False
         try:
-            return bool(
-                await method(
-                    str(target_umo or "").strip(),
-                    str(content or "").strip(),
-                    image_description=str(image_description or "").strip(),
-                    image_sent=bool(image_sent),
-                    media_kind=str(media_kind or "").strip(),
-                    reason=str(reason or "").strip(),
-                    sync_memory=bool(sync_memory),
-                )
-            )
+            return bool(await method(dict(receipt)))
         except Exception as exc:
-            logger.warning(f"[上下文] 回传生活插件主动行为失败: {exc}")
+            logger.debug(f"[日常分享] 活动回执待补录：{type(exc).__name__}")
             return False
+
+    async def flush_external_receipts(self) -> None:
+        if self.db is None:
+            return
+        async with self._receipt_lock:
+            receipts = await self.db.get_context_state("external_activity_outbox", {})
+            remaining = {}
+            for key, receipt in (receipts or {}).items():
+                if isinstance(receipt, dict) and not await self._send_external_receipt(receipt):
+                    remaining[key] = receipt
+            if receipts:
+                await self.db.set_context_state("external_activity_outbox", remaining)
 
     @staticmethod
     def share_target(job):

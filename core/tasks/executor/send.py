@@ -1,7 +1,7 @@
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType
-from ...integrations.delivery import record_confirmed_share
+from ...integrations.delivery import record_confirmed_history, record_confirmed_share
 from ..taskbase import TaskServiceBase
 
 
@@ -49,8 +49,8 @@ class TaskExecutorSendService(TaskServiceBase):
         image_description: str = "",
         degradation_reason: str = "",
     ) -> None:
-        await self.ctx_service.record_bot_reply_to_history(
-            uid, content, image_desc=image_description
+        await record_confirmed_history(
+            self.ctx_service, uid, content, image_description, media_result
         )
         await record_confirmed_share(
             self.ctx_service, uid, content, image_description, media_result

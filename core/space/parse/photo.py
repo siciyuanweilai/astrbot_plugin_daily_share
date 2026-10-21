@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from ..models import QzoneComment, QzonePhoto, QzonePhotoComment
@@ -47,10 +48,57 @@ def photo_reply_mention(content: str) -> tuple[int, str]:
     )
 
 
+def resolve_photo_comment_thread(
+    parent: QzoneComment, replies: list[QzoneComment]
+) -> list[QzoneComment]:
+    """单张与整组共用原楼绑定、时间排序和回复对象解析。"""
+    thread = [parent]
+    seen: set[tuple[str, str, int]] = set()
+    for reply in sorted(replies, key=lambda item: item.create_time):
+        identity = (parent.tid, reply.raw_tid, reply.uin)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        target_uin, target_name = photo_reply_mention(reply.content)
+        previous = [
+            item
+            for item in thread
+            if item.uin == target_uin and 0 < item.create_time < reply.create_time
+        ]
+        latest_time = max((item.create_time for item in previous), default=0)
+        latest = [item for item in previous if item.create_time == latest_time]
+        target = latest[0] if len(latest) == 1 else None
+        # 原楼必然先于其子回复，HTML 没有原楼精确时间时仍可确认此关系。
+        if (
+            not previous
+            and parent.uin == target_uin
+            and parent.create_time == 0
+            and reply.create_time > 0
+        ):
+            target = parent
+        thread.append(
+            replace(
+                reply,
+                tid=f"{parent.tid}_r_{reply.raw_tid}_{reply.uin}",
+                parent_tid=parent.tid,
+                reply_to_tid=target.tid if target else "",
+                raw_reply_to_tid=target.raw_tid if target else "",
+                reply_to_uin=target_uin,
+                reply_to_nickname=target_name or reply.reply_to_nickname,
+                reply_to_tid_source="photo_mention" if target else "",
+                raw_fields={
+                    **reply.raw_fields,
+                    "photo_root_id": parent.tid,
+                    "photo_root_uin": parent.uin,
+                },
+            )
+        )
+    return thread
+
+
 def photo_thread_comments(photo: QzonePhoto) -> list[QzoneComment]:
     """区分原一级评论的提交标识与查看器回复标识。"""
     comments: list[QzoneComment] = []
-    seen: set[tuple[str, str, int]] = set()
     for root in photo.comments:
         parent = QzoneComment(
             uin=root.uin,
@@ -62,47 +110,24 @@ def photo_thread_comments(photo: QzonePhoto) -> list[QzoneComment]:
             raw_tid=root.comment_id,
             raw_fields={"photo_topic_id": root.topic_id, "photo_private": root.private},
         )
-        comments.append(parent)
-        thread = [parent]
         # 查看器回复可能按任意顺序返回；时间缺失或相同时，无法可靠定位
         # 回复对象，继续排除这些自动回评候选。
-        for reply in sorted(root.replies, key=lambda item: item.create_time):
-            identity = (root.comment_id, reply.comment_id, reply.uin)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            target_uin, target_name = photo_reply_mention(reply.content)
-            previous = [
-                item
-                for item in thread
-                if item.uin == target_uin and 0 < item.create_time < reply.create_time
-            ]
-            latest_time = max((item.create_time for item in previous), default=0)
-            latest = [item for item in previous if item.create_time == latest_time]
-            target = latest[0] if len(latest) == 1 else None
-            comment = QzoneComment(
+        replies = [
+            QzoneComment(
                 uin=reply.uin,
                 nickname=reply.nickname,
                 content=reply.content,
                 create_time=reply.create_time,
-                tid=f"{root.comment_id}_r_{reply.comment_id}_{reply.uin}",
                 submit_tid=reply.comment_id,
                 raw_tid=reply.comment_id,
-                parent_tid=root.comment_id,
-                reply_to_tid=target.tid if target else "",
-                raw_reply_to_tid=target.raw_tid if target else "",
-                reply_to_uin=target_uin,
-                reply_to_nickname=target_name,
-                reply_to_tid_source="photo_mention" if target else "",
                 raw_fields={
                     "photo_topic_id": reply.topic_id,
                     "photo_private": reply.private,
-                    "photo_root_id": root.comment_id,
-                    "photo_root_uin": root.uin,
                 },
             )
-            thread.append(comment)
-            comments.append(comment)
+            for reply in root.replies
+        ]
+        comments.extend(resolve_photo_comment_thread(parent, replies))
     return comments
 
 

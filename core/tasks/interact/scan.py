@@ -90,9 +90,6 @@ async def _query_qzone_self_album_posts(owner, *, self_uin: int) -> list:
                 f"[日常分享] QQ 空间相册自动回评跳过: {post.comment_target_error}"
             )
             continue
-        photo_keys = {photo.key for photo in post.photo_targets}
-        if photo_keys <= seen_targets:
-            continue
         try:
             targets = (
                 await service.query_photo_posts(post.key)
@@ -100,10 +97,9 @@ async def _query_qzone_self_album_posts(owner, *, self_uin: int) -> list:
                 else [await service.detail(post.key)]
             )
             for target in targets:
-                photo_key = target.photo_targets[0].key
-                if photo_key not in seen_targets:
+                if target.key not in seen_targets:
                     photos.append(target)
-                    seen_targets.add(photo_key)
+                    seen_targets.add(target.key)
         except Exception as exc:
             logger.debug(f"[日常分享] QQ 空间相册自动回评读取照片评论失败: {exc}")
     return photos

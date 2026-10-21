@@ -51,6 +51,9 @@ FEED_COMMENT_KEYS = (
 )
 
 RAW_COMMENT_FIELD_KEYS = (
+    "photo_topic_id",
+    "photo_owner_uin",
+    "photo_private",
     "id",
     "tid",
     "commentid",

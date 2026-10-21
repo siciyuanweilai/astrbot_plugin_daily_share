@@ -45,6 +45,7 @@ class DashboardApplyQzoneService(PanelComponent):
             (
                 "enable_qzone",
                 "qzone_enable_image",
+                "qzone_auto_like_own_post",
                 "qzone_attach_hot_news_image",
                 "qzone_enable_auto_interaction",
                 "qzone_enable_auto_like",
@@ -94,7 +95,10 @@ class DashboardApplyQzoneService(PanelComponent):
             qzone_body,
             (
                 ("qzone_auto_interaction_active_hours", 24, 0, 168),
+                ("qzone_self_comment_probability", 30, 0, 100),
                 ("qzone_auto_comment_reply_probability", 0, 0, 100),
+                ("qzone_auto_comment_reply_user_limit", 1, 1, 10),
+                ("qzone_auto_comment_photo_batch_probability", 100, 0, 100),
             ),
         )
         self.qzone_apply._page_apply_qzone_auto_fields(

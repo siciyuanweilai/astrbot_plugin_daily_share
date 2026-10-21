@@ -36,6 +36,7 @@ from .reply.plans import QzoneReplyPlanService
 from .reply.recipients import QzoneReplyTargetService
 from .reply.replypayload import QzoneReplyPayloadService
 from .reply.verify import QzoneReplyVerifyService
+from .selfpost import QzoneSelfPostService
 from .transport.cookie import QzoneH5CookieService
 from .transport.header import QzoneHeaderService
 from .transport.native import QzoneH5NativeService
@@ -121,6 +122,7 @@ class QzoneService:
     PHOTO_VIEW_URL: Any = QzoneServiceConstants.PHOTO_VIEW_URL
     PHOTO_COMMENT_URL: Any = QzoneServiceConstants.PHOTO_COMMENT_URL
     PHOTO_REPLY_URL: Any = QzoneServiceConstants.PHOTO_REPLY_URL
+    PHOTO_BATCH_REPLY_URL: Any = QzoneServiceConstants.PHOTO_BATCH_REPLY_URL
     PUBLISH_URL: Any = QzoneServiceConstants.PUBLISH_URL
     LIKE_URL: Any = QzoneServiceConstants.LIKE_URL
     LIST_URL: Any = QzoneServiceConstants.LIST_URL
@@ -208,13 +210,16 @@ class QzoneService:
             submitted_at=submitted_at,
         )
 
-    def has_thread_reply_submit_plan(self, post, comment, *, parent_comment):
+    def has_thread_reply_submit_plan(
+        self, post, comment, *, parent_comment, self_uin: int = 0
+    ):
         return self.reply_targets.has_thread_reply_submit_plan(
-            post, comment, parent_comment=parent_comment
+            post, comment, parent_comment=parent_comment, self_uin=self_uin
         )
 
     def __init__(self, plugin):
         self._qzone_config = lambda: plugin.qzone_conf
+        self.self_post = QzoneSelfPostService(self, plugin)
         self._qq_adapter_id = lambda: plugin._cached_qq_adapter_id
         self.qzone_conf = plugin.qzone_conf
         self.ctx_service = plugin.ctx_service
@@ -303,6 +308,25 @@ class QzoneService:
             pic_key=pic_key,
             content=content,
             feed_topic_id=feed_topic_id,
+        )
+
+    async def comment_photo_batch(
+        self,
+        *,
+        owner_uin,
+        album_id,
+        pic_key,
+        batch_id,
+        topic_id,
+        content,
+    ):
+        return await self.photos.comment_photo_batch(
+            owner_uin=owner_uin,
+            album_id=album_id,
+            pic_key=pic_key,
+            batch_id=batch_id,
+            topic_id=topic_id,
+            content=content,
         )
 
     async def reply_photo_comment(
@@ -565,6 +589,8 @@ class QzoneService:
                 )
                 if confirmed is not None:
                     logger.info("[日常分享] 已从最新动态确认 QQ 空间说说发布成功。")
+                    self._remember_posts([confirmed])
+                    self.self_post.schedule(confirmed, image_count=len(images or []))
                     return confirmed
                 raise QzonePublishUnknownError(
                     "QQ 空间说说提交状态未知，为避免重复发布已停止自动重试；请先检查空间动态"
@@ -584,6 +610,7 @@ class QzoneService:
         )
         self._invalidate_qzone_cache(target_id=str(ctx.uin))
         self._remember_posts([post])
+        self.self_post.schedule(post, image_count=len(images or []))
         return post
 
     async def like(self, post_id: str) -> None:
@@ -817,7 +844,7 @@ class QzoneService:
             return post
         if ":" in key:
             uin, tid = key.split(":", 1)
-            if tid.startswith("photo:"):
+            if tid.startswith(("photo:", "photo-batch:")):
                 raise RuntimeError("相册照片引用已失效，请先刷新 QQ 空间动态")
             if uin.isdigit() and tid:
                 post = QzonePost(uin=int(uin), tid=tid)

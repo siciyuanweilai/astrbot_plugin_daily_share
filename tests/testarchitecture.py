@@ -260,6 +260,67 @@ class TaskArchitectureTests(unittest.TestCase):
         self.assertEqual(plugin.config["basic_conf"]["llm_timeout"], 90)
         self.assertNotIn("llm_conf", plugin.config)
 
+    def test_panel_own_post_settings_round_trip_and_keep_zero_probability(self):
+        mod = _load_main_module()
+        plugin = mod.DailySharePlugin(mod.Context(), {})
+        operations = plugin.dashboard_service.operations
+        payload = operations.payload._page_config_payload()["sections"]["qzone"]
+        self.assertTrue(payload["qzone_auto_like_own_post"])
+        self.assertEqual(payload["qzone_self_comment_probability"], 30)
+
+        for value, expected in ((0, 0), (100, 100), (-5, 0), (120, 100)):
+            with self.subTest(probability=value):
+                operations.apply._apply_page_config_payload(
+                    {
+                        "sections": {
+                            "qzone": {
+                                "qzone_auto_like_own_post": False,
+                                "qzone_self_comment_probability": value,
+                            }
+                        }
+                    }
+                )
+                payload = operations.payload._page_config_payload()["sections"]["qzone"]
+                self.assertFalse(payload["qzone_auto_like_own_post"])
+                self.assertEqual(payload["qzone_self_comment_probability"], expected)
+
+    def test_panel_reply_user_limit_round_trip_and_runtime_bounds(self):
+        mod = _load_main_module()
+        plugin = mod.DailySharePlugin(mod.Context(), {})
+        operations = plugin.dashboard_service.operations
+        field = "qzone_auto_comment_reply_user_limit"
+        self.assertEqual(
+            operations.payload._page_config_payload()["sections"]["qzone"][field], 1
+        )
+        self.assertEqual(
+            plugin.task_manager.qzone_interaction._qzone_auto_config().comment_reply_user_limit,
+            1,
+        )
+        for value, expected in ((3, 3), (10, 10), (0, 1), (100, 10)):
+            with self.subTest(value=value):
+                operations.apply._apply_page_config_payload(
+                    {"sections": {"qzone": {field: value}}}
+                )
+                operations.refresh._refresh_config_refs()
+                self.assertEqual(
+                    operations.payload._page_config_payload()["sections"]["qzone"][
+                        field
+                    ],
+                    expected,
+                )
+
+                self.assertEqual(
+                    plugin.task_manager.qzone_interaction._qzone_auto_config().comment_reply_user_limit,
+                    expected,
+                )
+
+        with self.assertRaisesRegex(RuntimeError, "配置值必须是数字"):
+            operations.apply._apply_page_config_payload(
+                {"sections": {"qzone": {field: "invalid"}}}
+            )
+        cfg = type(plugin.task_manager.qzone_interaction._qzone_auto_config())
+        self.assertEqual(cfg.from_conf({field: "invalid"}).comment_reply_user_limit, 1)
+
     def test_panel_config_revisions_isolate_targets_from_other_settings(self):
         revision = _load_panel_revision_module()
         config = {

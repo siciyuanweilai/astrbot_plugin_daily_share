@@ -9,6 +9,7 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import ShareType, TimePeriod
 from ...constants import period_label, share_type_label
 from ...database.keys import SOURCE_SCHEDULED, SOURCE_SMART
+from ...integrations.contact import coordinate_share
 from ...toolkit import format_exception
 from ..continuation import preserve_share
 from ..taskbase import TaskServiceBase
@@ -156,6 +157,11 @@ class TaskExecutorService(TaskServiceBase):
                 )
                 return True, ""
 
+        memory_getter = getattr(getattr(self.plugin, "daily_life_bridge", None), "related_memory_prompt", None)
+        if callable(memory_getter):
+            memory = await memory_getter(str(post_context or life_ctx or "")[:1000], uid)
+            if memory:
+                content_context["life_prompt"] += "\n\n" + memory
         content = await self.content_service.generate(
             stype,
             period,
@@ -314,6 +320,7 @@ class TaskExecutorService(TaskServiceBase):
         )
         return True
 
+    @coordinate_share
     async def _execute_share_for_target(
         self,
         *,

@@ -83,7 +83,11 @@ class PluginToolContextService(SupportComponent):
             return ""
         task = self._prompt_inflight.get(key)
         if task is None:
-            task = asyncio.create_task(self._run_context_builder(builder, target))
+            track = getattr(self.runtime, "track_task", None)
+            work = self._run_context_builder(builder, target)
+            task = track(work) if callable(track) else asyncio.create_task(work)
+            if task is None:
+                return ""
             self._prompt_inflight[key] = task
             task.add_done_callback(
                 lambda completed: self._finish_context_prompt(key, completed)

@@ -104,6 +104,7 @@ class QzonePhoto:
     like_total: int = 0
     comments: list[QzonePhotoComment] = field(default_factory=list)
     feed_topic_id: str = ""
+    verified_batch_topic_id: str = ""
     batch_id: str = ""
     platform_sub_id: int | None = None
     batch_targets: list[QzonePhoto] = field(default_factory=list)
@@ -150,6 +151,8 @@ class QzonePost:
     photo_targets: list[QzonePhoto] = field(default_factory=list)
     photo_batch_key: str = ""
     photo_batch_complete: bool = True
+    photo_comment_scope: str = "photo"
+    photo_batch_topic_id: str = ""
 
     @property
     def like_keys(self) -> tuple[str, str]:
@@ -193,6 +196,29 @@ class QzonePost:
             return ""
         if int(self.appid) != 4:
             return f"暂不支持该类型动态的评论（appid={self.appid}）"
+        if self.photo_comment_scope == "batch":
+            from .parse.phototarget import parse_photo_batch_topic
+
+            if len(self.photo_targets) != 1:
+                return "相册批次评论缺少唯一的批次锚点"
+            photo = self.photo_targets[0]
+            batch = parse_photo_batch_topic(
+                self.photo_batch_topic_id, album_id=photo.album_id
+            )
+            if (
+                not batch
+                or batch[0] != photo.pic_key
+                or batch[1] != photo.batch_id
+                or batch[2] != photo.platform_sub_id
+                or photo.verified_batch_topic_id != self.photo_batch_topic_id
+                or not self.photo_batch_complete
+            ):
+                return "相册批次评论目标未经动态与查看器共同核验"
+            if photo.owner_uin and photo.owner_uin != self.uin:
+                return "相册批次主人与动态作者不一致"
+            return ""
+        if self.photo_comment_scope != "photo":
+            return "未知的相册评论范围"
         if not self.photo_targets:
             return "相册动态缺少明确的 albumId/picKey，不能作为普通说说评论"
         if len(self.photo_targets) != 1:

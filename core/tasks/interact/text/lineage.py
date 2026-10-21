@@ -25,9 +25,12 @@ def _qzone_auto_reply_comment_summary(
     )
     if as_post_owner:
         self_uin = self_uin or getattr(post, "uin", 0)
+    role = "动态作者" if as_post_owner else "评论参与者"
+    bot_id = f"，QQ：{self_uin}" if self_uin else ""
     parts = [
         f"{author}的{post_label}：{post_content or '（没有文字，可能主要是图片或视频）'}",
         f"{post_label}发布时间：{_format_qzone_local_datetime(getattr(post, 'create_time', 0))}",
+        f"你的身份：{role}（Bot{bot_id}）",
     ]
     context = _qzone_root_reply_dialogue_context(post, comment, self_uin=self_uin)
     if context:
@@ -36,16 +39,43 @@ def _qzone_auto_reply_comment_summary(
         [
             f"评论人：{_qzone_comment_label(comment)}",
             f"评论时间：{_format_qzone_local_datetime(getattr(comment, 'create_time', 0))}",
+            f"原评论面向：{_qzone_comment_recipient_label(post, comment, self_uin=self_uin)}",
             f"对方评论：{comment_content}",
         ]
     )
     return "\n".join(parts)
 
 
+def _qzone_comment_recipient_label(post, comment, *, self_uin: int = 0) -> str:
+    """区分原评论的受话人与本次回评对象，只使用已规范化的回复字段。"""
+    target_uin = str(getattr(comment, "reply_to_uin", "") or "").strip()
+    target_name = str(getattr(comment, "reply_to_nickname", "") or "").strip()
+    if target_uin and target_uin != "0":
+        if self_uin and target_uin == str(self_uin):
+            return f"你（Bot，QQ：{self_uin}）"
+        if target_uin == str(getattr(post, "uin", "")):
+            return f"动态作者 {_qzone_comment_label(post, self_uin=self_uin)}"
+        if not target_name:
+            for item in _qzone_public_post_comments(post):
+                if target_uin == str(getattr(item, "uin", "")):
+                    return _qzone_comment_label(item, self_uin=self_uin)
+        return f"{target_name or '用户'}（QQ：{target_uin}）"
+    if target_name:
+        return target_name
+    if getattr(comment, "parent_tid", "") or getattr(comment, "reply_to_tid", ""):
+        return "未确认，结合评论楼对话判断"
+    if getattr(post, "uin", 0) and str(getattr(comment, "uin", "")) == str(post.uin):
+        return "评论区参与者（动态作者的补充发言，未指定个人）"
+    return f"动态作者 {_qzone_comment_label(post, self_uin=self_uin)}（顶层评论，未指定其他回复对象）"
+
+
 def _qzone_comment_label(comment, *, self_uin: int = 0) -> str:
     name = (
         str(
-            getattr(comment, "nickname", "") or getattr(comment, "uin", "") or ""
+            getattr(comment, "nickname", "")
+            or getattr(comment, "name", "")
+            or getattr(comment, "uin", "")
+            or ""
         ).strip()
         or "未知用户"
     )

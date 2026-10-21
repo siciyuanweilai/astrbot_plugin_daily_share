@@ -57,6 +57,27 @@ class QzoneAutoPromptService:
     def __init__(self, owner: TaskQzoneAutoCommentService) -> None:
         self.owner = owner
 
+    async def generate_qzone_self_comment(self, post, *, image_count: int = 0) -> str:
+        system_prompt = await self._qzone_auto_interaction_system_prompt(
+            "这条说说是你本人刚发布的。请继续以作者本人身份，在自己的说说下自评一句。"
+            "根据原文自然补充一个小想法，或者轻轻自嘲、吐槽自己；两种表达任选其一。"
+            "不以旁观好友身份夸赞作者，不重复正文，不编造新的经历或配图细节。"
+        )
+        prompt = "\n\n".join(
+            (
+                _qzone_auto_interaction_time_context(),
+                f"【我刚发布的说说原文】\n{str(post.text or '').strip() or '（仅发布了图片）'}",
+                f"配图数量：{max(0, image_count)}。未提供画面资料，以原文为依据。",
+                "请写一条可直接发到自己评论区的补充或自我吐槽。",
+            )
+        )
+        content = await self._qzone_auto_interaction_llm(
+            prompt, system_prompt=system_prompt, max_bytes=240
+        )
+        if "".join(content.split()) == "".join(str(post.text or "").split()):
+            raise RuntimeError("自评与说说正文重复，已跳过")
+        return content
+
     @staticmethod
     def _qzone_auto_comment_post_summary(post) -> str:
         return _qzone_auto_comment_post_summary(post)
@@ -64,15 +85,16 @@ class QzoneAutoPromptService:
     async def _qzone_auto_interaction_system_prompt(
         self, task_prompt: str, *, output_rule: str = "", scene: str = "qzone_comment"
     ) -> str:
-        rules = build_qzone_interaction_rules(
-            task_prompt, output_rule=output_rule, scene=scene
-        )
+        task_prompt = str(task_prompt or "").strip()
         content_service = getattr(self.owner.plugin, "content_service", None)
         style_getter = getattr(content_service, "get_qzone_chat_style_prompt", None)
         if callable(style_getter):
             style_prompt = await style_getter(scene=scene)
             if style_prompt:
-                rules += f"\n\n{style_prompt}"
+                task_prompt = f"{task_prompt}\n\n{style_prompt}".strip()
+        rules = build_qzone_interaction_rules(
+            task_prompt, output_rule=output_rule, scene=scene
+        )
         persona_prompt = await self.owner._qzone_auto_interaction_persona_prompt()
         if not persona_prompt:
             return rules
@@ -125,6 +147,11 @@ class QzoneAutoPromptService:
             parts.append(body)
         return "\n\n".join(parts)
 
+    async def _related_memory_prompt(self, query: str) -> str:
+        bridge = getattr(self.owner.plugin, "daily_life_bridge", None)
+        method = getattr(bridge, "related_memory_prompt", None)
+        return await method(query, "qzone_broadcast") if callable(method) else ""
+
     async def _qzone_auto_interaction_llm(
         self,
         prompt: str,
@@ -153,8 +180,16 @@ class QzoneAutoPromptService:
             _qzone_auto_interaction_time_context(),
             self.owner._qzone_auto_comment_post_summary(post),
         ]
+        if getattr(post, "photo_comment_scope", "photo") == "batch":
+            prompt_parts.append(
+                "评论范围：整组上传照片。结合发布者正文和已识别图片形成整体感受，"
+                "不必逐张罗列；未识别的画面细节不要推测。"
+            )
         if image_context:
             prompt_parts.append(image_context)
+        memory = await self._related_memory_prompt(str(getattr(post, "text", "") or ""))
+        if memory:
+            prompt_parts.append(memory)
         life_context = await self.owner._qzone_auto_life_context_prompt(
             post, role="动态作者"
         )
@@ -237,14 +272,10 @@ class QzoneAutoPromptService:
             str(index) for index in sorted(allowed_indices)
         )
         system_prompt = await self.owner._qzone_auto_interaction_system_prompt(
-            "本批照片只发一条综合评论。默认结合本批全部已识别图片形成整组感受，"
-            "不是只评价提交落点这一张，也不必逐张罗列。"
-            "接口必须选择一张照片挂载这条整组评论。"
+            "本次评论针对本批中的一张照片。结合发布者正文，选择一张已识别的照片，"
+            "评论聚焦该张的画面、穿搭、动作或感受，不混入其他照片的细节。"
             "photo_index 必须使用本次可选落点中的原始图号，不能重新编号；"
-            "综合多张场景时使用‘这组照片’、‘这一组’等整组措辞，"
-            "不能把多张不同画面都混称为‘这张’。"
-            "若文案具体聚焦某张的画面、穿搭或动作，提交落点就选择对应的照片；"
-            "其他照片细节仍可作为整组背景，但不能写成落点照片自身的内容。",
+            "正文不提图号，只输出自然的一句评论。",
             output_rule=output_rule,
         )
         raw = await self.owner.plugin.call_llm(
@@ -272,7 +303,7 @@ class QzoneAutoPromptService:
         self_uin: int = 0,
     ) -> str:
         prompt_parts = [
-            "回复对象：最后列出的‘对方评论’；结合动态正文和已有对话接话，其他评论楼仅作背景。",
+            "参与这条动态下的讨论，结合动态作者的处境与评论的指向，回应最后列出的‘对方评论’；其他评论楼仅作背景。",
             _qzone_auto_interaction_time_context(),
             _qzone_auto_reply_comment_summary(
                 post, comment, as_post_owner=as_post_owner, self_uin=self_uin
@@ -303,12 +334,18 @@ class QzoneAutoPromptService:
         )
         if life_context:
             prompt_parts.append(life_context)
+        memory = await self._related_memory_prompt(
+            str(getattr(post, "text", "") or "") + "\n" + str(getattr(comment, "content", "") or "")
+        )
+        if memory:
+            prompt_parts.append(memory)
         prompt = "\n\n".join(part for part in prompt_parts if part)
         system_prompt = await self.owner._qzone_auto_interaction_system_prompt(
             (
                 "以空间主人的身份回复这条评论。"
                 if as_post_owner
-                else "以评论参与者的身份，回复这条好友动态中的评论。"
+                else "以评论参与者的身份加入好友动态的讨论，回应目标评论在当前话题中的意思。"
+                "结合动态作者的处境自然赞同、补充、提醒或打趣，保持各人的立场和话语指向一致。"
             ),
             scene="qzone_reply",
         )
@@ -346,6 +383,11 @@ class QzoneAutoPromptService:
         )
         if life_context:
             prompt_parts.append(life_context)
+        memory = await self._related_memory_prompt(
+            str(getattr(post, "text", "") or "") + "\n" + str(getattr(comment, "content", "") or "")
+        )
+        if memory:
+            prompt_parts.append(memory)
         prompt = "\n\n".join(part for part in prompt_parts if part)
         system_prompt = await self.owner._qzone_auto_interaction_system_prompt(
             "以你在评论楼中的身份，回应最新回复。",

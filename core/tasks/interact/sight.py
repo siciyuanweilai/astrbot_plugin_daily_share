@@ -492,10 +492,13 @@ async def _qzone_image_refs_descriptions(
         )
         if cached:
             cache_updates.update(
-                {key: cached for key in cache_keys if not cache.get(key)}
+                {key: cached for key in cache_keys}
             )
-            changed = _fill_qzone_image_cache_aliases(cache, cache_keys, cached)
-            cache_changed = cache_changed or changed
+            _fill_qzone_image_cache_aliases(cache, cache_keys, cached)
+            for key in cache_keys:
+                cache.pop(key, None)
+                cache[key] = cached
+            cache_changed = True
             logger.debug(
                 f"[日常分享] {label}识别命中缓存: 图{index}（{scope}），{cached}"
             )

@@ -1,6 +1,7 @@
 """多图上传共用识图上限，仅发一条评论，各照片回评目标独立。"""
 
 import copy
+import html
 import json
 import sys
 import types
@@ -9,14 +10,12 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from .testqzonecomment import _interaction_args
-
 from .testqzone import (
     _load_qzone_service,
     _new_qzone_service,
     _parser,
 )
-from .testqzonecomment import FakeDb, _load_auto_comment_module
+from .testqzonecomment import FakeDb, _interaction_args, _load_auto_comment_module
 from .testqzonephotoauto import PhotoResponseSession, album_feed, parse_feed
 from .testqzonephototarget import batch_feed_html, upload_feed_html
 
@@ -31,6 +30,26 @@ def upload_capture():
     return (
         Path(__file__).parent / "fixtures/qzone_album_upload_viewer.jsonp"
     ).read_text()
+
+
+def batch_reply_html(reply_id, uin, nickname, target_uin, target_name, content):
+    return (
+        '<li class="comments-item" data-type="replyroot" '
+        f'data-tid="{reply_id}" data-uin="{uin}" data-nick="{html.escape(nickname)}">'
+        f'<div class="comments-content"><a class="nickname">{html.escape(nickname)}</a>'
+        ' 回复<a class="nickname" '
+        f'link="nameCard_{target_uin}" href="http://user.qzone.qq.com/{target_uin}">'
+        f"{html.escape(target_name)}</a>&nbsp; : {html.escape(content)}</div></li>"
+    )
+
+
+def batch_thread_html(replies):
+    root = (
+        Path(__file__).parent / "fixtures/qzone_album_upload_comments.html"
+    ).read_text()
+    return root.rsplit("</li>", 1)[0] + (
+        f'<div class="mod-comments-sub"><ul>{replies}</ul></div></li>'
+    )
 
 
 class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
@@ -50,6 +69,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         )
         self.service._remember_posts([self.post])
         self.comments = {}
+        self.batch_comment_html = None
         self.failed_pics = set()
         self.service._request = AsyncMock(side_effect=self.request)
         self.service.query_mention_posts = AsyncMock(return_value=[])
@@ -68,6 +88,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 10,
+                    "qzone_auto_comment_photo_batch_probability": 0,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 10,
                     "qzone_auto_interaction_active_hours": 0,
@@ -113,16 +134,28 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.manager = Manager()
 
     async def request(self, method, url, **kwargs):
+        if kwargs.get("data", {}).get("isfakereq") == 1:
+            if self.batch_comment_html is None:
+                raise RuntimeError("batch comments unavailable")
+            return {"code": 0, "data": {"feeds": self.batch_comment_html}}
         if method == "POST":
             data = kwargs["data"]
             pic = next(
                 item["picKey"]
                 for item in self.payload["data"]["photos"]
                 if data["topicId"]
-                == (
-                    f"album-1_{item['picKey']}_0_0"
-                    if url == self.service.PHOTO_REPLY_URL
-                    else f"album-1_{item['picKey']}"
+                in (
+                    {
+                        f"album-1_{item['picKey']}_0_0",
+                        f"album-1_{item['picKey']}_{item.get('batchId')}_4",
+                    }
+                    if url
+                    in (
+                        self.service.PHOTO_REPLY_URL,
+                        self.service.PHOTO_BATCH_REPLY_URL,
+                    )
+                    or data.get("ref") == "feeds"
+                    else {f"album-1_{item['picKey']}"}
                 )
             )
             if url == self.service.PHOTO_REPLY_URL:
@@ -164,6 +197,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
             call
             for call in self.service._request.call_args_list
             if call.args[0] == "POST"
+            and not call.kwargs.get("data", {}).get("isfakereq")
         ]
 
     def use_image_vision(self, *, limit=None, enabled=True):
@@ -286,6 +320,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
             payload = copy.deepcopy(self.payload)
             payload["data"]["picPosInPage"] = index
             responses.append(f"viewer_Callback({json.dumps(payload)});")
+        responses.append(json.dumps({"code": 0, "data": {"feeds": ""}}))
         responses.append(
             (
                 Path(__file__).parent
@@ -300,7 +335,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.vision.await_count, 3)
         self.manager.plugin.call_llm.assert_awaited_once()
         self.assertEqual(
-            [call["method"] for call in session.calls], ["GET"] * 3 + ["POST"]
+            [call["method"] for call in session.calls], ["GET"] * 3 + ["POST"] * 2
         )
         self.assertEqual(
             [call["params"]["picKey"] for call in session.calls[:3]],
@@ -704,6 +739,10 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("生活聊天表达：自然、轻松。", call.kwargs["system_prompt"])
         self.assertIn("原有人设", call.kwargs["system_prompt"])
         self.assertIn("只输出 JSON 对象", call.kwargs["system_prompt"])
+        self.assertGreater(
+            call.kwargs["system_prompt"].index("只输出 JSON 对象"),
+            call.kwargs["system_prompt"].index("生活聊天表达：自然、轻松。"),
+        )
         self.assertNotIn("只输出评论/回复正文", call.kwargs["system_prompt"])
         self.assertEqual(len(self.writes()), 1)
         data = self.writes()[0].kwargs["data"]
@@ -736,7 +775,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("图1（候选评论照片）", prompt)
         self.assertEqual(self.writes()[0].kwargs["data"]["topicId"], "album-1_pic-2!!")
 
-    async def test_comprehensive_comment_keeps_all_three_images_and_explicit_batch_wording(
+    async def test_single_photo_selection_sees_batch_but_focuses_selected_photo(
         self,
     ):
         self.use_image_vision(limit=3)
@@ -745,7 +784,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
             types.SimpleNamespace(completion_text="展厅里欣赏画作"),
             types.SimpleNamespace(completion_text="夕阳下坐在江边捧着饮料"),
         ]
-        content = "这组从屋里的慵懒到看展、江边的夕阳，松弛得刚刚好。"
+        content = "伸个懒腰都这么惬意。"
         self.manager.plugin.call_llm.return_value = json.dumps(
             {"photo_index": 1, "comment": content}, ensure_ascii=False
         )
@@ -756,9 +795,9 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         call = self.manager.plugin.call_llm.call_args
         for detail in ("室内伸懒腰", "展厅里欣赏画作", "夕阳下坐在江边捧着饮料"):
             self.assertIn(detail, call.kwargs["prompt"])
-        self.assertIn("本批照片只发一条综合评论", call.kwargs["system_prompt"])
-        self.assertIn("不是只评价提交落点这一张", call.kwargs["system_prompt"])
-        self.assertIn("本批全部已识别图片", call.kwargs["system_prompt"])
+        self.assertIn("评论针对本批中的一张照片", call.kwargs["system_prompt"])
+        self.assertIn("评论聚焦该张", call.kwargs["system_prompt"])
+        self.assertIn("不混入其他照片的细节", call.kwargs["system_prompt"])
         self.assertIn("可选提交落点", call.kwargs["prompt"])
         self.assertEqual(len(self.writes()), 1)
         data = self.writes()[0].kwargs["data"]
@@ -1322,3 +1361,678 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
         scopes = await self.service.query_photo_posts(self.post.key)
         self.assertEqual([len(post.comments) for post in scopes], [0, 1, 0])
         self.assertEqual(scopes[1].comments[0].uin, 30003)
+
+    def use_batch_comment(self, *, replace_params=(), replies=""):
+        self.use_upload_capture()
+        comment_html = (
+            Path(__file__).parent / "fixtures/qzone_album_upload_comments.html"
+        ).read_text()
+        for old, new in replace_params:
+            comment_html = comment_html.replace(old, new)
+        if replies:
+            comment_html = comment_html.rsplit("</li>", 1)[0] + (
+                f'<div class="mod-comments-sub">{replies}</div></li>'
+            )
+        self.post = parse_feed(
+            album_feed(html=upload_feed_html() + comment_html, photos=[])
+        )
+        self.service._remember_posts([self.post])
+        self.manager.qzone_conf["qzone_auto_comment_reply_probability"] = 100
+
+    async def test_upload_batch_comment_is_bound_to_one_verified_anchor(self):
+        self.use_batch_comment()
+        self.assertEqual(self.post.comments[0].content, "Nice photos!")
+        self.comments["pic-2!!"] = [self.root("pic-2!!")]
+        scopes = await self.service.query_photo_posts(self.post.key)
+        self.assertEqual([len(post.comments) for post in scopes], [0, 1, 0, 1])
+        self.assertEqual(
+            scopes[0].photo_targets[0].verified_batch_topic_id,
+            "album-1_pic-1!!_1790992589220000_4",
+        )
+        self.assertEqual(
+            scopes[0].photo_targets[0].feed_comment_topic_id,
+            "album-1_pic-1!!_0_0",
+        )
+        self.assertTrue(all(not post.comment_target_error for post in scopes))
+
+    def use_remote_batch_comments(self):
+        self.use_upload_capture()
+        self.batch_comment_html = (
+            Path(__file__).parent / "fixtures/qzone_album_upload_comments.html"
+        ).read_text()
+        self.manager.qzone_conf["qzone_auto_comment_reply_probability"] = 100
+
+    async def test_missing_feed_comments_are_read_before_probability_reply(self):
+        self.use_remote_batch_comments()
+        self.assertEqual(self.post.comments, [])
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (2, 0))
+        main, reply = self.writes()
+        self.assertEqual(main.args[1], self.service.PHOTO_COMMENT_URL)
+        self.assertEqual(reply.args[1], self.service.PHOTO_BATCH_REPLY_URL)
+        data = reply.kwargs["data"]
+        self.assertEqual(data["topicId"], "album-1_pic-1!!_1790992589220000_4")
+        self.assertEqual((data["commentId"], data["commentUin"]), ("41", 30003))
+        self.assertEqual((data["feedsType"], data["platformid"]), (100, 52))
+        self.assertEqual((data["ref"], data["paramstr"]), ("feeds", 1))
+        read = next(
+            call
+            for call in self.service._request.call_args_list
+            if call.kwargs.get("data", {}).get("isfakereq") == 1
+        )
+        self.assertEqual(read.kwargs["data"]["feedsType"], 8)
+        self.assertNotIn("content", read.kwargs["data"])
+        self.assertLess(
+            self.service._request.call_args_list.index(read),
+            self.service._request.call_args_list.index(reply),
+        )
+
+    async def test_batch_probability_reply_can_join_two_distinct_users(self):
+        self.use_remote_batch_comments()
+        self.manager.qzone_conf["qzone_auto_comment_reply_user_limit"] = 2
+        original = self.batch_comment_html
+        self.batch_comment_html += (
+            original.replace('data-tid="41"', 'data-tid="42"')
+            .replace("cmtid=41", "cmtid=42")
+            .replace('data-uin="30003"', 'data-uin="40004"')
+        )
+        first = await self.run_comment()
+        second = await self.run_comment()
+        self.assertEqual((first["commented"], second["commented"]), (3, 0))
+        writes = self.writes()
+        self.assertEqual(len(writes), 3)
+        self.assertTrue(
+            all(
+                call.args[1] == self.service.PHOTO_BATCH_REPLY_URL
+                for call in writes[1:]
+            )
+        )
+        self.assertEqual(
+            {call.kwargs["data"]["commentUin"] for call in writes[1:]}, {30003, 40004}
+        )
+        self.assertEqual(
+            {call.kwargs["data"]["commentId"] for call in writes[1:]}, {"41", "42"}
+        )
+
+    async def test_batch_and_photo_replies_share_user_quota_across_rounds(self):
+        self.use_remote_batch_comments()
+        self.manager.qzone_conf.update(
+            qzone_auto_comment_reply_user_limit=2, qzone_auto_comment_limit=1
+        )
+        photo_comment = self.root("pic-2!!")
+        photo_comment["poster"]["id"] = 40004
+        self.comments["pic-2!!"] = [photo_comment]
+        results = [(await self.run_comment())["commented"] for _ in range(3)]
+        self.assertEqual(results, [2, 1, 0])
+        replies = self.writes()[1:]
+        self.assertEqual(len(replies), 2)
+        self.assertEqual(
+            {call.args[1] for call in replies},
+            {self.service.PHOTO_BATCH_REPLY_URL, self.service.PHOTO_REPLY_URL},
+        )
+        self.assertEqual(
+            {call.kwargs["data"]["commentUin"] for call in replies}, {30003, 40004}
+        )
+
+    async def test_remote_comments_must_match_batch_owner_and_public_scope(self):
+        self.use_remote_batch_comments()
+        original = self.batch_comment_html
+        for old, new in (
+            ("oweruin=20002", "oweruin=40004"),
+            ("batchId=1790992589220000", "batchId=1790992589220001"),
+            ("zz=0", "zz=1"),
+            ("cmtType=4", "cmtType=0"),
+        ):
+            with self.subTest(binding=new):
+                self.batch_comment_html = original.replace(old, new)
+                self.service._post_detail_cache_at.clear()
+                scopes = await self.service.query_photo_posts(self.post.key)
+                self.assertEqual(scopes[-1].comments, [])
+                self.assertTrue(all(not post.comments for post in scopes))
+        self.assertEqual(self.writes(), [])
+
+    async def test_batch_detail_reuses_cache_then_reads_new_comments(self):
+        self.use_remote_batch_comments()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        batch = scopes[-1]
+        self.assertEqual([item.tid for item in batch.comments], ["41"])
+        before = self.service._request.call_count
+        self.assertEqual((await self.service.detail(batch.key)).comments[0].tid, "41")
+        self.assertEqual(self.service._request.call_count, before)
+        self.batch_comment_html = self.batch_comment_html.replace(
+            'tid="41"', 'tid="42"'
+        ).replace("cmtid=41", "cmtid=42")
+        self.service._post_detail_cache_at.pop(batch.key, None)
+        refreshed = await self.service.detail(batch.key)
+        self.assertEqual([item.tid for item in refreshed.comments], ["42"])
+        self.assertEqual(self.service._request.call_count, before + 1)
+        self.assertEqual(self.writes(), [])
+
+    async def test_empty_remote_comments_remove_stale_feed_candidates(self):
+        self.use_batch_comment()
+        self.batch_comment_html = ""
+        scopes = await self.service.query_photo_posts(self.post.key)
+        self.assertEqual(scopes[-1].comments, [])
+
+    async def test_upload_batch_comment_runs_after_main_and_is_not_repeated(self):
+        self.use_batch_comment()
+        self.manager.qzone_conf["qzone_auto_comment_limit"] = 1
+        first = await self.run_comment()
+        self.assertEqual((first["commented"], first["failed"]), (2, 0))
+        main, reply = self.writes()
+        self.assertEqual(main.args[1], self.service.PHOTO_COMMENT_URL)
+        self.assertEqual(main.kwargs["data"]["topicId"], "album-1_pic-1!!")
+        self.assertEqual(reply.args[1], self.service.PHOTO_BATCH_REPLY_URL)
+        self.assertEqual(
+            reply.kwargs["data"]["topicId"],
+            "album-1_pic-1!!_1790992589220000_4",
+        )
+        self.assertEqual(reply.kwargs["data"]["commentId"], "41")
+        self.assertEqual(reply.kwargs["data"]["commentUin"], 30003)
+        self.assertEqual(reply.kwargs["data"]["hostUin"], 20002)
+        self.assertIn("@{uin:30003", reply.kwargs["data"]["content"])
+        second = await self.run_comment()
+        self.assertEqual(second["commented"], 0)
+        self.assertEqual(len(self.writes()), 2)
+
+    async def test_upload_batch_comment_does_not_require_another_main_comment(self):
+        self.use_batch_comment()
+        self.comments["pic-3!!"] = [self.root("pic-3!!", bot=True)]
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(len(self.writes()), 1)
+        self.assertEqual(self.writes()[0].args[1], self.service.PHOTO_BATCH_REPLY_URL)
+
+    async def test_batch_reply_uses_verified_feed_id_when_callback_omits_data_id(self):
+        self.use_batch_comment()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        batch = scopes[-1]
+        root = batch.comments[0]
+        photo = batch.photo_targets[0]
+        root_html = (
+            Path(__file__).parent / "fixtures/qzone_album_upload_comments.html"
+        ).read_text()
+        root_html = root_html.rsplit("</li>", 1)[0] + (
+            '<div class="mod-comments-sub"><ul>'
+            '<li class="comments-item" data-type="replyroot" '
+            'data-tid="1790960000" data-uin="10001" data-nick="Bot">'
+            '<div class="comments-content"><a class="nickname">Bot</a>'
+            '回复<a class="nickname">Friend</a> : Thanks!</div>'
+            "</li></ul></div></li>"
+        )
+        self.service._request = AsyncMock(
+            return_value={
+                "code": 0,
+                "subcode": 0,
+                "data": {"feeds": root_html},
+            }
+        )
+
+        result = await self.service.reply_photo_comment(
+            owner_uin=20002,
+            album_id=photo.album_id,
+            pic_key=photo.pic_key,
+            feed_topic_id=root.raw_fields["photo_topic_id"],
+            comment=root,
+            content="Thanks!",
+        )
+
+        self.assertEqual(result["reply_id"], "1790960000")
+        self.assertEqual(result["transport"], "photo_reply")
+        self.service._request.assert_awaited_once()
+
+    async def test_batch_reply_without_matching_feed_entry_stays_unknown(self):
+        self.use_batch_comment()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        batch = scopes[-1]
+        root = batch.comments[0]
+        photo = batch.photo_targets[0]
+        wrong_root_html = (
+            (Path(__file__).parent / "fixtures/qzone_album_upload_comments.html")
+            .read_text()
+            .replace('data-tid="41"', 'data-tid="42"')
+        )
+        self.service._request = AsyncMock(
+            return_value={
+                "code": 0,
+                "subcode": 0,
+                "data": {"feeds": wrong_root_html},
+            }
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "状态未知") as error:
+            await self.service.reply_photo_comment(
+                owner_uin=20002,
+                album_id=photo.album_id,
+                pic_key=photo.pic_key,
+                feed_topic_id=root.raw_fields["photo_topic_id"],
+                comment=root,
+                content="Thanks!",
+            )
+
+        self.assertTrue(error.exception.submission_unknown)
+        self.service._request.assert_awaited_once()
+
+    async def test_upload_batch_comment_requires_exact_public_binding(self):
+        for old, new in (
+            ("oweruin=20002", "oweruin=40004"),
+            ("albumid=album-1", "albumid=other-album"),
+            ("lloc=pic-1!!", "lloc=pic-2!!"),
+            ("batchId=1790992589220000", "batchId=1790992589220001"),
+            ("cmtType=4", "cmtType=0"),
+            ("cmtid=41", "cmtid=42"),
+            ("zz=0", "zz=1"),
+            ("zz=0", "zz="),
+            ("oweruin=20002", "oweruin=20002&amp;oweruin=40004"),
+            ("http://photo.qq.com/", "http://unrelated.example/"),
+            ("http://photo.qq.com/", "http://[invalid/"),
+        ):
+            with self.subTest(binding=new):
+                self.use_batch_comment(replace_params=[(old, new)])
+                scopes = await self.service.query_photo_posts(self.post.key)
+                self.assertEqual([len(post.comments) for post in scopes], [0, 0, 0, 0])
+        self.assertEqual(self.writes(), [])
+
+    async def test_existing_bot_reply_in_batch_thread_prevents_repeat_join(self):
+        self.use_batch_comment(
+            replies="""
+            <li class="comments-item" data-type="replyroot" data-tid="1"
+                data-uin="10001" data-nick="Bot">
+              <div class="comments-content"><a class="nickname">Bot</a> :
+                Already joined this thread
+              </div>
+            </li>
+        """
+        )
+        scopes = await self.service.query_photo_posts(self.post.key)
+        root, reply = scopes[-1].comments
+        self.assertEqual(reply.parent_tid, root.tid)
+        self.assertEqual(reply.uin, 10001)
+        self.assertEqual(
+            reply.raw_fields["photo_topic_id"], root.raw_fields["photo_topic_id"]
+        )
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(len(self.writes()), 1)
+        self.assertEqual(self.writes()[0].args[1], self.service.PHOTO_COMMENT_URL)
+
+    def use_batch_conversation(self, *, owner_reply=None):
+        bot = batch_reply_html(1790997800, 10001, "Bot", 30003, "Other", "Nice!")
+        owner = owner_reply or batch_reply_html(
+            1790997849, 20002, "Owner", 10001, "Bot", "What do you think?"
+        )
+        other = batch_reply_html(1790997908, 30003, "Other", 10001, "Bot", "I agree!")
+        self.batch_replies = bot + owner + other
+        self.use_batch_comment(replies=self.batch_replies)
+        self.batch_comment_html = batch_thread_html(self.batch_replies)
+        self.comments["pic-3!!"] = [self.root("pic-3!!", bot=True)]
+
+    def batch_candidates(self, posts):
+        candidate = sys.modules[f"{self.task_module.__package__}.interact.candidate"]
+        return candidate._qzone_friend_thread_comment_candidates(
+            self.manager, posts, self_uin=10001, processed={}
+        )
+
+    async def test_batch_join_keeps_both_people_replying_to_bot_as_candidates(self):
+        self.use_batch_conversation()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        root, bot, owner, other = scopes[-1].comments
+        self.assertEqual(bot.reply_to_tid, root.tid)
+        self.assertEqual(bot.create_time, 1790997800)
+        for reply in (owner, other):
+            self.assertEqual(reply.reply_to_uin, 10001)
+            self.assertEqual(reply.reply_to_tid, bot.tid)
+            self.assertEqual(reply.reply_to_tid_source, "photo_mention")
+            self.assertEqual(reply.raw_fields["photo_root_id"], root.tid)
+            self.assertEqual(reply.raw_fields["photo_root_uin"], root.uin)
+        self.assertEqual(
+            [item.comment.uin for item in self.batch_candidates(scopes)],
+            [30003, 20002],
+        )
+
+    async def test_batch_bot_root_can_continue_without_precise_root_timestamp(self):
+        reply = batch_reply_html(1790997849, 20002, "Owner", 10001, "Bot", "Hi!")
+        self.use_batch_comment(replies=reply)
+        self.batch_comment_html = batch_thread_html(reply).replace(
+            'data-uin="30003" data-nick="Friend"',
+            'data-uin="10001" data-nick="Bot"',
+        )
+        scopes = await self.service.query_photo_posts(self.post.key)
+        root, child = scopes[-1].comments
+        self.assertEqual(root.create_time, 0)
+        self.assertEqual(child.reply_to_tid, root.tid)
+        self.assertEqual(child.reply_to_uin, 10001)
+        self.assertEqual(
+            [item.comment.uin for item in self.batch_candidates(scopes)], [20002]
+        )
+
+    async def test_reordered_duplicate_batch_replies_keep_stable_candidates(self):
+        self.use_batch_conversation()
+        items = self.batch_replies.split("</li>")
+        self.batch_comment_html = batch_thread_html(
+            "".join(items[index] + "</li>" for index in (2, 0, 1, 1))
+        )
+        scopes = await self.service.query_photo_posts(self.post.key)
+        self.assertEqual(len(scopes[-1].comments), 4)
+        self.assertEqual(
+            [item.comment.raw_tid for item in self.batch_candidates(scopes)],
+            ["1790997908", "1790997849"],
+        )
+
+    async def test_batch_conversation_continues_across_people_and_rounds_without_repeat(
+        self,
+    ):
+        self.use_batch_conversation()
+        submitted = 0
+
+        async def request(method, url, **kwargs):
+            nonlocal submitted
+            if url != self.service.PHOTO_BATCH_REPLY_URL:
+                return await self.request(method, url, **kwargs)
+            submitted += 1
+            data = kwargs["data"]
+            self.assertEqual(data["commentId"], "41")
+            self.assertEqual(data["commentUin"], 30003)
+            target = 20002 if "uin:20002," in data["content"] else 30003
+            reply_id = 1790998100 + submitted if submitted <= 2 else 1790998300
+            self.batch_replies += batch_reply_html(
+                reply_id, 10001, "Bot", target, "Friend", "Thanks!"
+            )
+            self.batch_comment_html = batch_thread_html(self.batch_replies)
+            # 与实际抓包一致：成功回包只有整楼 HTML，没有 data.id。
+            return {"code": 0, "subcode": 0, "data": {"feeds": self.batch_comment_html}}
+
+        self.service._request = AsyncMock(side_effect=request)
+        first = await self.run_comment()
+        self.assertEqual((first["commented"], first["failed"]), (2, 0))
+        self.assertEqual([item[2] for item in self.manager.generated], [30003, 20002])
+        state = self.manager.db.state[self.task_module.QZONE_AUTO_COMMENT_STATE_KEY][
+            "processed"
+        ]
+        confirmed = [item for item in state.values() if item.get("verification_status")]
+        self.assertEqual(len(confirmed), 2)
+        self.assertTrue(
+            all(item["verification_status"] == "confirmed" for item in confirmed)
+        )
+        self.assertEqual((await self.run_comment())["commented"], 0)
+
+        self.batch_replies += batch_reply_html(
+            1790998200, 30003, "Other", 10001, "Bot", "One more thing!"
+        )
+        self.batch_comment_html = batch_thread_html(self.batch_replies)
+        self.service._post_detail_cache_at.clear()
+        second = await self.run_comment()
+        self.assertEqual((second["commented"], second["failed"]), (1, 0))
+        self.assertEqual(submitted, 3)
+        self.manager.runtime = replace(self.manager.runtime, db=FakeDb())
+        self.service._post_detail_cache_at.clear()
+        self.assertEqual((await self.run_comment())["commented"], 0)
+        self.assertEqual(submitted, 3)
+
+    async def test_batch_reply_uses_batch_readback_when_callback_omits_feeds(self):
+        self.use_batch_conversation()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        candidate = self.batch_candidates(scopes)[0]
+        self.batch_replies += batch_reply_html(
+            1790998100, 10001, "Bot", 30003, "Other", "Thanks!"
+        )
+        self.batch_comment_html = batch_thread_html(self.batch_replies)
+        self.service.query_photo = AsyncMock(side_effect=AssertionError("wrong scope"))
+
+        async def request(method, url, **kwargs):
+            if url == self.service.PHOTO_BATCH_REPLY_URL:
+                return {"code": 0, "subcode": 0, "data": {"id": 1790998100}}
+            return await self.request(method, url, **kwargs)
+
+        self.service._request = AsyncMock(side_effect=request)
+        result = await self.service.reply_photo_comment(
+            owner_uin=20002,
+            album_id="album-1",
+            pic_key="pic-1!!",
+            feed_topic_id=candidate.post.photo_batch_topic_id,
+            comment=candidate.comment,
+            parent_comment=candidate.parent_comment,
+            content="Thanks!",
+        )
+        self.assertEqual(result["verification_status"], "confirmed")
+        self.service.query_photo.assert_not_awaited()
+        self.assertEqual(len(self.writes()), 1)
+
+    async def test_batch_reply_with_missing_or_conflicting_recipient_is_not_candidate(
+        self,
+    ):
+        valid = batch_reply_html(1790997849, 20002, "Owner", 10001, "Bot", "Hi!")
+        for invalid in (
+            valid.replace('link="nameCard_10001"', "").replace(
+                'href="http://user.qzone.qq.com/10001"', ""
+            ),
+            valid.replace("nameCard_10001", "nameCard_40004"),
+            valid.replace('data-tid="1790997849"', 'data-tid="2"'),
+            valid.replace("Hi!", "Hi! @{uin:40004}"),
+            valid.replace("nameCard_10001", "nameCard_40004").replace(
+                "qzone.qq.com/10001", "qzone.qq.com/40004"
+            ),
+        ):
+            with self.subTest(invalid=invalid):
+                self.use_batch_conversation(owner_reply=invalid)
+                self.service._post_detail_cache_at.clear()
+                scopes = await self.service.query_photo_posts(self.post.key)
+                self.assertEqual(
+                    [item.comment.uin for item in self.batch_candidates(scopes)],
+                    [30003],
+                )
+        self.assertEqual(self.writes(), [])
+
+    async def test_batch_comment_cannot_be_submitted_to_another_photo_or_owner(self):
+        self.use_batch_comment()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        comment = scopes[-1].comments[0]
+        for owner, pic, topic in (
+            (40004, "pic-1!!", "album-1_pic-1!!_1790992589220000_4"),
+            (20002, "pic-2!!", "album-1_pic-1!!_1790992589220000_4"),
+            (20002, "pic-1!!", "album-1_pic-1!!_1790992589220001_4"),
+            (20002, "pic-1!!", "album-1_pic-1!!_0_0"),
+        ):
+            with self.subTest(owner=owner, pic=pic, topic=topic):
+                with self.assertRaises(RuntimeError):
+                    await self.service.reply_photo_comment(
+                        owner_uin=owner,
+                        album_id="album-1",
+                        pic_key=pic,
+                        feed_topic_id=topic,
+                        comment=comment,
+                        content="Reply",
+                    )
+        self.assertEqual(self.writes(), [])
+
+    async def test_whole_batch_main_uses_captured_feed_form_and_all_images(self):
+        self.use_upload_capture()
+        self.manager.qzone_conf.pop("qzone_auto_comment_photo_batch_probability")
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(len(self.writes()), 1)
+        data = self.writes()[0].kwargs["data"]
+        self.assertEqual(data["topicId"], "album-1_pic-1!!_1790992589220000_4")
+        self.assertEqual(
+            (data["feedsType"], data["platformid"], data["ref"]), (100, 52, "feeds")
+        )
+        self.assertEqual(
+            (data["hostUin"], data["uin"], data["private"]), (20002, 10001, 0)
+        )
+        self.assertEqual(data["paramstr"], 1)
+        for field in ("albumId", "picKey", "commentUin", "commentId"):
+            self.assertNotIn(field, data)
+        self.assertEqual(
+            self.manager.generated[0][2],
+            [f"https://photo.example/photo-{i}.jpg" for i in (1, 2, 3)],
+        )
+        self.assertEqual((await self.run_comment())["commented"], 0)
+        self.assertEqual(len(self.writes()), 1)
+
+    async def test_batch_probability_rolls_once_and_respects_boundary(self):
+        self.use_upload_capture()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        discuss = sys.modules[
+            f"{self.task_module.__package__}.interact.executors.discuss"
+        ]
+        self.manager.qzone_conf["qzone_auto_comment_photo_batch_probability"] = 50
+        ctx = await self.service.context()
+        for value, scope in ((0.499, "batch"), (0.5, "photo")):
+            with (
+                self.subTest(value=value),
+                patch.object(discuss.random, "random", return_value=value) as draw,
+            ):
+                generated = await discuss._generate_qzone_comment_target(
+                    self.manager,
+                    scopes[0],
+                    scopes,
+                    ctx,
+                    {},
+                    {},
+                    target_umo="",
+                    skip_post_keys=set(),
+                )
+                self.assertEqual(generated[0].photo_comment_scope, scope)
+                draw.assert_called_once_with()
+
+    async def test_fixed_probability_modes_do_not_draw_random(self):
+        self.use_upload_capture()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        discuss = sys.modules[
+            f"{self.task_module.__package__}.interact.executors.discuss"
+        ]
+        for probability, scope in ((0, "photo"), (100, "batch")):
+            self.manager.qzone_conf["qzone_auto_comment_photo_batch_probability"] = (
+                probability
+            )
+            with (
+                self.subTest(probability=probability),
+                patch.object(
+                    discuss.random,
+                    "random",
+                    side_effect=AssertionError("Unexpected random draw"),
+                ),
+            ):
+                generated = await discuss._generate_qzone_comment_target(
+                    self.manager,
+                    scopes[0],
+                    scopes,
+                    await self.service.context(),
+                    {},
+                    {},
+                    target_umo="",
+                    skip_post_keys=set(),
+                )
+                self.assertEqual(generated[0].photo_comment_scope, scope)
+
+    async def test_whole_batch_vision_shares_budget_and_cache_with_single_mode(self):
+        self.use_upload_capture()
+        self.use_image_vision(limit=2)
+        scopes = await self.service.query_photo_posts(self.post.key)
+        state = {}
+        await self.manager.generate_qzone_auto_photo_comment(
+            scopes[0], scopes[:-1], state=state
+        )
+        self.assertEqual(self.vision.await_count, 2)
+        self.manager.plugin.call_llm.return_value = "这组拍得很惬意。"
+        await self.manager.generate_qzone_auto_comment(scopes[-1], state=state)
+        self.assertEqual(self.vision.await_count, 2)
+        prompt = self.manager.plugin.call_llm.call_args.kwargs["prompt"]
+        self.assertIn("评论范围：整组上传照片", prompt)
+        self.assertIn("Visible details of https://photo.example/photo-1.jpg", prompt)
+        self.assertIn("Visible details of https://photo.example/photo-2.jpg", prompt)
+        self.assertNotIn("Visible details of https://photo.example/photo-3.jpg", prompt)
+
+    async def test_whole_batch_pending_retry_survives_probability_change(self):
+        self.use_upload_capture()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        tracker = sys.modules[f"{self.task_module.__package__}.interact.tracker"]
+        processed = {}
+        tracker._mark_qzone_post_processed(
+            processed,
+            scopes[-1],
+            "retry_later",
+            content="Saved batch caption",
+            photo_target_key=tracker._photo_target_key(scopes[-1]),
+        )
+        self.manager.db.state[self.task_module.QZONE_AUTO_COMMENT_STATE_KEY] = {
+            "processed": processed
+        }
+        self.manager.qzone_conf["qzone_auto_comment_photo_batch_probability"] = 0
+        self.post.photo_targets.reverse()
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (1, 0))
+        self.assertEqual(self.manager.generated, [])
+        data = self.writes()[0].kwargs["data"]
+        self.assertEqual(
+            (data["ref"], data["content"]), ("feeds", "Saved batch caption")
+        )
+        self.assertEqual(data["topicId"], "album-1_pic-1!!_1790992589220000_4")
+
+    async def test_batch_main_then_batch_reply_are_independent_and_deduplicated(self):
+        self.use_batch_comment()
+        self.manager.qzone_conf["qzone_auto_comment_photo_batch_probability"] = 100
+        self.manager.qzone_conf["qzone_auto_comment_limit"] = 1
+        result = await self.run_comment()
+        self.assertEqual((result["commented"], result["failed"]), (2, 0))
+        main, reply = self.writes()
+        self.assertEqual(main.kwargs["data"]["ref"], "feeds")
+        self.assertEqual(reply.args[1], self.service.PHOTO_BATCH_REPLY_URL)
+        self.assertEqual(
+            main.kwargs["data"]["topicId"], reply.kwargs["data"]["topicId"]
+        )
+        self.assertEqual(reply.kwargs["data"]["commentId"], "41")
+        self.assertEqual((await self.run_comment())["commented"], 0)
+        self.assertEqual(len(self.writes()), 2)
+
+    async def test_batch_and_photo_comments_with_same_id_do_not_share_thread_state(
+        self,
+    ):
+        self.use_batch_comment()
+        self.comments["pic-1!!"] = [self.root("pic-1!!")]
+        scopes = await self.service.query_photo_posts(self.post.key)
+        tracker = sys.modules[f"{self.task_module.__package__}.interact.tracker"]
+        self.assertEqual(scopes[0].comments[0].tid, scopes[-1].comments[0].tid)
+        photo_key = tracker._comment_key(scopes[0], scopes[0].comments[0])
+        batch_key = tracker._comment_key(scopes[-1], scopes[-1].comments[0])
+        self.assertNotEqual(photo_key, batch_key)
+        self.assertIn(":photo-batch:", batch_key)
+        self.service._post_detail_cache_at.clear()
+        self.service.query_photo = AsyncMock(
+            side_effect=AssertionError("Batch detail must not read single photo")
+        )
+        detailed = await self.service.detail(scopes[-1].key)
+        self.assertEqual([c.content for c in detailed.comments], ["Nice photos!"])
+
+    async def test_unverified_batch_cannot_submit_or_reconstruct_as_mood(self):
+        self.use_upload_capture()
+        scopes = await self.service.query_photo_posts(self.post.key)
+        batch = scopes[-1]
+        bad = replace(batch, photo_batch_topic_id="album-1_pic-2!!_1790992589220000_4")
+        self.service._remember_posts([bad])
+        with self.assertRaisesRegex(RuntimeError, "未经"):
+            await self.service.comment(bad.key, "Caption")
+        self.service._post_cache.pop(batch.key, None)
+        with self.assertRaisesRegex(RuntimeError, "引用已失效"):
+            self.service._require_post(batch.key)
+        self.assertEqual(self.writes(), [])
+
+    def test_batch_probability_defaults_and_clamps_preserve_zero(self):
+        options = sys.modules[f"{self.task_module.__package__}.interact.options"]
+        config = options.QzoneAutoInteractionConfig
+        self.assertEqual(config.from_conf({}).comment_photo_batch_probability, 100)
+        for value, expected in (
+            (0, 0),
+            (50, 50),
+            (100, 100),
+            (-1, 0),
+            (101, 100),
+            ("invalid", 100),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    config.from_conf(
+                        {"qzone_auto_comment_photo_batch_probability": value}
+                    ).comment_photo_batch_probability,
+                    expected,
+                )

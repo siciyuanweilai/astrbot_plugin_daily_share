@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from ...space.photos import photo_reply_target_error
+from ...space.photos import photo_reply_target_error, photo_reply_topic
 from .comments import (
     QzoneCommentIndex,
     _comment_has_self_reply,
@@ -20,7 +20,7 @@ from .tracker import (
     QZONE_ACTION_RETRY_LATER,
     _comment_key,
     _post_key,
-    _qzone_comment_reply_post_action,
+    _qzone_comment_reply_participation,
     _qzone_like_post_processed_action,
     _qzone_post_processed_action,
     _qzone_processed_thread_has_self_reply,
@@ -131,7 +131,11 @@ class QzoneAutoPolicyService:
             return False
         if int(getattr(post, "uin", 0) or 0) in {0, int(self_uin or 0)}:
             return False
-        if _qzone_comment_reply_post_action(processed, post):
+        replied_users, reserved, blocked = _qzone_comment_reply_participation(
+            processed, post
+        )
+        user_limit = self.owner._qzone_auto_config().comment_reply_user_limit
+        if blocked or len(replied_users) + reserved >= user_limit:
             return False
         if (
             str(getattr(comment, "parent_tid", "") or "").strip()
@@ -144,6 +148,8 @@ class QzoneAutoPolicyService:
         if not comment_id:
             return False
         if int(getattr(comment, "uin", 0) or 0) in {0, int(self_uin or 0)}:
+            return False
+        if int(comment.uin) in replied_users:
             return False
         if not str(getattr(comment, "content", "") or "").strip():
             return False
@@ -181,7 +187,7 @@ class QzoneAutoPolicyService:
                 return False
             return not photo_reply_target_error(
                 comment,
-                topic=photos[0].feed_comment_topic_id,
+                topic=photo_reply_topic(photos[0], comment),
                 parent_comment=None,
             )
         return True

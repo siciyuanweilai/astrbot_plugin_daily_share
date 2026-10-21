@@ -3,7 +3,7 @@ from typing import Any
 
 from astrbot.api import logger
 
-from ...space.photos import photo_reply_target_error
+from ...space.photos import photo_reply_target_error, photo_reply_topic
 from .comments import QzoneCommentIndex, _comment_created_at, _comment_replies_to_self
 from .placement import _has_thread_reply_submit_plan, _unsafe_thread_target_reason
 from .tracker import _comment_key
@@ -26,7 +26,7 @@ _QZONE_SKIP_REASON_LABELS = {
     "missing_self_thread_reply": "缺少机器人在原楼层中的回复记录",
     "photo_reply_not_to_bot": "相册回复未明确指向机器人",
     "already_replied_to_photo_author": "已回复该相册评论人",
-    "synthetic_thread_tid_without_real_submit_id": "楼层仅有合成 tid，缺少真实提交 ID",
+    "synthetic_thread_tid_without_real_submit_id": "楼中楼编号无法匹配可靠的回复目标",
 }
 
 
@@ -53,7 +53,7 @@ def _log_qzone_candidate_skip(label: str, reason: str, post, comment) -> None:
 def _photo_candidate_skip_reason(post, comment, parent, *, self_uin, index) -> str:
     if getattr(post, "comment_target_error", ""):
         return post.comment_target_error
-    topic = post.photo_targets[0].feed_comment_topic_id
+    topic = photo_reply_topic(post.photo_targets[0], comment, parent_comment=parent)
     reason = photo_reply_target_error(
         comment,
         topic=topic,
@@ -136,6 +136,7 @@ def _qzone_friend_thread_comment_candidates(
                     post,
                     comment,
                     parent_comment=parent_comment,
+                    self_uin=self_uin,
                 )
             ):
                 _log_qzone_candidate_skip("好友动态续评", unsafe_reason, post, comment)
@@ -232,6 +233,7 @@ def _qzone_self_reply_candidates(
                         post,
                         comment,
                         parent_comment=parent_comment,
+                        self_uin=self_uin,
                     )
                 ):
                     result["skipped"] += 1

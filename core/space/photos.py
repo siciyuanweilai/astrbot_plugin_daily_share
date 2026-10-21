@@ -18,6 +18,8 @@ from .models import (
 from .parse.decoder import clean_qzone_text
 from .parse.photo import photo_reply_mention, photo_thread_comments
 from .parse.phototarget import parse_photo_batch_topic
+from .parse.thread import _feed_html_comment_items, parse_comments
+from .photobatch import batch_comments, refresh_batch_comments
 
 if TYPE_CHECKING:
     from .qzone import QzoneService
@@ -66,6 +68,24 @@ def _photo_form_headers(
     )
 
 
+def photo_reply_topic(
+    photo: QzonePhoto,
+    comment: QzoneComment,
+    *,
+    parent_comment: QzoneComment | None = None,
+) -> str:
+    root = parent_comment if parent_comment is not None else comment
+    fields = root.raw_fields or {}
+    topic = str(fields.get("photo_topic_id") or "")
+    if (
+        topic
+        and topic == photo.verified_batch_topic_id
+        and fields.get("photo_owner_uin") == photo.owner_uin
+    ):
+        return topic
+    return photo.feed_comment_topic_id
+
+
 def photo_reply_target_error(
     comment: QzoneComment, *, topic: str, parent_comment: QzoneComment | None = None
 ) -> str:
@@ -108,9 +128,21 @@ def photo_reply_target_error(
 
 
 async def _verify_photo_reply(
-    service, *, owner, album, pic, root, target, reply, content
+    service, *, owner, album, pic, root, target, reply, content, topic, payload
 ):
     """按返回的回复 ID 回查结果，不重发，也不调用说说评论删除接口。"""
+    if topic != f"{album}_{pic}_0_0":
+        return await _verify_batch_photo_reply(
+            service,
+            owner=owner,
+            album=album,
+            topic=topic,
+            root=root,
+            target=target,
+            reply=reply,
+            content=content,
+            payload=payload,
+        )
     status = "not_found"
     for delay in (0, 0.8, 1.6):
         if delay:
@@ -153,6 +185,61 @@ async def _verify_photo_reply(
     return {"verification_status": status}
 
 
+async def _verify_batch_photo_reply(
+    service, *, owner, album, topic, root, target, reply, content, payload
+):
+    batch = parse_photo_batch_topic(topic, album_id=album)
+    if not batch:
+        return {"verification_status": "detail_failed"}
+    try:
+        post = service._require_post(f"{owner}:photo-batch:{album}:{batch[1]}")
+        if post.photo_batch_topic_id != topic or post.comment_target_error:
+            return {"verification_status": "detail_failed"}
+    except RuntimeError:
+        return {"verification_status": "detail_failed"}
+
+    def check(comments):
+        def body(value):
+            return re.sub(r"@\{[^}]*\}", "", clean_qzone_text(value)).strip()
+
+        for item in comments:
+            if item.raw_tid != reply.comment_id or item.uin != reply.uin:
+                continue
+            if (
+                item.parent_tid != root.tid
+                or item.raw_fields.get("photo_root_uin") != root.uin
+                or item.reply_to_uin != target.uin
+                or body(item.content) != body(content)
+            ):
+                return {"verification_status": "wrong_target"}
+            return {
+                "verification_status": "confirmed",
+                "verified_reply_tid": item.tid,
+                "verified_reply_to_tid": target.tid,
+                "verified_reply_to_uin": target.uin,
+            }
+        return None
+
+    data = payload.get("data")
+    feeds = data.get("feeds") if isinstance(data, dict) else None
+    if isinstance(feeds, str):
+        verified = check(
+            batch_comments(post, parse_comments(_feed_html_comment_items(feeds)))
+        )
+        if verified:
+            return verified
+    # 正常回包自带整楼 HTML，可直接核验；省略时只读原批次，不查单张。
+    for delay in (0, 0.8, 1.6):
+        if delay:
+            await asyncio.sleep(delay)
+        service._invalidate_qzone_cache(post_id=post.key)
+        refreshed = await refresh_batch_comments(service, post)
+        verified = check(refreshed.comments)
+        if verified:
+            return verified
+    return {"verification_status": "not_found"}
+
+
 def _photo_submit_result(
     service, payload: dict, *, content: str, uin: int, transport: str
 ) -> QzonePhotoComment:
@@ -193,6 +280,57 @@ def _photo_submit_result(
     return comment
 
 
+def _batch_photo_reply_id(
+    payload: dict[str, Any],
+    *,
+    root_id: str,
+    root_uin: int,
+    bot_uin: int,
+    content: str,
+    target_uin: int = 0,
+    after_time: int = 0,
+) -> str:
+    """从 QQ 批次回评响应的 feeds HTML 中确认本次回复 ID。
+
+    批次回评接口成功时可能只返回 code 和 feeds，不返回 data.id。
+    只有回复确实出现在指定原评论楼、作者为当前机器人且正文吻合时，
+    才能用其 ID 作为成功回执；否则保留提交状态未知，避免误重试。
+    """
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return ""
+    feeds = data.get("feeds")
+    if not isinstance(feeds, str) or "comments-item" not in feeds:
+        return ""
+
+    def body(value: Any) -> str:
+        return re.sub(r"@\{[^}]*\}", "", clean_qzone_text(value)).strip()
+
+    expected_body = body(content)
+    if not expected_body:
+        return ""
+    matches = []
+    for root in _feed_html_comment_items(feeds):
+        if (
+            str(root.get("commentid") or "") != root_id
+            or int(root.get("uin") or 0) != root_uin
+        ):
+            continue
+        for reply in root.get("replyList") or []:
+            reply_id = str(reply.get("commentId") or "").strip()
+            if (
+                reply_id.isascii()
+                and reply_id.isdigit()
+                and 0 < int(reply_id) <= 10**20 - 1
+                and int(reply.get("commentUin") or 0) == bot_uin
+                and body(reply.get("commentContent")) == expected_body
+                and (not target_uin or reply.get("reply_to_uin") == target_uin)
+                and (not after_time or reply.get("create_time", 0) > after_time)
+            ):
+                matches.append(reply_id)
+    return matches[0] if len(matches) == 1 else ""
+
+
 class QzonePhotoService:
     """读取 QQ 空间相册中的单张照片并发表评论。"""
 
@@ -204,6 +342,8 @@ class QzonePhotoService:
         post = self.owner._require_post(post_id)
         if int(post.appid or 311) != 4:
             return [post]
+        if post.photo_comment_scope == "batch":
+            return [await refresh_batch_comments(self.owner, post)]
         targets = {}
         missing_count = 0
         for target in post.photo_targets:
@@ -351,6 +491,19 @@ class QzonePhotoService:
             result = safe_result
             if not result:
                 raise RuntimeError("QQ 空间相册共享 topicId 未能核实任何照片目标")
+        for item in result:
+            photo = item.photo_targets[0]
+            target = targets[photo.key]
+            batch_topic = parse_photo_batch_topic(
+                target.feed_topic_id, album_id=photo.album_id
+            )
+            if not batch_topic or batch_topic != (
+                photo.pic_key,
+                viewer_batches.get(photo.key),
+                photo.platform_sub_id,
+            ):
+                continue
+            photo.verified_batch_topic_id = target.feed_topic_id
         batches = {
             (item.photo_targets[0].album_id, item.photo_targets[0].batch_id)
             for item in result
@@ -365,7 +518,38 @@ class QzonePhotoService:
         for item in result:
             item.photo_batch_key = batch_key
             item.photo_batch_complete = complete
-        self.owner._remember_posts(result, detailed=True)
+        if complete and len(batches) == 1 and next(iter(batches))[1]:
+            batch_photo = next(
+                (
+                    item.photo_targets[0]
+                    for item in result
+                    if item.photo_targets[0].verified_batch_topic_id
+                ),
+                None,
+            )
+            if batch_photo is not None:
+                batch_topic = batch_photo.verified_batch_topic_id
+                batch_post = replace(
+                    post,
+                    tid=f"photo-batch:{batch_photo.album_id}:{batch_photo.batch_id}",
+                    feed_key=post.feed_key or post.tid,
+                    photo_targets=[batch_photo],
+                    comments=post.comments,
+                    images=[
+                        item.photo_targets[0].image_url
+                        for item in result
+                        if item.photo_targets[0].image_url
+                    ],
+                    photo_batch_key=batch_key,
+                    photo_batch_complete=True,
+                    photo_comment_scope="batch",
+                    photo_batch_topic_id=batch_topic,
+                )
+                result.append(await refresh_batch_comments(self.owner, batch_post))
+        self.owner._remember_posts(
+            [item for item in result if item.photo_comment_scope != "batch"],
+            detailed=True,
+        )
         return result
 
     async def query_photo(
@@ -489,6 +673,74 @@ class QzonePhotoService:
             self.owner, payload, content=text, uin=ctx.uin, transport="photo_comment"
         )
 
+    async def comment_photo_batch(
+        self,
+        *,
+        owner_uin: int | str,
+        album_id: str,
+        pic_key: str,
+        batch_id: str,
+        topic_id: str,
+        content: str,
+    ) -> QzonePhotoComment:
+        """发表评论到已核实的相册上传批次。"""
+        owner = _positive_uin(owner_uin, label="相册主人 QQ")
+        album = _photo_identifier(album_id, label="相册 ID")
+        pic = _photo_identifier(pic_key, label="照片 picKey")
+        batch = _photo_identifier(batch_id, label="相册批次 ID")
+        topic = _photo_identifier(topic_id, label="相册批次 topicId")
+        if parse_photo_batch_topic(topic, album_id=album) != (pic, batch, 4):
+            raise RuntimeError("相册批次 topicId 与照片和批次标识不一致")
+        text = str(content or "").strip()
+        if not text:
+            raise RuntimeError("相册批次评论内容不能为空")
+        ctx = await self.owner.context()
+        referer = f"{self.owner.BASE_URL}/{owner}"
+        data = {
+            "topicId": topic,
+            "feedsType": 100,
+            "inCharset": "utf-8",
+            "outCharset": "utf-8",
+            "plat": "qzone",
+            "source": "ic",
+            "hostUin": owner,
+            "isSignIn": "",
+            "platformid": 52,
+            "uin": ctx.uin,
+            "format": "fs",
+            "ref": "feeds",
+            "content": text,
+            "richval": "",
+            "richtype": "",
+            "private": 0,
+            "paramstr": 1,
+            "qzreferrer": referer,
+        }
+        try:
+            payload = await self.owner._request(
+                "POST",
+                self.owner.PHOTO_COMMENT_URL,
+                params={"g_tk": ctx.gtk},
+                data=data,
+                headers=_photo_form_headers(
+                    self.owner, ctx, owner=owner, referer=referer
+                ),
+                retry_parse_error=False,
+            )
+        except RuntimeError as error:
+            exc = RuntimeError(
+                f"{error}（transport=photo_batch_comment, appid=4，提交状态未知）"
+            )
+            setattr(exc, "submission_unknown", True)
+            raise exc from error
+        return _photo_submit_result(
+            self.owner,
+            payload,
+            content=text,
+            uin=ctx.uin,
+            transport="photo_batch_comment",
+        )
+
     async def reply_photo_comment(
         self,
         *,
@@ -505,14 +757,22 @@ class QzonePhotoService:
         album = _photo_identifier(album_id, label="相册 ID")
         pic = _photo_identifier(pic_key, label="照片 picKey")
         topic = normalize_photo_comment_topic(album, pic, feed_topic_id)
+        root = parent_comment if parent_comment is not None else comment
         if topic != f"{album}_{pic}_0_0":
-            raise RuntimeError("相册动态 topicId 与 albumId/picKey 不一致")
+            batch_topic = parse_photo_batch_topic(topic, album_id=album)
+            fields = root.raw_fields or {}
+            if (
+                not batch_topic
+                or batch_topic[0] != pic
+                or fields.get("photo_topic_id") != topic
+                or fields.get("photo_owner_uin") != owner
+            ):
+                raise RuntimeError("相册动态 topicId 与评论批次绑定不一致")
         target_error = photo_reply_target_error(
             comment, topic=topic, parent_comment=parent_comment
         )
         if target_error:
             raise RuntimeError(target_error)
-        root = parent_comment if parent_comment is not None else comment
         comment_id = str(root.tid).strip()
         commenter = int(root.uin)
         text = str(content or "").strip()
@@ -544,11 +804,37 @@ class QzonePhotoService:
             "to_tweet": 0,
             "qzreferrer": f"{self.owner.BASE_URL}/{owner}",
         }
+        url = self.owner.PHOTO_REPLY_URL
+        if topic != f"{album}_{pic}_0_0":
+            # 上传批次属于动态评论，使用 QQ 空间动态的回评接口和表单。
+            url = self.owner.PHOTO_BATCH_REPLY_URL
+            data = {
+                "topicId": topic,
+                "feedsType": 100,
+                "hostUin": owner,
+                "uin": ctx.uin,
+                "commentId": comment_id,
+                "commentUin": commenter,
+                "content": submit_content,
+                "platformid": 52,
+                "isSignIn": "",
+                "format": "fs",
+                "ref": "feeds",
+                "paramstr": 1,
+                "inCharset": "utf-8",
+                "outCharset": "utf-8",
+                "plat": "qzone",
+                "source": "ic",
+                "private": 0,
+                "richval": "",
+                "richtype": "",
+                "qzreferrer": f"{self.owner.BASE_URL}/{owner}",
+            }
         targets = [{"comment_id": comment_id, "comment_uin": commenter}]
         try:
             payload = await self.owner._request(
                 "POST",
-                self.owner.PHOTO_REPLY_URL,
+                url,
                 params={"g_tk": ctx.gtk},
                 data=data,
                 headers=_photo_form_headers(self.owner, ctx, owner=owner),
@@ -569,6 +855,26 @@ class QzonePhotoService:
             "subcode": payload.get("subcode"),
             "http_status": payload.get("_http_status"),
         }
+        response_data = payload.get("data")
+        if (
+            topic != f"{album}_{pic}_0_0"
+            and isinstance(response_data, dict)
+            and not str(response_data.get("id") or "").strip()
+        ):
+            confirmed_id = _batch_photo_reply_id(
+                payload,
+                root_id=comment_id,
+                root_uin=commenter,
+                bot_uin=ctx.uin,
+                content=submit_content,
+                target_uin=comment.uin if parent_comment is not None else 0,
+                after_time=comment.create_time if parent_comment is not None else 0,
+            )
+            if confirmed_id:
+                payload = {
+                    **payload,
+                    "data": {**response_data, "id": confirmed_id},
+                }
         try:
             reply = _photo_submit_result(
                 self.owner,
@@ -600,6 +906,8 @@ class QzonePhotoService:
                 target=comment,
                 reply=reply,
                 content=submit_content,
+                topic=topic,
+                payload=payload,
             )
             result.update(verification)
             if verification["verification_status"] != "confirmed":

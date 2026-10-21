@@ -33,7 +33,12 @@ def _comment_key(post, comment) -> str:
     post_key = str(getattr(post, "key", "") or "").strip()
     if int(getattr(post, "appid", 311) or 311) == 4:
         photos = getattr(post, "photo_targets", []) or []
-        if len(photos) == 1 and photos[0].album_id and photos[0].pic_key:
+        if (
+            getattr(post, "photo_comment_scope", "photo") != "batch"
+            and len(photos) == 1
+            and photos[0].album_id
+            and photos[0].pic_key
+        ):
             post_key = f"{post.uin}:photo:{photos[0].album_id}:{photos[0].pic_key}"
     comment_tid = _comment_tid(comment)
     if comment_tid:
@@ -58,6 +63,15 @@ def _photo_batch_key(post) -> str:
     if len(photos) == 1 and photos[0].batch_id:
         return f"{post.uin}:photo-batch:{photos[0].album_id}:{photos[0].batch_id}"
     return ""
+
+
+def _photo_target_key(post) -> str:
+    if int(getattr(post, "appid", 311) or 311) != 4:
+        return ""
+    if getattr(post, "photo_comment_scope", "photo") == "batch":
+        return f"batch:{post.photo_batch_topic_id}"
+    photos = getattr(post, "photo_targets", []) or []
+    return photos[0].key if len(photos) == 1 else ""
 
 
 def _post_stable_body_key(post) -> str:
@@ -93,7 +107,12 @@ def _post_alias_keys(post) -> list[str]:
     appid = str(getattr(post, "appid", "") or "").strip()
     if appid == "4":
         photos = getattr(post, "photo_targets", []) or []
-        if len(photos) == 1 and photos[0].album_id and photos[0].pic_key:
+        if (
+            getattr(post, "photo_comment_scope", "photo") != "batch"
+            and len(photos) == 1
+            and photos[0].album_id
+            and photos[0].pic_key
+        ):
             keys.append(f"{uin}:photo:{photos[0].album_id}:{photos[0].pic_key}")
         keys.append(_photo_batch_key(post))
         if getattr(post, "photo_batch_key", "") and getattr(post, "feed_key", ""):
@@ -161,20 +180,75 @@ def _qzone_post_processed_action(processed: dict, post) -> str:
     return ""
 
 
-def _qzone_comment_reply_post_action(processed: dict, post) -> str:
+def _qzone_comment_reply_participation(
+    processed: dict, post
+) -> tuple[set[int], int, bool]:
+    """同一动态/上传批次已参与的用户、旧记录保留名额及暂停状态。"""
+    users: set[int] = set()
+    reserved = 0
+    blocked = False
     for key in _post_alias_keys(post):
-        action = _qzone_processed_action(
-            processed, QZONE_COMMENT_REPLY_POST_PREFIX + key
-        )
-        if action:
-            return action
-        # 兼容此前与主体评论共用的回评记录，防止升级后重复参与。
-        if _qzone_processed_action(processed, key) == QZONE_ACTION_COMMENT_REPLIED:
-            return QZONE_ACTION_COMMENT_REPLIED
-        item = processed.get(key)
-        if isinstance(item, dict) and item.get("submission_unknown"):
-            return QZONE_ACTION_SKIPPED
-    return ""
+        previous = processed.get(key)
+        if isinstance(previous, dict) and previous.get("submission_unknown"):
+            blocked = True
+        records = [processed.get(QZONE_COMMENT_REPLY_POST_PREFIX + key)]
+        if (
+            not isinstance(records[0], dict)
+            and _qzone_processed_action(processed, key) == QZONE_ACTION_COMMENT_REPLIED
+        ):
+            records.append(previous)
+        for item in records:
+            if not isinstance(item, dict):
+                continue
+            if item.get("action") != QZONE_ACTION_COMMENT_REPLIED:
+                blocked = True
+                continue
+            if isinstance(item.get("reply_users"), list):
+                users.update(
+                    int(uin)
+                    for uin in item["reply_users"]
+                    if str(uin).isdigit() and int(uin) > 0
+                )
+                reserved = max(reserved, int(item.get("reserved_reply_slots") or 0))
+                continue
+            # 旧版每条动态最多参与一人；优先从原提交记录恢复账号。
+            comment_id = str(item.get("comment_id") or "")
+            legacy_uin = 0
+            for alias in [key, *(item.get("post_alias_keys") or [])]:
+                target = processed.get(f"{alias}:{comment_id}")
+                if isinstance(target, dict):
+                    legacy_uin = int(target.get("submitted_comment_uin") or 0)
+                    if legacy_uin:
+                        break
+            if not legacy_uin and comment_id:
+                legacy_uin = next(
+                    (
+                        _comment_uin(comment)
+                        for comment in post.comments
+                        if _comment_tid(comment) == comment_id
+                    ),
+                    0,
+                )
+            if legacy_uin:
+                users.add(legacy_uin)
+            else:
+                reserved = max(reserved, 1)
+    return users, reserved, blocked
+
+
+def _mark_qzone_comment_reply_post(processed: dict, post, comment, action: str) -> None:
+    users, reserved, _ = _qzone_comment_reply_participation(processed, post)
+    if action == QZONE_ACTION_COMMENT_REPLIED:
+        users.add(_comment_uin(comment))
+    _mark_qzone_post_processed(
+        processed,
+        post,
+        action,
+        key_prefix=QZONE_COMMENT_REPLY_POST_PREFIX,
+        comment_id=_comment_tid(comment),
+        reply_users=sorted(users - {0}),
+        reserved_reply_slots=reserved,
+    )
 
 
 def _qzone_pending_reply(processed: dict, key: Any) -> str:
@@ -228,7 +302,11 @@ def _qzone_processed_thread_has_self_reply(
         photos = getattr(post, "photo_targets", []) or []
         if len(photos) != 1:
             return False
-        photo_prefix = f"{post.uin}:photo:{photos[0].album_id}:{photos[0].pic_key}:"
+        photo_prefix = (
+            f"{post.key}:"
+            if getattr(post, "photo_comment_scope", "photo") == "batch"
+            else f"{post.uin}:photo:{photos[0].album_id}:{photos[0].pic_key}:"
+        )
     for key, item in processed.items():
         if not isinstance(item, dict):
             continue

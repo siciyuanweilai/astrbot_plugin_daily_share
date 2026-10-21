@@ -641,6 +641,14 @@
                 <textarea id="cfgQzoneImageTypes" rows="3" placeholder="问候&#10;心情"></textarea>
               </label>
               <label class="setting-switch">
+                <input id="cfgQzoneOwnPostLike" type="checkbox" />
+                <span>发布自己的说说后自动点赞</span>
+              </label>
+              <label class="setting-field">
+                <span>自己的说说自动评论概率（%）</span>
+                <input id="cfgQzoneSelfCommentProbability" type="number" min="0" max="100" step="5" />
+              </label>
+              <label class="setting-switch">
                 <input id="cfgQzoneAutoInteraction" type="checkbox" />
                 <span>自动互动</span>
               </label>
@@ -667,6 +675,14 @@
               <label class="setting-field">
                 <span>回复其他用户评论概率（%）</span>
                 <input id="cfgQzoneAutoCommentReplyProbability" type="number" min="0" max="100" step="5" />
+              </label>
+              <label class="setting-field">
+                <span>每条动态概率回评人数上限</span>
+                <input id="cfgQzoneAutoCommentReplyUserLimit" type="number" min="1" max="10" step="1" />
+              </label>
+              <label class="setting-field">
+                <span>整组照片评论概率（%）</span>
+                <input id="cfgQzoneAutoCommentPhotoBatchProbability" type="number" min="0" max="100" step="5" />
               </label>
               <label class="setting-switch">
                 <input id="cfgQzoneAutoReply" type="checkbox" />
@@ -791,6 +807,10 @@
               <label class="setting-switch">
                 <input id="cfgTtsEnabled" type="checkbox" />
                 <span>语音转换</span>
+              </label>
+              <label class="setting-switch">
+                <input id="cfgTtsFollowLife" type="checkbox" />
+                <span>跟随生活插件选择语音</span>
               </label>
               <label class="setting-switch">
                 <input id="cfgAudioOnly" type="checkbox" />

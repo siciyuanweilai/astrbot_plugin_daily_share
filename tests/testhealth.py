@@ -8,7 +8,7 @@ import types
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from . import testfailure, testidentity, testmedia, testmetrics, testqzonecomment
 from .testqzone import _load_qzone_service, _new_qzone_service
@@ -440,6 +440,51 @@ class CacheHealthTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await db.close()
 
+    async def test_recent_image_hit_survives_cache_pressure_without_new_model_call(
+        self,
+    ):
+        module, models = testqzonecomment._load_auto_comment_module()
+        sight = importlib.import_module(module.__package__ + ".interact.sight")
+        db_module = testmetrics._load_db_module()
+        post = models.QzonePost(uin=101, tid="hot", text="照片", create_time=123)
+        refs = [(post, "正文配图", "https://example.com/hot.jpg")]
+        keys = sight._qzone_image_vision_cache_keys(
+            post, refs[0][2], index=1, total=1, scope="正文配图"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            db = db_module.DatabaseManager(Path(directory))
+            try:
+                cache = {key: "已识别的照片" for key in keys}
+                cache.update({f"cold-{i}": "旧照片" for i in range(200 - len(cache))})
+                await db.set_qzone_state("test", {"image_vision_cache": cache})
+                owner = types.SimpleNamespace(db=db)
+                state = await db.get_qzone_state("test", {})
+                with (
+                    patch.object(sight, "_enabled_qzone_image_refs", return_value=refs),
+                    patch.object(
+                        sight, "_describe_qzone_image", AsyncMock()
+                    ) as describe,
+                ):
+                    await sight._qzone_image_refs_descriptions(
+                        owner, refs, state=state, state_key="test"
+                    )
+                    await sight._save_qzone_image_vision_cache(
+                        owner,
+                        state,
+                        state_key="test",
+                        updates={f"new-{i}": "新照片" for i in range(10)},
+                    )
+                    reloaded = await db.get_qzone_state("test", {})
+                    self.assertEqual(len(reloaded["image_vision_cache"]), 200)
+                    self.assertIn(keys[0], reloaded["image_vision_cache"])
+                    result = await sight._qzone_image_refs_descriptions(
+                        owner, refs, state=reloaded, state_key="test"
+                    )
+                    self.assertEqual(result, [(1, "正文配图", "已识别的照片")])
+                    describe.assert_not_awaited()
+            finally:
+                await db.close()
+
     async def test_image_cache_aliases_require_actual_identity_but_allow_token_rotation(
         self,
     ):
@@ -543,7 +588,7 @@ class LogTranslationTests(unittest.TestCase):
             ("already_processed", "已处理该评论"),
             (
                 "synthetic_thread_tid_without_real_submit_id",
-                "楼层仅有合成 tid，缺少真实提交 ID",
+                "楼中楼编号无法匹配可靠的回复目标",
             ),
             ("原因已是中文", "原因已是中文"),
             ("unknown_future_code", "unknown_future_code"),

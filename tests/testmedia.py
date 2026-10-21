@@ -168,6 +168,9 @@ def _new_dashboard_service(mod):
 
 def _new_plugin_with_support(mod):
     plugin = object.__new__(mod.DailySharePlugin)
+    plugin._is_terminated = False
+    plugin._bg_tasks = set()
+    plugin.runtime_service = mod.RuntimeService(plugin)
     plugin.support_service = mod.SupportService(plugin)
     return plugin
 

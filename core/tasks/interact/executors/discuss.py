@@ -34,6 +34,7 @@ from ..tracker import (
     _mark_qzone_post_processed,
     _mark_qzone_processed,
     _photo_batch_key,
+    _photo_target_key,
     _post_alias_keys,
     _qzone_pending_reply,
 )
@@ -60,11 +61,11 @@ def _qzone_auto_comment_batch_posts(post, posts: list) -> list:
 def _qzone_auto_comment_generation_post(post, posts: list):
     batch_posts = _qzone_auto_comment_batch_posts(post, posts)
     images = list(dict.fromkeys(image for item in batch_posts for image in item.images))
-    # 仅生成文案时使用整批图片，缓存中的评论提交与回评目标仍按照片隔离。
+    # 生成时共享本批图片预算；实际评论范围由选定目标保留。
     return replace(post, images=images) if images != post.images else post
 
 
-def _qzone_auto_comment_reply_target(
+def _qzone_auto_comment_reply_targets(
     owner,
     posts: list,
     ctx,
@@ -99,17 +100,24 @@ def _qzone_auto_comment_reply_target(
                 )
             )
     if not candidates:
-        return None
+        return []
     candidates.sort(key=lambda item: item[:3], reverse=True)
-    pending = next((item for item in candidates if item[0]), None)
+    pending = [item for item in candidates if item[0]]
     if pending:
-        return pending[3:]
-    if not probability:
-        return None
-    if random.random() * 100 >= max(0, min(100, int(probability or 0))):
-        return None
-    selected = candidates[0]
-    return selected[3:]
+        candidates = pending
+    elif not probability or random.random() * 100 >= probability:
+        return []
+    selected = []
+    users: set[int] = set()
+    user_limit = _qzone_auto_config(owner).comment_reply_user_limit
+    for item in candidates:
+        uin = int(item[4].uin)
+        if uin not in users:
+            users.add(uin)
+            selected.append(item[3:])
+        if len(selected) >= user_limit:
+            break
+    return selected
 
 
 async def _execute_qzone_auto_comment_reply(
@@ -275,7 +283,7 @@ async def _execute_qzone_auto_comment_replies(
         ):
             continue
         attempted.add(identity)
-        target = _qzone_auto_comment_reply_target(
+        targets = _qzone_auto_comment_reply_targets(
             owner,
             _qzone_auto_comment_batch_posts(post, posts),
             ctx,
@@ -283,22 +291,27 @@ async def _execute_qzone_auto_comment_replies(
             probability=probability,
             skip_post_keys=skip_post_keys,
         )
-        if target is None:
-            continue
-        reply_post, reply_comment, item_key = target
-        result["scanned"] += 1
-        if await _execute_qzone_auto_comment_reply(
-            owner,
-            reply_post,
-            reply_comment,
-            item_key,
-            state,
-            processed,
-            result,
-            self_uin=ctx.uin,
-            target_umo=target_umo,
-        ):
-            break
+        for reply_post, reply_comment, item_key in targets:
+            if result["commented"] >= limit:
+                break
+            # 上一条回评可能已用完人数名额，或提交结果不明而暂停整批。
+            if not owner._qzone_auto_comment_reply_candidate(
+                reply_post, reply_comment, self_uin=ctx.uin, processed=processed
+            ):
+                continue
+            result["scanned"] += 1
+            if await _execute_qzone_auto_comment_reply(
+                owner,
+                reply_post,
+                reply_comment,
+                item_key,
+                state,
+                processed,
+                result,
+                self_uin=ctx.uin,
+                target_umo=target_umo,
+            ):
+                return
 
 
 async def _submit_qzone_auto_comment(
@@ -384,6 +397,7 @@ async def _submit_qzone_auto_comment(
         post,
         comment,
         scene="qzone_comment",
+        photo_key=photo_key,
         actor_id=str(getattr(post, "uin", "") or ""),
     )
     owner.plugin.emit_dashboard_event(
@@ -410,42 +424,44 @@ async def _generate_qzone_comment_target(
     target_umo: str,
     skip_post_keys: set[str],
 ):
-    """生成整批评论并验证实际提交目标，不在这里修改持久状态。"""
-    photo_key = post.photo_targets[0].key if int(post.appid or 311) == 4 else ""
+    """每批只选择一次评论范围，生成后校验实际落点。"""
     batch_posts = _qzone_auto_comment_batch_posts(post, posts)
-    if len(batch_posts) > 1:
-        (
-            selected_key,
-            comment,
-        ) = await owner.generate_qzone_auto_photo_comment(
-            _qzone_auto_comment_generation_post(post, batch_posts),
-            batch_posts,
+    batch_post = next(
+        (item for item in batch_posts if item.photo_comment_scope == "batch"), None
+    )
+    photo_posts = [item for item in batch_posts if item.photo_comment_scope != "batch"]
+    probability = _qzone_auto_config(owner).comment_photo_batch_probability
+    use_batch = batch_post is not None and (
+        probability >= 100 or (probability > 0 and random.random() * 100 < probability)
+    )
+    if use_batch:
+        post = batch_post
+        comment = await owner.generate_qzone_auto_comment(
+            post, state=state, target_umo=target_umo
+        )
+    elif len(photo_posts) > 1:
+        selected_key, comment = await owner.generate_qzone_auto_photo_comment(
+            _qzone_auto_comment_generation_post(photo_posts[0], photo_posts),
+            photo_posts,
             state=state,
             target_umo=target_umo,
         )
-        selected_post = next(
-            (item for item in batch_posts if item.photo_targets[0].key == selected_key),
+        post = next(
+            (item for item in photo_posts if item.photo_targets[0].key == selected_key),
             None,
         )
-        if selected_post is None:
+        if post is None:
             raise RuntimeError("相册评论选择了本批以外的照片，停止提交")
-        if (
-            selected_post.key in skip_post_keys
-            or not owner._qzone_auto_comment_candidate(
-                selected_post, self_uin=ctx.uin, processed=processed
-            )
-        ):
-            return None
-        post = selected_post
-        photo_key = selected_key
     else:
+        post = photo_posts[0] if photo_posts else post
         comment = await owner.generate_qzone_auto_comment(
-            post,
-            state=state,
-            target_umo=target_umo,
+            post, state=state, target_umo=target_umo
         )
-
-    return post, comment, photo_key
+    if post.key in skip_post_keys or not owner._qzone_auto_comment_candidate(
+        post, self_uin=ctx.uin, processed=processed
+    ):
+        return None
+    return post, comment, _photo_target_key(post)
 
 
 async def _execute_qzone_auto_comment_new_posts(
@@ -506,7 +522,7 @@ async def _execute_qzone_auto_comment_new_posts(
             ),
             "",
         )
-        photo_key = post.photo_targets[0].key if int(post.appid or 311) == 4 else ""
+        photo_key = _photo_target_key(post)
         if pending_target and pending_target != photo_key:
             result["skipped"] += 1
             continue

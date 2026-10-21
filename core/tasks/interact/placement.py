@@ -25,12 +25,13 @@ def _unsafe_thread_target_reason(owner, comment, *, parent_comment=None) -> str:
     )
 
 
-def _has_thread_reply_submit_plan(owner, post, comment, *, parent_comment=None) -> bool:
+def _has_thread_reply_submit_plan(
+    owner, post, comment, *, parent_comment=None, self_uin: int = 0
+) -> bool:
     if parent_comment is None:
         return False
     targets = _reply_submit_targets(owner, post, comment, parent_comment=parent_comment)
-    return bool(
-        QzoneReplyPlanService._thread_reply_payload_variants(
-            post, comment, parent_comment, targets
-        )
+    _, variants = QzoneReplyPlanService._thread_reply_submit_variants(
+        post, comment, parent_comment, targets, self_uin=self_uin
     )
+    return bool(variants)

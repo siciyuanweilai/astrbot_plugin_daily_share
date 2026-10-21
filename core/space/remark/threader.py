@@ -4,6 +4,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from ..models import QzoneComment
+from ..photos import photo_reply_topic
 
 if TYPE_CHECKING:
     from ..qzone import QzoneService
@@ -34,7 +35,9 @@ class QzoneCommentReplyService:
                 pic_key=photo.pic_key,
                 comment=comment,
                 content=content,
-                feed_topic_id=photo.feed_comment_topic_id,
+                feed_topic_id=photo_reply_topic(
+                    photo, comment, parent_comment=parent_comment
+                ),
                 parent_comment=parent_comment,
             )
             self.owner._invalidate_qzone_cache(

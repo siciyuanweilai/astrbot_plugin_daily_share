@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType
-from ....integrations.delivery import record_confirmed_share
+from ....integrations.delivery import record_confirmed_history, record_confirmed_share
 
 if TYPE_CHECKING:
     from .. import TaskCommandShareService
@@ -56,8 +56,8 @@ class TaskCommandLocalRecordService:
         image_description: str = "",
         degradation_reason: str = "",
     ) -> None:
-        await self.owner.ctx_service.record_bot_reply_to_history(
-            target_umo, content, image_desc=image_description
+        await record_confirmed_history(
+            self.owner.ctx_service, target_umo, content, image_description, media_result
         )
         await record_confirmed_share(
             self.owner.ctx_service, target_umo, content, image_description, media_result
