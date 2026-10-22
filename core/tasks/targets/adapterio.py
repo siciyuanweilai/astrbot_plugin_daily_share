@@ -6,6 +6,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...platform import (
     ONEBOT_PLATFORM_TYPES,
+    QQ_OFFICIAL_PLATFORM_TYPES,
     WEIXIN_PLATFORM_TYPE,
     PlatformBinding,
     get_platform_bindings,
@@ -109,6 +110,11 @@ class TaskTargetPlatformService:
             raise ValueError("检测到多个机器人实例，请选择要发送的机器人")
 
         binding = matches[0]
+        if binding.shared_id and binding.platform_type in QQ_OFFICIAL_PLATFORM_TYPES:
+            raise ValueError(
+                "QQ 官方机器人与其他平台使用了相同的实例 ID，"
+                "请在 AstrBot 平台配置中为官方机器人设置独立 ID 后重新添加目标"
+            )
         if binding.conflicted:
             raise ValueError(
                 f"机器人实例 ID 冲突：“{binding.platform_id}”在同一平台类型中重复，"

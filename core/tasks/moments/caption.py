@@ -34,7 +34,7 @@ class TaskQzoneContentService:
             )
         )
 
-        logger.info("[日常分享] 正在为 QQ 空间生成自然状态文案（daily_life 联动）...")
+        logger.info("[日常分享] 正在生成 QQ 空间文案...")
         self.owner.services.progress.update_share_progress(
             progress_id, "content", message="QQ 空间文案生成中"
         )

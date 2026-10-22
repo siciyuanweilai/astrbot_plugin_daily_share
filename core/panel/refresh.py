@@ -37,6 +37,7 @@ class DashboardConfigRefreshService(PanelComponent):
         self.image_conf = self.config.setdefault("image_conf", {})
         self.tts_conf = self.config.setdefault("tts_conf", {})
         self.qzone_conf = self.config.setdefault("qzone_conf", {})
+        self.qzone_conf.pop("qzone_adapter_id", None)
         self.receiver_conf = self.config.setdefault("receiver", {})
         self.extra_shares_conf = self.config.setdefault("extra_shares", {})
         self.context_conf = self.config.setdefault("context_conf", {})

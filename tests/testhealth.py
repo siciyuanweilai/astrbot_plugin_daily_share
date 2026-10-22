@@ -28,7 +28,7 @@ def _account_service():
         return {"nickname": str(bot.uin)}
 
     plugin = types.SimpleNamespace(
-        qzone_conf={"qzone_adapter_id": "a"},
+        qzone_conf={},
         _cached_qq_adapter_id="a",
         ctx_service=types.SimpleNamespace(
             bot_map=bots,
@@ -57,7 +57,7 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
             async def text(self):
-                plugin.qzone_conf["qzone_adapter_id"] = "b"
+                plugin._cached_qq_adapter_id = "b"
                 return '{"code":-100}'
 
         def request(*args, **kwargs):
@@ -79,7 +79,7 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
         service._store_query_posts(("recent",), [object()])
         service._post_cache["101:old"] = object()
         service._last_friend_feeds_meta = {"account": 101}
-        plugin.qzone_conf["qzone_adapter_id"] = "b"
+        plugin._cached_qq_adapter_id = "b"
 
         self.assertIsNone(service._cached_query_posts(("recent",)))
         self.assertEqual(service._post_cache, {})
@@ -88,11 +88,11 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((first.uin, second.uin), (101, 202))
         self.assertIsNot(first, second)
 
-    async def test_explicit_adapter_is_not_changed_by_chat_event_adapter(self):
+    async def test_removed_setting_cannot_override_current_onebot(self):
         service, plugin, _, calls = _account_service()
         first = await service.context()
         call_count = len(calls)
-        plugin._cached_qq_adapter_id = "b"
+        plugin.qzone_conf["qzone_adapter_id"] = "b"
         self.assertIs(await service.context(), first)
         self.assertEqual(len(calls), call_count)
 
@@ -102,7 +102,7 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
 
         async def switching_action(bot, name, **kwargs):
             result = await original(bot, name, **kwargs)
-            plugin.qzone_conf["qzone_adapter_id"] = "b"
+            plugin._cached_qq_adapter_id = "b"
             return result
 
         plugin.ctx_service.call_onebot_action = switching_action
@@ -112,10 +112,10 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(bot is bots["a"] for bot, _ in calls))
         self.assertEqual((await service.context()).uin, 202)
 
-    async def test_missing_explicit_adapter_cannot_reuse_previous_login(self):
+    async def test_missing_current_adapter_cannot_reuse_previous_login(self):
         service, plugin, _, _ = _account_service()
         await service.context()
-        plugin.qzone_conf["qzone_adapter_id"] = "missing"
+        plugin._cached_qq_adapter_id = "missing"
         with self.assertRaisesRegex(RuntimeError, "没有可用"):
             await service.context()
         self.assertIsNone(service._ctx)

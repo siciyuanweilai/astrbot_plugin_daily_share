@@ -145,7 +145,6 @@ export function getDashboardElements() {
     cfgNewsRandomSources: document.getElementById("cfgNewsRandomSources"),
     cfgLlmProviderId: document.getElementById("cfgLlmProviderId"),
     cfgLlmProviderOptions: document.getElementById("cfgLlmProviderOptions"),
-    cfgAdapterOptions: document.getElementById("cfgAdapterOptions"),
     cfgLlmTimeout: document.getElementById("cfgLlmTimeout"),
     notice: document.getElementById("notice"),
     configList: document.getElementById("configList"),

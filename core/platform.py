@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 ONEBOT_PLATFORM_TYPES = frozenset({"aiocqhttp", "onebot"})
+QQ_OFFICIAL_PLATFORM_TYPES = frozenset({"qq_official", "qq_official_webhook"})
 WEIXIN_PLATFORM_TYPE = "weixin_oc"
 PRIVATE_ONLY_PLATFORM_TYPES = frozenset({"webchat", WEIXIN_PLATFORM_TYPE})
 SESSION_MESSAGE_TYPES = frozenset({"GroupMessage", "FriendMessage"})

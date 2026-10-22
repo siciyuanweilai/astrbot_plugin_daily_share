@@ -62,15 +62,22 @@ class QzoneAutoPromptService:
             "这条说说是你本人刚发布的。请继续以作者本人身份，在自己的说说下自评一句。"
             "根据原文自然补充一个小想法，或者轻轻自嘲、吐槽自己；两种表达任选其一。"
             "不以旁观好友身份夸赞作者，不重复正文，不编造新的经历或配图细节。"
+            "生活状态、连续性和记忆只作相关背景，不逐项复述；不把私密细节或未确认的计划写进公开评论。",
+            scene="qzone_comment",
         )
-        prompt = "\n\n".join(
-            (
-                _qzone_auto_interaction_time_context(),
-                f"【我刚发布的说说原文】\n{str(post.text or '').strip() or '（仅发布了图片）'}",
-                f"配图数量：{max(0, image_count)}。未提供画面资料，以原文为依据。",
-                "请写一条可直接发到自己评论区的补充或自我吐槽。",
-            )
-        )
+        prompt_parts = [
+            _qzone_auto_interaction_time_context(),
+            f"【我刚发布的说说原文】\n{str(post.text or '').strip() or '（仅发布了图片）'}",
+            f"配图数量：{max(0, image_count)}。未提供画面资料，以原文为依据。",
+        ]
+        life_context = await self._qzone_auto_own_life_context_prompt()
+        if life_context:
+            prompt_parts.append(life_context)
+        memory = await self._related_memory_prompt(str(getattr(post, "text", "") or ""))
+        if memory:
+            prompt_parts.append(memory)
+        prompt_parts.append("请写一条可直接发到自己评论区的补充或自我吐槽。")
+        prompt = "\n\n".join(part for part in prompt_parts if part)
         content = await self._qzone_auto_interaction_llm(
             prompt, system_prompt=system_prompt, max_bytes=240
         )
@@ -147,10 +154,39 @@ class QzoneAutoPromptService:
             parts.append(body)
         return "\n\n".join(parts)
 
+    async def _qzone_auto_own_life_context_prompt(self) -> str:
+        """自评只读取 QQ 空间公开范围的生活投影，不借用某个好友的私聊上下文。"""
+        try:
+            data = await self.owner.ctx_service.get_qzone_interaction_context(
+                QZONE_TARGET_ID
+            )
+        except Exception as exc:
+            logger.debug(f"[日常分享] 读取自评生活状态参考失败: {type(exc).__name__}")
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        parts = []
+        compact = _compact_qzone_auto_life_context(data.get("life_context"))
+        if compact:
+            parts.append(f"【当前生活状态参考】\n{compact}")
+        continuity = str(data.get("continuity_context") or "").strip()
+        if continuity:
+            parts.append(continuity)
+        body = str(data.get("body_context") or "").strip()
+        if body:
+            parts.append(body)
+        return "\n\n".join(parts)
+
     async def _related_memory_prompt(self, query: str) -> str:
         bridge = getattr(self.owner.plugin, "daily_life_bridge", None)
         method = getattr(bridge, "related_memory_prompt", None)
-        return await method(query, "qzone_broadcast") if callable(method) else ""
+        if not callable(method):
+            return ""
+        try:
+            return str(await method(query, "qzone_broadcast") or "")
+        except Exception as exc:
+            logger.debug(f"[日常分享] 读取公开互动相关记忆失败: {type(exc).__name__}")
+            return ""
 
     async def _qzone_auto_interaction_llm(
         self,

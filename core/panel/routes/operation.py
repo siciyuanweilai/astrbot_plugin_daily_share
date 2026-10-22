@@ -34,7 +34,7 @@ def _page_broadcast_target_scope(target: str) -> str:
 
 def _page_missing_target_message(target: str) -> str:
     if target == "broadcast_groups":
-        return "未找到可用群聊接收对象，请在目标配置中添加群号。"
+        return "未找到可用群聊接收对象，请在目标配置中添加群号或会话 ID。"
     if target == "broadcast_users":
         return "未找到可用私聊接收对象，请在目标配置中添加 QQ 号或会话 ID。"
     return "未找到可用接收对象，请先在目标配置中添加群聊或私聊目标。"

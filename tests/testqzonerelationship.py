@@ -39,21 +39,17 @@ class Platform:
         return self.client
 
 
-def qzone_service(platforms, *, adapter="qq-test", cached="", bots=None):
+def qzone_service(platforms, *, cached="qq-test", bots=None):
     module, _ = _load_qzone_service_module()
     context = types.SimpleNamespace(
         platform_manager=types.SimpleNamespace(get_insts=lambda: platforms)
     )
     bots = bots if bots is not None else {item.name: item.client for item in platforms}
-    ctx_service = types.SimpleNamespace(
-        context=context,
-        bot_map=bots,
-        get_bot_instance=lambda key: bots.get(key),
-        get_onebot_bot=lambda **kwargs: None,
-        is_onebot_platform=lambda key: key in {"aiocqhttp", "onebot"},
-    )
+    context_module = importlib.import_module(f"{CORE_PACKAGE_NAME}.context")
+    ctx_service = context_module.ContextService(context, {})
+    ctx_service.bot_map = bots
     plugin = types.SimpleNamespace(
-        qzone_conf={"qzone_adapter_id": adapter},
+        qzone_conf={},
         _cached_qq_adapter_id=cached,
         ctx_service=ctx_service,
     )
@@ -61,26 +57,26 @@ def qzone_service(platforms, *, adapter="qq-test", cached="", bots=None):
 
 
 class QzoneRelationshipRoutingTests(unittest.TestCase):
-    def test_selected_client_overrides_cached_other_account(self):
+    def test_current_onebot_routes_relationship_to_same_account(self):
         first, second = object(), object()
         service = qzone_service(
             [Platform("qq-test", first), Platform("qq-other", second)],
             cached="qq-other",
         )
         self.assertEqual(
-            service.relationship_target("20002"), "qq-test:FriendMessage:20002"
+            service.relationship_target("20002"), "qq-other:FriendMessage:20002"
         )
 
     def test_cached_and_single_client_routes_use_actual_platform_id(self):
         bot = object()
         service = qzone_service(
-            [Platform("custom-qq", bot)], adapter="", cached="custom-qq"
+            [Platform("custom-qq", bot)], cached="custom-qq"
         )
         self.assertEqual(
             service.relationship_target("20002"), "custom-qq:FriendMessage:20002"
         )
         service = qzone_service(
-            [Platform("custom-qq", bot)], adapter="", bots={"aiocqhttp": bot}
+            [Platform("custom-qq", bot)], cached="", bots={"aiocqhttp": bot}
         )
         self.assertEqual(
             service.relationship_target("20002"), "custom-qq:FriendMessage:20002"
@@ -90,7 +86,7 @@ class QzoneRelationshipRoutingTests(unittest.TestCase):
         qq, weixin = object(), object()
         service = qzone_service(
             [Platform("shared", qq), Platform("shared", weixin, "weixin_oc")],
-            adapter="aiocqhttp!shared",
+            cached="aiocqhttp!shared",
             bots={"aiocqhttp!shared": qq, "weixin_oc!shared": weixin},
         )
         self.assertEqual(
@@ -105,7 +101,7 @@ class QzoneRelationshipRoutingTests(unittest.TestCase):
             qzone_service([Platform("qq-test", bot), Platform("alias", bot)]),
             qzone_service([Platform("qq-test", bot, "weixin_oc")]),
             qzone_service(
-                [Platform("first", bot), Platform("second", object())], adapter=""
+                [Platform("first", bot), Platform("second", object())], cached=""
             ),
         ]
         for service in scenarios:

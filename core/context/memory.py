@@ -119,5 +119,5 @@ class ContextMemoryService(ContextComponent):
             sync_memory=bool(self.memory_conf.get("record_share_to_memory", True)),
         )
         if recorded:
-            logger.debug(f"[上下文] 已向生活插件回传主动分享: {target_umo}")
+            logger.debug(f"[上下文] 主动分享已记录: {target_umo}")
         return recorded

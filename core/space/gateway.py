@@ -153,25 +153,12 @@ class QzoneClientGateway:
         raise RuntimeError(message)
 
     def _get_bot(self):
-        conf = self.owner._qzone_config()
-        configured_adapter_id = str(conf.get("qzone_adapter_id", "") or "").strip()
-        cached_adapter_id = str(self.owner._qq_adapter_id() or "").strip()
-        adapter_id = configured_adapter_id or cached_adapter_id
+        adapter_id = str(self.owner._qq_adapter_id() or "").strip()
         if adapter_id:
-            bot = self.owner.ctx_service.get_bot_instance(adapter_id)
-            if bot:
-                return bot
-            bot = self.owner.ctx_service.get_onebot_bot(
+            return self.owner.ctx_service.get_onebot_bot(
                 target_umo="0",
                 adapter_id=adapter_id,
             )
-            if bot:
-                return bot
-        if configured_adapter_id:
-            logger.warning(
-                f"[日常分享] QQ 空间配置的机器人实例不可用: {configured_adapter_id}，"
-            )
-            return None
         bot_map = self.owner.ctx_service.bot_map
         onebot_bots = [
             item
@@ -183,7 +170,7 @@ class QzoneClientGateway:
         if len(onebot_bots) > 1:
             logger.error(
                 "[日常分享] 检测到多个 OneBot 机器人实例，"
-                "请在 QQ 空间设置中选择机器人实例"
+                "请先在需要使用的机器人会话中执行空间命令"
             )
             return None
         return self.owner.ctx_service.get_onebot_bot(target_umo="0", adapter_id="")

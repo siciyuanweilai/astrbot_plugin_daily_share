@@ -1257,7 +1257,9 @@ class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_main_module()
         context = mod.Context()
         context.register_web_api = lambda *args: None
-        plugin = mod.DailySharePlugin(context, {})
+        initial_config = {"qzone_conf": {"qzone_adapter_id": "旧实例"}}
+        plugin = mod.DailySharePlugin(context, initial_config)
+        self.assertNotIn("qzone_adapter_id", initial_config["qzone_conf"])
         refresh = plugin.dashboard_service.operations.refresh
         next_qzone = {"enable_qzone": True, "qzone_adapter_id": "测试实例"}
         plugin.config["qzone_conf"] = next_qzone
@@ -1268,6 +1270,7 @@ class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(plugin.qzone_service.qzone_conf, next_qzone)
         self.assertIs(plugin.content_service.qzone_conf, next_qzone)
         self.assertIs(plugin.task_manager.config.qzone, next_qzone)
+        self.assertNotIn("qzone_adapter_id", next_qzone)
 
     async def test_initialize_and_terminate_are_idempotent_and_clear_tasks(self):
         mod = _load_main_module()

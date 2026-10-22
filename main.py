@@ -43,6 +43,7 @@ class DailySharePlugin(Star):
         self.image_conf = self.config.get("image_conf", {})
         self.tts_conf = self.config.get("tts_conf", {})
         self.qzone_conf = self.config.get("qzone_conf", {})
+        self.qzone_conf.pop("qzone_adapter_id", None)
         self.receiver_conf = self.config.get("receiver", {})
         self.extra_shares_conf = self.config.get("extra_shares", {})
         self.context_conf = self.config.get("context_conf", {})

@@ -258,12 +258,6 @@ class DashboardConfigMetaService(PanelComponent):
                     section_value
                 )
 
-        adapter_options = self.meta._page_adapter_options()
-        for section_meta in sections.values():
-            for field_meta in (section_meta.get("fields") or {}).values():
-                if field_meta.get("_special") == "select_adapter":
-                    field_meta["options"] = copy.deepcopy(adapter_options)
-
         meta = {
             "root": root_fields,
             "sections": sections,

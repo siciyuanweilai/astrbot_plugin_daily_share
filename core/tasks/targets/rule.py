@@ -45,7 +45,7 @@ class TaskTargetConfigService:
         selected = str(adapter_id or "").strip()
         original = str(original_umo or "").strip()
         if not raw:
-            raise ValueError("QQ 号或群号不能为空")
+            raise ValueError("目标会话 ID 不能为空")
 
         parsed = parse_platform_session(raw)
         if parsed:

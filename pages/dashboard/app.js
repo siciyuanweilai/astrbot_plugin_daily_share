@@ -415,13 +415,13 @@ function updateRunFormState() {
   }
   if (el.runSpecificTargetLabel) {
     el.runSpecificTargetLabel.textContent = specificTargetIsGroup
-      ? "指定群号"
+      ? "指定群号 / 会话 ID"
       : "指定 QQ 号 / 会话 ID";
   }
   if (el.runSpecificTarget) {
     el.runSpecificTarget.placeholder = specificTargetIsGroup
-      ? "输入群号，可留空"
-      : "输入 QQ 号或会话 ID，可留空";
+      ? "输入群号、官方群 OpenID 或完整 /sid，可留空"
+      : "输入 QQ 号、官方用户 OpenID 或完整 /sid，可留空";
     el.runSpecificTarget.inputMode = "text";
     el.runSpecificTarget.disabled = !specificTarget;
     if (specificTarget) {

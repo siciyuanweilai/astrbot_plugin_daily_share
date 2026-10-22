@@ -19,7 +19,7 @@
         },
         "description": "分享到群聊",
         "default": [],
-        "hint": "在仪表盘中只需填写群号并选择机器人；只有一个可用实例时会自动选择。直接编辑原始配置时使用 /sid 输出的完整 Session ID。可在目标卡片中设置独立时间和类型序列。"
+        "hint": "在仪表盘中填写群号或会话 ID 并选择机器人；QQ 官方机器人请使用群 OpenID 或 /sid 完整标识；只有一个可用实例时会自动选择。直接编辑原始配置时使用 /sid 输出的完整 Session ID。可在目标卡片中设置独立时间和类型序列。"
       },
       "users": {
         "title": "私聊独立配置",
@@ -29,7 +29,7 @@
         },
         "description": "分享到私聊",
         "default": [],
-        "hint": "在仪表盘中只需填写 QQ 号或会话 ID 并选择机器人；只有一个可用实例时会自动选择。直接编辑原始配置时使用 /sid 输出的完整 Session ID。可在目标卡片中设置独立时间和类型序列。"
+        "hint": "在仪表盘中填写 QQ 号或会话 ID 并选择机器人；QQ 官方机器人请使用用户 OpenID 或 /sid 完整标识；只有一个可用实例时会自动选择。直接编辑原始配置时使用 /sid 输出的完整 Session ID。可在目标卡片中设置独立时间和类型序列。"
       }
     }
   },
@@ -118,7 +118,7 @@
           "type": "string"
         },
         "default": [],
-        "hint": "在仪表盘中填写群号并选择机器人；只有一个可用实例时会自动选择。留空则不分享。"
+        "hint": "在仪表盘中填写群号或会话 ID 并选择机器人；QQ 官方机器人使用群 OpenID；只有一个可用实例时会自动选择。留空则不分享。"
       },
       "briefing_users": {
         "description": "早报分享私聊",
@@ -127,7 +127,7 @@
           "type": "string"
         },
         "default": [],
-        "hint": "在仪表盘中填写 QQ 号或会话 ID 并选择机器人；只有一个可用实例时会自动选择。留空则不分享。"
+        "hint": "在仪表盘中填写 QQ 号或会话 ID 并选择机器人；QQ 官方机器人使用用户 OpenID；只有一个可用实例时会自动选择。留空则不分享。"
       },
       "briefing_schedule_mode": {
         "description": "早报定时模式",
@@ -882,13 +882,6 @@
         "type": "bool",
         "default": false,
         "hint": "开启后，将按照下方的规则和序列自动分享QQ空间说说。"
-      },
-      "qzone_adapter_id": {
-        "description": "QQ 空间机器人实例",
-        "type": "string",
-        "default": "",
-        "_special": "select_adapter",
-        "hint": "指定 QQ 空间使用的机器人实例；留空时默认使用当前缓存的第一个实例。只影响 QQ 空间。"
       },
       "qzone_api_timeout_seconds": {
         "description": "QQ 空间请求超时秒数",

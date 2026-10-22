@@ -1339,7 +1339,7 @@ class QzoneParserTests(unittest.TestCase):
 
 
 class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_get_bot_prefers_configured_qzone_adapter(self):
+    async def test_get_bot_uses_current_onebot_and_ignores_removed_setting(self):
         service_module = _load_qzone_service()
         first = object()
         selected = object()
@@ -1354,7 +1354,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return False
 
             def get_onebot_bot(self, *args, **kwargs):
-                return None
+                return self.bot_map.get(kwargs.get("adapter_id"))
 
         plugin = types.SimpleNamespace(
             _cached_qq_adapter_id="V",
@@ -1363,7 +1363,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         service = _new_qzone_service(service_module, plugin)
 
-        self.assertIs(service._get_bot(), selected)
+        self.assertIs(service._get_bot(), first)
 
     async def test_get_bot_rejects_ambiguous_instances_when_adapter_empty(self):
         service_module = _load_qzone_service()
@@ -1382,11 +1382,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return True
 
             def get_onebot_bot(self, *args, **kwargs):
-                return None
+                return self.bot_map.get(kwargs.get("adapter_id"))
 
         plugin = types.SimpleNamespace(
             _cached_qq_adapter_id="",
-            qzone_conf={"qzone_adapter_id": ""},
+            qzone_conf={},
             ctx_service=CtxService(),
         )
         service = _new_qzone_service(service_module, plugin)
@@ -1408,11 +1408,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return True
 
             def get_onebot_bot(self, *args, **kwargs):
-                return None
+                return self.bot_map.get(kwargs.get("adapter_id"))
 
         plugin = types.SimpleNamespace(
             _cached_qq_adapter_id="",
-            qzone_conf={"qzone_adapter_id": ""},
+            qzone_conf={},
             ctx_service=CtxService(),
         )
         service = _new_qzone_service(service_module, plugin)

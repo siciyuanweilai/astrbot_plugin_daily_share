@@ -165,6 +165,27 @@ class PermissionTests(unittest.TestCase):
 
         self.assertFalse(self.host._is_admin_event(event))
 
+    def test_only_onebot_event_can_change_qzone_account(self):
+        self.host.ctx_service = types.SimpleNamespace(
+            is_weixin_event=lambda event: event.platform == "weixin_oc",
+            is_weixin_platform=lambda origin: origin.startswith("weixin:"),
+            is_onebot_event=lambda event: event.platform == "aiocqhttp",
+        )
+        self.host._cached_qq_adapter_id = "qq-first"
+        for platform in ("qq_official", "qq_official_webhook", "telegram"):
+            with self.subTest(platform=platform):
+                event = _Event(sender_id="12345")
+                event.platform = platform
+                event.unified_msg_origin = f"{platform}:FriendMessage:12345"
+                self.host._remember_event_adapter(event)
+                self.assertEqual(self.host._cached_adapter_id, platform)
+                self.assertEqual(self.host._cached_qq_adapter_id, "qq-first")
+
+        event.platform = "aiocqhttp"
+        event.unified_msg_origin = "qq-second:FriendMessage:12345"
+        self.host._remember_event_adapter(event)
+        self.assertEqual(self.host._cached_qq_adapter_id, "qq-second")
+
     def test_accepts_only_astrbot_message_event_contract(self):
         event = _Event(role="admin")
         wrapper = _ContextWrapper(event)

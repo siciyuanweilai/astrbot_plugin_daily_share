@@ -32,7 +32,7 @@ class PluginPermissionService(SupportComponent):
             ) and self.ctx_service.is_weixin_platform(origin)
             if is_weixin:
                 self._cached_weixin_adapter_id = adapter_id
-            elif str(event.get_sender_id() or "").strip().isdigit():
+            elif self.ctx_service.is_onebot_event(event):
                 self._cached_qq_adapter_id = adapter_id
         except Exception as exc:
             logger.debug(f"[日常分享] 记录事件平台失败: {exc}")

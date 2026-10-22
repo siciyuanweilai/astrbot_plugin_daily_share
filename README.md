@@ -8,9 +8,9 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.1-ef6f8f" alt="版本 1.2.1"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.2-ef6f8f" alt="版本 1.2.2"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
-  <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp 和 weixin_oc">
+  <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
 </p>
 
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.2.1 版本更新**：新增自己说说自动点赞与概率自评、多人概率回评和整组/单张照片评论切换，修复相册回评与后续接话；完善 daily_life 表达、记忆、发送协调及语音选择。详见 [更新日志](./CHANGELOG.md)。
+> **v1.2.2 版本更新**：支持 QQ 官方机器人私聊与群聊分享；说说自评进一步结合公开生活状态和记忆，完善异常回退。详见 [更新日志](./CHANGELOG.md)。
 
 ---
 
@@ -97,7 +97,7 @@
 | 图文、视频、语音 | 安装并配置 <code>astrbot_plugin_daily_life</code>，再打开对应媒体能力 |
 | 个人微信 | 使用 <code>/sid</code> 输出的完整会话 ID，并确认框架已保存 <code>context_token</code> |
 | QQ 空间 | 使用 OneBot，并确认适配器支持 <code>get_cookies</code> |
-| 多个机器人 | 在目标卡片和 QQ 空间设置中分别选择负责发送的机器人实例 |
+| 多个机器人 | 在目标卡片选择分享实例；QQ 空间跟随执行空间命令的 OneBot 会话 |
 
 ---
 
@@ -189,10 +189,15 @@
 | 平台 | 支持场景 | 目标填写 | 注意事项 |
 | :--- | :--- | :--- | :--- |
 | QQ / OneBot (<code>aiocqhttp</code>) | 私聊、群聊、QQ 空间 | QQ 号或群号 | 多实例时选择负责发送的机器人 |
+| QQ 官方机器人 (<code>qq_official</code> / <code>qq_official_webhook</code>) | 私聊、群聊 | 官方 OpenID 或 <code>/sid</code> 完整标识 | 使用独立实例 ID，群聊需开启主动发言；不支持 QQ 空间 |
 | 个人微信 (<code>weixin_oc</code>) | 个人私聊 | 会话 ID 或 <code>/分享 添加当前</code> | 需要框架已保存对应 <code>context_token</code> |
 | WebChat / 其他平台 | 取决于适配器能力 | 优先使用 <code>/sid</code> 输出 | 主动发送能力由适配器决定 |
 
 只有一个可用机器人实例时，仪表盘会自动绑定；存在多个实例时必须明确选择。插件内部保存完整会话标识，避免多机器人实例串线。
+
+QQ 官方机器人建议使用更新后的 AstrBot 官方适配器。在目标私聊或群聊中发送 `/分享 添加当前`，即可保存当前会话；也可将 `/sid` 的完整输出填入仪表盘。官方用户/群 OpenID 与真实 QQ 号/群号不同，请勿混用。官方平台的称呼优先使用会话可提供的昵称、人设称呼或本地别名，聊天历史读取 AstrBot 已保存的记录，不调用 OneBot 查询。
+
+官方群聊需在手机 QQ 的机器人设置中开启“机器人主动在群聊内发言”；需要参考群聊上下文时可开启“获取群内全部消息”，详见 [AstrBot 官方接入说明](https://docs.astrbot.app/platform/qqofficial/websockets.html)。首次配置或适配器重启后，先在目标群 @机器人发送一条消息，让适配器识别群会话，再执行主动分享。文字、图片、语音和视频交由 AstrBot 适配器发送，权限、媒体格式与发送额度遵循官方平台限制；QQ 空间发布、点赞、评论和回评仍需另配 OneBot 实例。
 
 <a id="qzone"></a>
 
@@ -200,7 +205,7 @@
 
 ### ✨ 发布与操作
 
-使用 OneBot，并确认适配器支持 `get_cookies`；多个机器人时，在 QQ 空间设置中单独选择实例。
+使用 OneBot，并确认适配器支持 `get_cookies`。QQ 空间自动使用唯一可用的 OneBot；有多个 OneBot 时，先在需要使用的机器人会话中执行空间命令，后续空间任务使用该实例。重载插件后需重新执行一次。
 
 - 发布文字或图片说说，查看自己或指定用户的动态与详情；
 - 点赞、评论说说及相册动态，删除自己发布的说说；
@@ -301,7 +306,7 @@ daily_life 可提供公开场景的表达习惯与对象称呼，不导入私聊
 | <code>news_conf</code> | 新闻接口、新闻源、短链接和联网证据 |
 | <code>image_conf</code> | 配图、新闻长图、视频和个人微信图片处理 |
 | <code>tts_conf</code> | 语音生成、允许类型、跟随生活插件选择语音和仅发送语音 |
-| <code>qzone_conf</code> | QQ 空间实例、定时、序列、配图与自动互动 |
+| <code>qzone_conf</code> | QQ 空间定时、序列、配图与自动互动 |
 
 接收目标通过仪表盘目标管理或 `/分享` 指令维护，普通设置保存不会改写目标列表。设置变更自动保存，重新进入页面会读取最新配置。
 
@@ -334,7 +339,7 @@ daily_share 可独立完成文字分享、新闻和定时发送；安装 [daily_
 
 QQ 空间沿用角色的日常口吻，不套用私聊分段或字数限制；说说保留 80 字发布保护上限，用户指定的固定评论正文保持原样。
 
-主体评论、概率回评、楼内续评与自动自评均读取聊天表达参考，生成后统一进行本地标点清洗。相关记忆检索不调用模型；识图缓存按图片复用，切换识别模型仍可命中，常用结果按最近使用顺序保留。
+主体评论、概率回评、楼内续评与自动自评均读取聊天表达参考，生成后统一进行本地标点清洗。自动自评还会结合 daily_life 的公开生活状态、连续性、身体状态和相关公开记忆，不读取好友私聊关系；生活插件不可用时按人设和原文正常生成。相关记忆检索不调用模型；识图缓存按图片复用，切换识别模型仍可命中，常用结果按最近使用顺序保留。
 
 语音设置新增“跟随生活插件选择语音”，默认关闭。开启后，自动分享使用 daily_life 的表达判断模型选择文字或语音，并复用该次判断的语音风格；手动请求语音和“仅发语音”优先。
 

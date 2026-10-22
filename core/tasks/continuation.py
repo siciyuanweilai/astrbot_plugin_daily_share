@@ -433,5 +433,5 @@ class ShareContinuationService:
                 await self.plugin.daily_life_bridge.flush_public_receipts()
                 await self.recover_once()
             except Exception as exc:
-                logger.warning(f"[日常分享] 联动任务恢复巡检失败：{type(exc).__name__}")
+                logger.warning(f"[日常分享] 后台恢复巡检失败：{type(exc).__name__}")
             await asyncio.sleep(45)

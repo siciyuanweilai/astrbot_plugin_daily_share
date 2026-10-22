@@ -8,6 +8,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 
 from ...platformsession import create_message_session
+from ...qqofficial import ensure_qq_official_background_send
 from ...toolkit import format_exception
 from ..taskbase import TaskServiceBase
 from .stage import TaskDeliveryStatusService
@@ -42,9 +43,11 @@ class TaskDeliveryChainService(TaskServiceBase):
             else 120
         )
 
-        if event:
+        if event and self.services.targets.event_matches_target(event, str(uid)):
             await asyncio.wait_for(self.send_event(event, chain), timeout=timeout)
             return
+
+        ensure_qq_official_background_send(binding, str(uid))
 
         if binding.shared_id:
             parsed = self.ctx_service.parse_umo(str(uid or ""))

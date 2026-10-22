@@ -149,13 +149,11 @@ class ContextService:
 
     def get_onebot_bot(self, target_umo: str = "", event=None, adapter_id: str = ""):
         """获取 QQ 机器人客户端。运行时会话标识第一段是平台标识，不能当成平台类型判断。"""
+        if adapter_id:
+            return self._onebot_bot_for_adapter(adapter_id)
+
         if event and self.is_onebot_event(event):
             bot = event.bot
-            if bot:
-                return bot
-
-        if adapter_id and self.is_onebot_platform(adapter_id):
-            bot = self.get_bot_instance(adapter_id)
             if bot:
                 return bot
 

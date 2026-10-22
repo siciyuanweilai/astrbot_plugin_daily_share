@@ -250,16 +250,10 @@ export function createSettingsConfig({
     setInputValue(el.cfgNewsRandomSources, newsSourceArrayToLines(news.news_random_sources, data.options?.news_sources || []));
 
     populateDatalist(el.cfgLlmProviderOptions, data.options?.providers || [], basic.llm_provider_id);
-    populateDatalist(
-      el.cfgAdapterOptions,
-      data.options?.adapters || [],
-      qzone.qzone_adapter_id || data.schema_values?.sections?.qzone_conf?.qzone_adapter_id,
-    );
 
     applySettingsSchemaEnhancements(data);
     applySchemaSpecialCombos(el.configForm, registerSweetCombo, {
       provider: el.cfgLlmProviderOptions,
-      adapter: el.cfgAdapterOptions,
     });
     applySchemaExtraValues(state.configData, el.configForm, syncSettingSlider);
     state.configApplying = false;

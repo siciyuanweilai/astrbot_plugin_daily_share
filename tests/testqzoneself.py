@@ -325,6 +325,63 @@ class SelfCommentPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("自然口语", args["system_prompt"])
         self.plugin.call_llm.assert_awaited_once()
 
+    async def test_prompt_uses_public_life_context_and_related_memory(self):
+        context = AsyncMock(
+            return_value={
+                "life_context": "最近状态：收拾完房间后有点累",
+                "continuity_context": "【已确认生活连续性】\n已有整理房间的记录",
+                "body_context": "【当前身体状态】\n疲劳适中",
+                "relationship_context": "仅限好友私聊的关系资料",
+            }
+        )
+        self.owner.runtime = replace(
+            self.owner.runtime,
+            ctx_service=types.SimpleNamespace(
+                get_qzone_interaction_context=context,
+            ),
+        )
+        memory = AsyncMock(
+            return_value="【本地相关记忆，仅作背景】\n之前也提到过整理房间"
+        )
+        self.plugin.daily_life_bridge = types.SimpleNamespace(
+            related_memory_prompt=memory,
+        )
+
+        await self.owner.generate_qzone_self_comment(self.post)
+
+        args = self.plugin.call_llm.await_args.kwargs
+        self.assertIn("最近状态：收拾完房间后有点累", args["prompt"])
+        self.assertIn("已有整理房间的记录", args["prompt"])
+        self.assertIn("当前身体状态", args["prompt"])
+        self.assertIn("之前也提到过整理房间", args["prompt"])
+        self.assertNotIn("仅限好友私聊的关系资料", args["prompt"])
+        context.assert_awaited_once_with("qzone_broadcast")
+        memory.assert_awaited_once_with(self.post.text, "qzone_broadcast")
+
+    async def test_daily_life_failures_fall_back_to_persona_only_prompt(self):
+        self.owner.runtime = replace(
+            self.owner.runtime,
+            ctx_service=types.SimpleNamespace(
+                get_qzone_interaction_context=AsyncMock(
+                    side_effect=RuntimeError("生活快照暂不可用")
+                ),
+            ),
+        )
+        self.plugin.daily_life_bridge = types.SimpleNamespace(
+            related_memory_prompt=AsyncMock(
+                side_effect=RuntimeError("记忆检索暂不可用")
+            ),
+        )
+
+        result = await self.owner.generate_qzone_self_comment(self.post)
+
+        self.assertEqual(result, "维持整洁就看明天的我了")
+        args = self.plugin.call_llm.await_args.kwargs
+        self.assertIn(self.post.text, args["prompt"])
+        self.assertNotIn("生活快照暂不可用", args["prompt"])
+        self.assertNotIn("记忆检索暂不可用", args["prompt"])
+        self.plugin.call_llm.assert_awaited_once()
+
     async def test_empty_generation_does_not_produce_a_comment(self):
         self.plugin.call_llm.return_value = ""
         with self.assertRaisesRegex(RuntimeError, "有效内容"):

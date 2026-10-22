@@ -396,12 +396,12 @@ export function createTargetsUi({
     const idLabel = document.createElement("label");
     idLabel.className = "target-field";
     const idText = document.createElement("span");
-    idText.textContent = bucket.includes("groups") ? "群号" : "QQ 号 / 会话 ID";
+    idText.textContent = bucket.includes("groups") ? "群号 / 会话 ID" : "QQ 号 / 会话 ID";
     const idInput = document.createElement("input");
     idInput.value = item.session_id || "";
     idInput.placeholder = bucket.includes("groups")
-      ? "输入群号"
-      : "输入 QQ 号或会话 ID";
+      ? "输入群号、官方群 OpenID 或完整 /sid"
+      : "输入 QQ 号、官方用户 OpenID 或完整 /sid";
     idInput.autocomplete = "off";
     idInput.addEventListener("input", () => {
       updateTargetItem(bucket, index, "session_id", idInput.value);

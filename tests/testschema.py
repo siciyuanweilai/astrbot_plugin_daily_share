@@ -607,13 +607,11 @@ class ConfigSchemaTests(unittest.TestCase):
         self.assertEqual(delay["slider"]["min"], 0)
         self.assertEqual(delay["slider"]["max"], 60)
 
-    def test_qzone_adapter_config_exists(self):
+    def test_qzone_adapter_config_removed(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         qzone_items = schema["qzone_conf"]["items"]
 
-        self.assertIn("qzone_adapter_id", qzone_items)
-        self.assertEqual(qzone_items["qzone_adapter_id"]["default"], "")
-        self.assertEqual(qzone_items["qzone_adapter_id"]["_special"], "select_adapter")
+        self.assertNotIn("qzone_adapter_id", qzone_items)
 
     def test_qzone_video_config_removed(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
@@ -737,7 +735,7 @@ class ConfigSchemaTests(unittest.TestCase):
             "select_provider",
         )
 
-    def test_dashboard_payload_exposes_adapter_options(self):
+    def test_dashboard_keeps_target_adapter_options_without_qzone_selector(self):
         config = _load_config_module()
         modules = _load_dashboard_config_modules(config)
 
@@ -787,17 +785,14 @@ class ConfigSchemaTests(unittest.TestCase):
 
         payload = plugin._page_config_payload()
         adapter_values = [item["value"] for item in payload["options"]["adapters"]]
-        adapter_meta = payload["schema_meta"]["sections"]["qzone_conf"]["fields"][
-            "qzone_adapter_id"
-        ]
-
-        self.assertEqual(
-            payload["schema_values"]["sections"]["qzone_conf"]["qzone_adapter_id"],
-            "Swan",
-        )
         self.assertEqual(adapter_values, ["", "V", "Swan"])
-        self.assertEqual(adapter_meta["_special"], "select_adapter")
-        self.assertEqual(adapter_meta["options"][0]["label"], "自动选择唯一实例")
+        self.assertNotIn(
+            "qzone_adapter_id", payload["schema_values"]["sections"]["qzone_conf"]
+        )
+        self.assertNotIn(
+            "qzone_adapter_id",
+            payload["schema_meta"]["sections"]["qzone_conf"]["fields"],
+        )
 
     def test_dashboard_payload_distinguishes_same_id_across_platforms(self):
         config = _load_config_module()

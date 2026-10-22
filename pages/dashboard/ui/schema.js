@@ -187,14 +187,6 @@ function makeExtraInput(meta = {}) {
     input.dataset.schemaProviderCombo = "1";
     input.autocomplete = "off";
   }
-  if (meta._special === "select_adapter") {
-    input.setAttribute("list", "cfgAdapterOptions");
-    input.placeholder = "默认第一个实例";
-    input.dataset.emptyLabel = "默认第一个实例";
-    input.dataset.comboKind = "adapter";
-    input.dataset.schemaAdapterCombo = "1";
-    input.autocomplete = "off";
-  }
   if (!input.dataset.comboKind && meta.options?.length) return makeExtraSelect(meta);
   return input;
 }
@@ -298,15 +290,9 @@ export function schemaExtraInput(wrapper) {
 }
 
 export function applySchemaSpecialCombos(configForm, registerSweetCombo, lists = {}) {
-  const specs = [
-    ["[data-schema-provider-combo]", lists.provider],
-    ["[data-schema-adapter-combo]", lists.adapter],
-  ];
-  for (const [selector, list] of specs) {
-    if (!list) continue;
-    for (const input of configForm?.querySelectorAll(selector) || []) {
-      registerSweetCombo?.(input, list);
-    }
+  if (!lists.provider) return;
+  for (const input of configForm?.querySelectorAll("[data-schema-provider-combo]") || []) {
+    registerSweetCombo?.(input, lists.provider);
   }
 }
 

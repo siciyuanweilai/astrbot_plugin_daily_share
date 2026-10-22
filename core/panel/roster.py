@@ -218,7 +218,7 @@ class DashboardTargetConfigService(PanelComponent):
     ) -> str:
         target_id = str(target_id or "").strip()
         if not target_id:
-            raise RuntimeError("QQ 号或群号不能为空")
+            raise RuntimeError("目标会话 ID 不能为空")
         try:
             return self.task_manager.targets.resolve_target_input(
                 target_id,
@@ -235,7 +235,7 @@ class DashboardTargetConfigService(PanelComponent):
         raw = str(target_id or "").strip()
         if not raw or target not in {"broadcast_groups", "broadcast_users"}:
             return "", ""
-        label = "群号" if target == "broadcast_groups" else "QQ 号或会话 ID"
+        label = "群号或会话 ID" if target == "broadcast_groups" else "QQ 号或会话 ID"
         if any(sep in raw for sep in (",", "，", ";", "；", "\n", "\r")):
             raise RuntimeError(f"一次只能指定一个{label}")
         is_group = target == "broadcast_groups"
