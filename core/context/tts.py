@@ -63,7 +63,9 @@ class ContextTtsService(ContextComponent):
         expression = None
         if automatic:
             planner = getattr(bridge, "plan_voice", None)
-            expression = await planner(final_text, target_umo) if callable(planner) else {}
+            expression = (
+                await planner(final_text, target_umo) if callable(planner) else {}
+            )
             if not expression.get("valid") or expression.get("channel") != "voice":
                 marker = getattr(bridge, "_set_media_result", None)
                 if callable(marker):

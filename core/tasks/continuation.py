@@ -20,7 +20,12 @@ from ..integrations.mediajob import (
     remember_media_task_result,
 )
 from ..schedule import normalize_schedule_mode
-from ..integrations.contact import ShareContactChanged, contact, current_contact
+from ..integrations.contact import (
+    ShareContactChanged,
+    ShareContactPending,
+    contact,
+    current_contact,
+)
 
 _STATE_KEY = "share_media_continuations"
 
@@ -44,7 +49,7 @@ def _decode(value):
 
 
 def preserve_share(kind: str):
-    """Checkpoint the prepared text and media owner, not a callable or old event."""
+    """保存已准备的文案及媒体归属检查点，不保存可调用对象或旧事件。"""
 
     def decorate(method):
         @wraps(method)
@@ -74,11 +79,15 @@ def preserve_share(kind: str):
                 job["contact_snapshot"] = ticket.get("snapshot")
                 job["contact_owner"] = ticket["owner"]
             elif params.get("history_source") in {"scheduled", "smart"}:
-                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                target = (
+                    params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                )
                 job["contact_owner"] = "share:" + job["id"]
                 result = await contact(self.plugin, target, job["contact_owner"])
                 if not result.get("allowed"):
-                    await contact(self.plugin, target, job["contact_owner"], action="release")
+                    await contact(
+                        self.plugin, target, job["contact_owner"], action="release"
+                    )
                     return False
                 job["contact_snapshot"] = result.get("snapshot")
             service.active.add(job["id"])
@@ -87,14 +96,25 @@ def preserve_share(kind: str):
             except BaseException:
                 service.active.discard(job["id"])
                 if job.get("contact_owner") and not ticket:
-                    target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
-                    await contact(self.plugin, target, job["contact_owner"], action="release")
+                    target = (
+                        params.get("uid")
+                        or params.get("target_umo")
+                        or "qzone_broadcast"
+                    )
+                    await contact(
+                        self.plugin, target, job["contact_owner"], action="release"
+                    )
                 raise
             token = current_share_job.set(job)
             try:
                 result = await method(self, *args, **kwargs)
             except ShareContactChanged as exc:
                 await service.finish(job, status="cancelled", reason=str(exc))
+                return False
+            except ShareContactPending as exc:
+                job.update(status="waiting_contact", reason=str(exc))
+                await service.save(job)
+                service.update_waiting_progress(job)
                 return False
             except ShareMediaPending:
                 job["status"] = "pending"
@@ -106,7 +126,11 @@ def preserve_share(kind: str):
                 return False
             except asyncio.CancelledError:
                 if job["status"] != "submitting":
-                    job["status"] = "pending"
+                    job["status"] = (
+                        "waiting_contact"
+                        if "prepared_media" in job or job["status"] == "waiting_contact"
+                        else "pending"
+                    )
                 await service.save(job)
                 raise
             except Exception:
@@ -122,8 +146,14 @@ def preserve_share(kind: str):
                 service.active.discard(job["id"])
                 current_share_job.reset(token)
                 if job.get("contact_owner") and not ticket:
-                    target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
-                    await contact(self.plugin, target, job["contact_owner"], action="release")
+                    target = (
+                        params.get("uid")
+                        or params.get("target_umo")
+                        or "qzone_broadcast"
+                    )
+                    await contact(
+                        self.plugin, target, job["contact_owner"], action="release"
+                    )
 
         return run
 
@@ -144,6 +174,14 @@ class ShareContinuationService:
             await self.plugin.db.update_share_state(_STATE_KEY, {job["id"]: payload})
 
     def update_waiting_progress(self, job: dict) -> None:
+        if job.get("status") == "waiting_contact":
+            self.plugin.task_manager.progress.update_share_progress(
+                str((job.get("params") or {}).get("progress_id") or ""),
+                "send",
+                message=f"{job.get('reason') or '等待发送时机'}；成品已保留，稍后继续发送",
+                mark_previous_done=False,
+            )
+            return
         kind = job.get("pending_media") or "image"
         status, reason = job.get("media_results", {}).get(kind, ("pending", ""))
         age = max(
@@ -180,12 +218,27 @@ class ShareContinuationService:
         if job is not None:
             params = job.get("params") or {}
             if params.get("history_source") in {"scheduled", "smart"}:
-                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                target = (
+                    params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                )
                 owner = job.setdefault("contact_owner", "share:" + job["id"])
-                result = await contact(self.plugin, target, owner, action="check", expected=job.get("contact_snapshot", ""))
+                result = await contact(
+                    self.plugin,
+                    target,
+                    owner,
+                    action="check",
+                    expected=job.get("contact_snapshot", ""),
+                )
                 if not result.get("allowed"):
-                    raise ShareContactChanged(result.get("reason") or "主动联系状态已变化，停止自动发送")
+                    if result.get("retryable") and not result.get("stale"):
+                        raise ShareContactPending(
+                            result.get("reason") or "等待其他主动联系任务完成"
+                        )
+                    raise ShareContactChanged(
+                        result.get("reason") or "主动联系状态已变化，停止自动发送"
+                    )
             job["status"] = "submitting"
+            job.pop("reason", None)
             await self.save(job)
 
     async def has_pending_share(self, target: str) -> bool:
@@ -194,6 +247,7 @@ class ShareContinuationService:
             if not isinstance(job, dict) or job.get("status") not in {
                 "pending",
                 "generating",
+                "waiting_contact",
                 "submitting",
             }:
                 continue
@@ -208,7 +262,7 @@ class ShareContinuationService:
         return False
 
     def recovery_allowed(self, job: dict) -> tuple[bool, bool]:
-        """Keep original scheduling switches and quiet hours effective on recovery."""
+        """恢复时继续遵守原有调度开关和免打扰时段。"""
         params = job.get("params") or {}
         scheduled = params.get("history_source") in {"scheduled", "smart"}
         maximum_age = 7200 if scheduled else 86400
@@ -278,7 +332,8 @@ class ShareContinuationService:
                 if (
                     key in self.active
                     or not isinstance(payload, dict)
-                    or payload.get("status") not in {"pending", "generating"}
+                    or payload.get("status")
+                    not in {"pending", "generating", "waiting_contact"}
                 ):
                     continue
                 params = payload.get("params") or {}
@@ -295,6 +350,31 @@ class ShareContinuationService:
                     params.get("uid") or params.get("target_umo") or "qzone_broadcast"
                 )
                 if self.plugin.runtime_service.is_share_busy(target):
+                    continue
+                if (
+                    payload["status"] == "waiting_contact"
+                    or "prepared_media" in payload
+                ):
+                    paths = payload.get("prepared_media", [])[:4]
+                    if not paths and payload.get("image_path"):
+                        paths = [payload["image_path"]]
+                    missing = False
+                    for path in paths:
+                        if (
+                            path
+                            and not path.startswith(("https://", "http://"))
+                            and not await asyncio.to_thread(Path(path).is_file)
+                        ):
+                            missing = True
+                            break
+                    if missing:
+                        await self.finish(
+                            dict(payload, service=self),
+                            status="failed",
+                            reason="原媒体成品文件不存在，未重新生成",
+                        )
+                        continue
+                    await self.resume(dict(payload, service=self))
                     continue
                 kind = payload.get("pending_media") or "image"
                 query = (
@@ -341,7 +421,7 @@ class ShareContinuationService:
                     )
                     continue
                 await self.resume(job)
-            # Keep unfinished and ambiguous submissions; bound only finished journals.
+            # 保留未完成及提交结果不明的任务，仅限制已结束任务的记录数量。
             async with self._write_lock:
                 latest = await self.plugin.db.get_share_state(_STATE_KEY, {})
                 finished = [
@@ -391,6 +471,9 @@ class ShareContinuationService:
         except ShareContactChanged as exc:
             job["status"] = "cancelled"
             job["reason"] = str(exc)
+        except ShareContactPending as exc:
+            job.update(status="waiting_contact", reason=str(exc))
+            self.update_waiting_progress(job)
         except ShareMediaPending:
             job["status"] = "pending"
             self.update_waiting_progress(job)
@@ -425,7 +508,9 @@ class ShareContinuationService:
                 current_share_job.reset(token)
                 self.active.discard(job["id"])
                 if job.get("contact_owner"):
-                    await contact(self.plugin, target, job["contact_owner"], action="release")
+                    await contact(
+                        self.plugin, target, job["contact_owner"], action="release"
+                    )
 
     async def run(self) -> None:
         while not self.plugin._is_terminated:

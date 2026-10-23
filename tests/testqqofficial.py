@@ -44,42 +44,38 @@ def _manager(*platforms):
 
 class QQOfficialDeliveryTests(unittest.IsolatedAsyncioTestCase):
     def test_official_targets_preserve_openid_instance_and_independent_schedule(self):
-        for platform_type in ("qq_official", "qq_official_webhook"):
-            manager, _ = _manager(_Platform(platform_type=platform_type))
-            for group, session_id in ((True, "GROUPOPENID"), (False, "USER_OPENID")):
-                with self.subTest(platform=platform_type, group=group):
-                    target = manager.targets.resolve_target_input(
-                        session_id, expected_group=group, adapter_id="official-main"
-                    )
-                    kind = "GroupMessage" if group else "FriendMessage"
-                    self.assertEqual(target, f"official-main:{kind}:{session_id}")
-                    self.assertEqual(
-                        manager.targets.parse_targets_config(
-                            [f"{target}:08:30:心情"], expected_group=group
-                        ),
-                        {target: {"cron": "30 8 * * *", "seq": "心情"}},
-                    )
+        manager, _ = _manager(_Platform())
+        for group, session_id in ((True, "GROUPOPENID"), (False, "USER_OPENID")):
+            with self.subTest(group=group):
+                target = manager.targets.resolve_target_input(
+                    session_id, expected_group=group, adapter_id="official-main"
+                )
+                kind = "GroupMessage" if group else "FriendMessage"
+                self.assertEqual(target, f"official-main:{kind}:{session_id}")
+                self.assertEqual(
+                    manager.targets.parse_targets_config(
+                        [f"{target}:08:30:心情"], expected_group=group
+                    ),
+                    {target: {"cron": "30 8 * * *", "seq": "心情"}},
+                )
 
     async def test_background_text_and_media_use_original_official_session(self):
-        for platform_type in ("qq_official", "qq_official_webhook"):
-            manager, plugin = _manager(_Platform(platform_type=platform_type))
-            for kind, session_id in (
-                ("GroupMessage", "GROUPOPENID"),
-                ("FriendMessage", "USER_OPENID"),
+        manager, plugin = _manager(_Platform())
+        for kind, session_id in (
+            ("GroupMessage", "GROUPOPENID"),
+            ("FriendMessage", "USER_OPENID"),
+        ):
+            for content in (
+                "分享正文",
+                ("image", "photo.png"),
+                ("record", "voice.wav"),
+                ("video", "video.mp4"),
             ):
-                for content in (
-                    "分享正文",
-                    ("image", "photo.png"),
-                    ("record", "voice.wav"),
-                    ("video", "video.mp4"),
-                ):
-                    with self.subTest(
-                        platform=platform_type, kind=kind, content=content
-                    ):
-                        target = f"official-main:{kind}:{session_id}"
-                        chain = _MessageChain().message(content)
-                        await manager.delivery.send_message_chain(target, chain)
-                        plugin.context.send_message.assert_awaited_with(target, chain)
+                with self.subTest(kind=kind, content=content):
+                    target = f"official-main:{kind}:{session_id}"
+                    chain = _MessageChain().message(content)
+                    await manager.delivery.send_message_chain(target, chain)
+                    plugin.context.send_message.assert_awaited_with(target, chain)
 
     async def test_matching_event_can_reply_without_background_scene_cache(self):
         platform = _Platform()
@@ -225,20 +221,18 @@ class QQOfficialContextTests(unittest.IsolatedAsyncioTestCase):
         from .testqzonerelationship import Platform, qzone_service
 
         official, onebot = object(), object()
-        for kind in ("qq_official", "qq_official_webhook"):
-            with self.subTest(kind=kind):
-                service = qzone_service(
-                    [Platform("official-main", official, kind)], cached=""
-                )
-                self.assertIsNone(service._get_bot())
-                service = qzone_service(
-                    [
-                        Platform("official-main", official, kind),
-                        Platform("onebot-main", onebot),
-                    ],
-                    cached="",
-                )
-                self.assertIs(service._get_bot(), onebot)
+        service = qzone_service(
+            [Platform("official-main", official, "qq_official")], cached=""
+        )
+        self.assertIsNone(service._get_bot())
+        service = qzone_service(
+            [
+                Platform("official-main", official, "qq_official"),
+                Platform("onebot-main", onebot),
+            ],
+            cached="",
+        )
+        self.assertIs(service._get_bot(), onebot)
 
 
 if __name__ == "__main__":

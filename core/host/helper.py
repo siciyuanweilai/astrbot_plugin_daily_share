@@ -28,7 +28,7 @@ class PluginToolContextService(SupportComponent):
         self._prompt_inflight = {}
 
     async def _run_context_builder(self, builder, target: str) -> str:
-        """Run one builder so concurrent callers can share its result safely."""
+        """只运行一个构建任务，让并发调用方安全复用其结果。"""
         try:
             return str(await builder(target) or "")
         except asyncio.CancelledError:
@@ -107,7 +107,7 @@ class PluginToolContextService(SupportComponent):
         self._prompt_inflight.pop(key, None)
 
     def invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
-        """Invalidate one dynamic prompt and suppress an older in-flight result."""
+        """使指定动态提示词失效，并丢弃此前尚未完成的构建结果。"""
         self._invalidate_context_prompt(kind, target_uid)
 
     def _strip_news_link_reference_tail(self, text: str) -> str:

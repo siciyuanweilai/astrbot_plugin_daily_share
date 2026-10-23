@@ -137,8 +137,17 @@ class TaskHelperMediaService(TaskServiceBase):
             self.services.progress.complete_share_progress_step(
                 progress_id, "audio", "语音已生成"
             )
-        elif getattr(getattr(self.plugin, "daily_life_bridge", None), "media_result", lambda _: ("", ""))("audio")[0] == "skipped":
-            self.services.progress.skip_share_progress_step(progress_id, "audio", "本轮使用文字")
+        elif (
+            getattr(
+                getattr(self.plugin, "daily_life_bridge", None),
+                "media_result",
+                lambda _: ("", ""),
+            )("audio")[0]
+            == "skipped"
+        ):
+            self.services.progress.skip_share_progress_step(
+                progress_id, "audio", "本轮使用文字"
+            )
         else:
             self.services.progress.fail_share_progress_step(
                 progress_id,

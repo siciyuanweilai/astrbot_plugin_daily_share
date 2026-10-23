@@ -31,13 +31,17 @@ def confirmed_share_payload(content: str, description: str, result: dict) -> dic
     )
     return {
         "content": text,
-        "description": description if confirmed.intersection({"image", "video"}) else "",
+        "description": description
+        if confirmed.intersection({"image", "video"})
+        else "",
         "image_sent": "image" in confirmed,
         "media_kind": kind,
     }
 
 
-async def record_confirmed_history(context_service, target, content, description, result):
+async def record_confirmed_history(
+    context_service, target, content, description, result
+):
     payload = confirmed_share_payload(content, description, result)
     if not payload:
         return
@@ -54,8 +58,11 @@ async def record_confirmed_share(
     payload = confirmed_share_payload(content, description, result)
     if payload:
         await context_service.record_external_share(
-            target, payload["content"], payload["description"],
-            image_sent=payload["image_sent"], media_kind=payload["media_kind"],
+            target,
+            payload["content"],
+            payload["description"],
+            image_sent=payload["image_sent"],
+            media_kind=payload["media_kind"],
         )
 
 

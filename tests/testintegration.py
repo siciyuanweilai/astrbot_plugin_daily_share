@@ -39,8 +39,14 @@ class _Runtime:
         }
 
     async def record_external_activity_receipt(self, receipt):
-        fields = {key: value for key, value in receipt.items() if key not in {"event_id", "occurred_at", "target_umo", "content"}}
-        return await self.record_external_activity(receipt["target_umo"], receipt["content"], **fields)
+        fields = {
+            key: value
+            for key, value in receipt.items()
+            if key not in {"event_id", "occurred_at", "target_umo", "content"}
+        }
+        return await self.record_external_activity(
+            receipt["target_umo"], receipt["content"], **fields
+        )
 
     async def record_external_activity(self, target_umo, content, **kwargs):
         self.activities.append((target_umo, content, kwargs))

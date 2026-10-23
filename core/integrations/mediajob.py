@@ -5,7 +5,7 @@ from contextvars import ContextVar
 
 
 class ShareMediaPending(Exception):
-    """An accepted generation belongs to an unfinished sharing workflow."""
+    """已受理的生成任务属于尚未完成的分享流程。"""
 
 
 current_share_job: ContextVar[dict | None] = ContextVar("daily_share_job", default=None)
@@ -17,7 +17,7 @@ async def save_share_job(job: dict) -> None:
 
 
 def media_error_message(value: object, default: str) -> str:
-    """Keep a bounded diagnostic without credentials or signed resource URLs."""
+    """保留长度受限的诊断信息，移除凭据和带签名的资源 URL。"""
     if not isinstance(value, str) or not value.strip():
         return default
     text = re.sub(r"https?://[^\s<>\"']+", "[地址已隐藏]", value)
@@ -33,7 +33,7 @@ def media_error_message(value: object, default: str) -> str:
 
 
 def normalize_media_task_result(result: object, kind: str) -> dict:
-    """Unknown query outcomes must never authorize a new generation or delivery."""
+    """查询结果不明确时，不得据此重新生成或发送。"""
     label = "图片" if kind == "image" else "视频"
     if not isinstance(result, dict):
         return {"status": "unavailable", "error": f"生活插件{label}任务返回格式无效"}
@@ -61,7 +61,7 @@ def normalize_media_task_result(result: object, kind: str) -> dict:
 
 
 def remember_media_task_result(job: dict, kind: str, result: dict) -> None:
-    """Persist per-share outcomes so recovery cannot inherit another task's error."""
+    """按分享任务持久化结果，防止恢复时误用其他任务的错误信息。"""
     status = result["status"]
     media_status = {"ready": "ok", "failed": "error", "missing": "error"}.get(
         status, status

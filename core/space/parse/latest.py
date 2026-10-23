@@ -175,7 +175,7 @@ def _recent_item_name(item: dict[str, Any], raw_html: str, uin: int) -> str:
 
 
 def _recent_item_text(raw_html: str, author: str = "") -> str:
-    # Unknown/empty body nodes must not turn comments or controls into a caption.
+    # 正文节点未知或为空时，不得将评论或控件误作正文。
     return _strip_feed_author_prefix(feed_body_text(raw_html), author)
 
 

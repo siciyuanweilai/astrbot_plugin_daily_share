@@ -1,7 +1,7 @@
-"""Exercise installed daily_life persistence and exports through daily_share.
+"""通过 daily_share 验证已安装 daily_life 的持久化与对外接口。
 
-Only provider requests and final message transport are replaced. These optional
-integration tests run when the sibling daily_life source tree is available.
+仅替换 provider 请求和最终消息传输环节。相邻目录中存在 daily_life 源码时，
+才运行这些可选集成测试。
 """
 
 import asyncio
@@ -37,7 +37,7 @@ if LIFE_AVAILABLE:
 @unittest.skipUnless(LIFE_AVAILABLE, "requires the sibling daily_life source tree")
 class DailyLifeFlowTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        # daily_life's lightweight scheduler stub has no cron trigger package.
+        # daily_life 的轻量调度器桩不包含 cron 触发器模块。
         for name in list(sys.modules):
             if name == "apscheduler" or name.startswith("apscheduler."):
                 sys.modules.pop(name, None)
@@ -304,7 +304,7 @@ class DailyLifeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("DO_NOT_PERSIST_CREDENTIAL", json.dumps(tasks[0].as_dict()))
         await plugin.db.close()
 
-        # Discard both plugin instances and reopen daily_life's actual SQLite DB.
+        # 丢弃两个插件实例，并重新打开 daily_life 的真实 SQLite 数据库。
         self.archive.close()
         self.archive = LifeArchive(self.database_path)
         self.life_plugin()

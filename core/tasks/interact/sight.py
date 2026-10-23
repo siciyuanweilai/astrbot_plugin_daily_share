@@ -491,9 +491,7 @@ async def _qzone_image_refs_descriptions(
             "",
         )
         if cached:
-            cache_updates.update(
-                {key: cached for key in cache_keys}
-            )
+            cache_updates.update({key: cached for key in cache_keys})
             _fill_qzone_image_cache_aliases(cache, cache_keys, cached)
             for key in cache_keys:
                 cache.pop(key, None)

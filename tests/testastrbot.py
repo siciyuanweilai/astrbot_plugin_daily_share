@@ -34,9 +34,6 @@ class AstrBotContractTests(unittest.TestCase):
             from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
                 QQOfficialPlatformAdapter,
             )
-            from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
-                QQOfficialWebhookPlatformAdapter,
-            )
             from astrbot_plugin_daily_share.main import DailySharePlugin
 
 
@@ -67,9 +64,7 @@ class AstrBotContractTests(unittest.TestCase):
                             new=AsyncMock(return_value={"file_info": "media"}),
                         ),
                     ):
-                        for adapter_class in (
-                            QQOfficialPlatformAdapter, QQOfficialWebhookPlatformAdapter,
-                        ):
+                        for adapter_class in (QQOfficialPlatformAdapter,):
                             adapter = object.__new__(adapter_class)
                             adapter.config = {"id": "official-main"}
                             adapter.use_markdown_default = False

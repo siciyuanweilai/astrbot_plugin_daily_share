@@ -219,6 +219,27 @@ class LifeRepairTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(lookup.await_count, 2)
 
+    async def test_contact_service_outage_and_malformed_reply_are_retryable(self):
+        coordinate = AsyncMock(side_effect=RuntimeError("temporarily unavailable"))
+        bridge = DailyLifeBridge(
+            types.SimpleNamespace(
+                get_all_stars=lambda: [
+                    _metadata(
+                        types.SimpleNamespace(coordinate_share_contact=coordinate)
+                    )
+                ]
+            )
+        )
+        for reply in ("exception", None, {}):
+            if reply != "exception":
+                coordinate.side_effect = None
+                coordinate.return_value = reply
+            result = await bridge.coordinate_contact(
+                "target", owner="share", action="check"
+            )
+            self.assertFalse(result.get("allowed"))
+            self.assertTrue(result.get("retryable"))
+
     async def test_voice_follow_reuses_one_decision_and_manual_skips_it(self):
         module = importlib.import_module(ContextTtsService.__module__)
         bridge = types.SimpleNamespace(

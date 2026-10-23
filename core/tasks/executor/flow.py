@@ -157,9 +157,15 @@ class TaskExecutorService(TaskServiceBase):
                 )
                 return True, ""
 
-        memory_getter = getattr(getattr(self.plugin, "daily_life_bridge", None), "related_memory_prompt", None)
+        memory_getter = getattr(
+            getattr(self.plugin, "daily_life_bridge", None),
+            "related_memory_prompt",
+            None,
+        )
         if callable(memory_getter):
-            memory = await memory_getter(str(post_context or life_ctx or "")[:1000], uid)
+            memory = await memory_getter(
+                str(post_context or life_ctx or "")[:1000], uid
+            )
             if memory:
                 content_context["life_prompt"] += "\n\n" + memory
         content = await self.content_service.generate(

@@ -172,7 +172,7 @@ class PermissionTests(unittest.TestCase):
             is_onebot_event=lambda event: event.platform == "aiocqhttp",
         )
         self.host._cached_qq_adapter_id = "qq-first"
-        for platform in ("qq_official", "qq_official_webhook", "telegram"):
+        for platform in ("qq_official", "telegram"):
             with self.subTest(platform=platform):
                 event = _Event(sender_id="12345")
                 event.platform = platform

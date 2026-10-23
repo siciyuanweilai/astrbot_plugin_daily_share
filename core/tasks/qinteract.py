@@ -377,6 +377,20 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             return result
 
         result["enabled"] = True
+        wait_until_ready = getattr(
+            getattr(self.plugin, "qzone_service", None), "wait_until_ready", None
+        )
+        if callable(wait_until_ready):
+            try:
+                await wait_until_ready()
+            except Exception:
+                result["failed"] = 1
+                logger.warning(
+                    "[日常分享] QQ 空间自动互动等待 OneBot 连接超时，本轮跳过"
+                )
+                _qzone_log_interaction_summary(result)
+                return result
+
         if cfg.enable_like:
             result["like"] = await self.execute_qzone_auto_like(emit_summary=False)
         if cfg.enable_comment and not _qzone_result_rate_limited(result["like"]):

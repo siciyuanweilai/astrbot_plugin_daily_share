@@ -49,7 +49,7 @@ _VOID_TAGS = frozenset(
 
 
 class _FeedTextParser(HTMLParser):
-    """Read balanced body nodes while keeping interaction subtrees out of captions."""
+    """读取标签配对完整的正文节点，并从正文中排除互动子树。"""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=False)

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.2-ef6f8f" alt="版本 1.2.2"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.3-ef6f8f" alt="版本 1.2.3"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.2.2 版本更新**：支持 QQ 官方机器人私聊与群聊分享；说说自评进一步结合公开生活状态和记忆，完善异常回退。详见 [更新日志](./CHANGELOG.md)。
+> **v1.2.3 版本更新**：修复媒体成品因临时发送冲突被取消的问题，支持保留原成品等待发送及重载后续接；完善 QQ 空间启动时的 OneBot 连接等待。详见 [更新日志](./CHANGELOG.md)。
 
 ---
 
@@ -189,7 +189,7 @@
 | 平台 | 支持场景 | 目标填写 | 注意事项 |
 | :--- | :--- | :--- | :--- |
 | QQ / OneBot (<code>aiocqhttp</code>) | 私聊、群聊、QQ 空间 | QQ 号或群号 | 多实例时选择负责发送的机器人 |
-| QQ 官方机器人 (<code>qq_official</code> / <code>qq_official_webhook</code>) | 私聊、群聊 | 官方 OpenID 或 <code>/sid</code> 完整标识 | 使用独立实例 ID，群聊需开启主动发言；不支持 QQ 空间 |
+| QQ 官方机器人 (<code>qq_official</code>) | 私聊、群聊 | 官方 OpenID 或 <code>/sid</code> 完整标识 | 使用独立实例 ID，群聊需开启主动发言；不支持 QQ 空间 |
 | 个人微信 (<code>weixin_oc</code>) | 个人私聊 | 会话 ID 或 <code>/分享 添加当前</code> | 需要框架已保存对应 <code>context_token</code> |
 | WebChat / 其他平台 | 取决于适配器能力 | 优先使用 <code>/sid</code> 输出 | 主动发送能力由适配器决定 |
 
@@ -316,14 +316,6 @@ daily_life 可提供公开场景的表达习惯与对象称呼，不导入私聊
 
 daily_share 可独立完成文字分享、新闻和定时发送；安装 [daily_life](https://github.com/siciyuanweilai/astrbot_plugin_daily_life) 后，可让分享延续角色的生活与表达。
 
-| 项目 | 要求 |
-| :--- | :--- |
-| 完整联动最低版本 | daily_life v1.4.5 或后续支持相同公开接口的版本 |
-| 本版联调版本 | daily_life v1.4.9（含本次联动修复） |
-| 更新顺序 | 先更新并重载 daily_life，再重载 daily_share；工作台强制刷新（Ctrl+F5） |
-
-新增生活回执、相关记忆、主动发送协调与语音判断能力需同步更新包含本次联动修复的 daily_life；仅更新 daily_share 无法补齐生活插件端接口。
-
 | 能力 | 配置与使用 |
 | :--- | :--- |
 | 生活状态 | 自动读取当前目标的生活快照，参考实际活动、天气、穿搭和身体状态 |
@@ -344,6 +336,8 @@ QQ 空间沿用角色的日常口吻，不套用私聊分段或字数限制；�
 语音设置新增“跟随生活插件选择语音”，默认关闭。开启后，自动分享使用 daily_life 的表达判断模型选择文字或语音，并复用该次判断的语音风格；手动请求语音和“仅发语音”优先。
 
 私聊和群聊活动回传保留事件 ID 与原始发送时间，生活插件重载后自动补录，避免重复记忆或把补录时间当作发送时间。历史只记入确认送达的文字和媒体。共同预约属于两插件之间的自动发送协调，不限制用户手动要求的分享，也不占用普通聊天会话锁。
+
+发送预约暂被占用、主动联系间隔未到或协调接口暂时不可用时，已生成的图片、视频、语音和原文案会保留，等待条件满足后继续发送；重载后复用同一份成品，避免重复生成。恢复时仍检查目标、配置、静默时段、任务时效与上下文；真实的新消息或生活事实变化会停止旧内容补发，成品文件丢失则结束任务，发送结果不明时不自动重发。
 
 生活插件不可用时跳过对应增强，基础分享继续运行。图片、视频已受理后保留原任务，等待或重载时查询续接；明确失败后才降级，文字已送达的部分成功不会重复重发。
 

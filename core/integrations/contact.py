@@ -13,8 +13,14 @@ class ShareContactChanged(RuntimeError):
     pass
 
 
+class ShareContactPending(RuntimeError):
+    """已准备的内容仍然有效，但暂时无法向该目标发送消息。"""
+
+
 async def contact(plugin, target, owner, *, action="reserve", expected=None):
-    method = getattr(getattr(plugin, "daily_life_bridge", None), "coordinate_contact", None)
+    method = getattr(
+        getattr(plugin, "daily_life_bridge", None), "coordinate_contact", None
+    )
     if not callable(method):
         return {"allowed": True}
     return await method(target, owner=owner, action=action, expected=expected)
@@ -31,12 +37,17 @@ def coordinate_share(method):
         try:
             result = await contact(self.plugin, target, owner)
             if not result.get("allowed"):
-                logger.debug(f"[日常分享] 本轮主动分享延后：{result.get('reason', '主动任务冲突')}")
+                logger.debug(
+                    f"[日常分享] 本轮主动分享延后：{result.get('reason', '主动任务冲突')}"
+                )
                 return False
-            token = current_contact.set({"target": target, "owner": owner, "snapshot": result.get("snapshot")})
+            token = current_contact.set(
+                {"target": target, "owner": owner, "snapshot": result.get("snapshot")}
+            )
             return await method(self, *args, **kwargs)
         finally:
             if token is not None:
                 current_contact.reset(token)
             await contact(self.plugin, target, owner, action="release")
+
     return run

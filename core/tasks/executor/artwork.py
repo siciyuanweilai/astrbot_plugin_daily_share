@@ -3,6 +3,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType, TimePeriod
 from ...constants import normalize_share_type_sequence, share_type_label
+from ...integrations.mediajob import current_share_job
 from ..taskbase import TaskServiceBase
 
 
@@ -21,6 +22,9 @@ class TaskExecutorMediaService(TaskServiceBase):
         period: TimePeriod,
         initial_img_path: str | None = None,
     ) -> tuple[str | None, str | None, str | None, str | None, str]:
+        job = current_share_job.get()
+        if job is not None and "prepared_media" in job:
+            return tuple(job["prepared_media"])
         img_path = initial_img_path
         send_img_path = None
         video_url = None
@@ -111,4 +115,8 @@ class TaskExecutorMediaService(TaskServiceBase):
                 progress_id, "audio", "语音未开启"
             )
 
-        return img_path, send_img_path, video_url, audio_path, image_description
+        media = img_path, send_img_path, video_url, audio_path, image_description
+        if job is not None:
+            job["prepared_media"] = list(media)
+            await job["service"].save(job)
+        return media

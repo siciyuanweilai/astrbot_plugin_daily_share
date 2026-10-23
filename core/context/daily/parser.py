@@ -29,7 +29,10 @@ class ContextLifeParseService(ContextComponent):
             "ready": "等待结算，尚未确认完成",
             "settling": "结算中，尚未确认完成",
         }.get(action.get("status"))
-        if action.get("status") == "running" and action.get("observation_state") == "pending":
+        if (
+            action.get("status") == "running"
+            and action.get("observation_state") == "pending"
+        ):
             label = "最近确认，当前进展待确认"
             observed = self._compact_life_text(action.get("observed_at", ""), 40)
             if observed:

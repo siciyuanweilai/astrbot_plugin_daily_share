@@ -281,6 +281,10 @@ class QzoneService:
     async def context(self):
         return await self.gateway.context()
 
+    async def wait_until_ready(self, *, timeout=None):
+        """等待 OneBot 反向连接就绪，避免启动竞态直接读取失败。"""
+        return await self.gateway.wait_until_ready(timeout=timeout)
+
     async def comment(self, post_id, content):
         return await self.comments.comment(post_id, content)
 

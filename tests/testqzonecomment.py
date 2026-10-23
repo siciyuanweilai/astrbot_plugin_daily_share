@@ -189,7 +189,7 @@ class FakeDb:
 
 
 def _interaction_args(module):
-    """Initialize the actual interaction service with isolated test dependencies."""
+    """使用隔离的测试依赖初始化真实互动服务。"""
     runtime_module = importlib.import_module(f"{module.__package__}.runtime")
     base_module = importlib.import_module(f"{module.__package__}.taskbase")
     runtime = runtime_module.TaskRuntime(

@@ -166,7 +166,7 @@ export function createSweetComboControls({
     if (!controller || input.disabled) return;
     closeSweetSelects();
     closeSweetCombos(input);
-    // Only text entered while the menu is open filters the available options.
+    // 仅使用菜单打开期间输入的文本筛选可用选项。
     controller.searchQuery = "";
     renderSweetCombo(input);
     controller.wrapper.classList.add("is-open");

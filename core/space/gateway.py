@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 
 class QzoneClientGateway:
+    BOT_READY_TIMEOUT_SECONDS = 15.0
+    BOT_READY_POLL_INTERVAL_SECONDS = 0.25
+
     def __init__(self, owner: QzoneService) -> None:
         self.owner = owner
 
@@ -152,7 +155,49 @@ class QzoneClientGateway:
             message += "；提交状态未知，请先检查原账号中的结果"
         raise RuntimeError(message)
 
-    def _get_bot(self):
+    @staticmethod
+    def _bot_connection_ready(bot) -> bool:
+        """识别 aiocqhttp 反向 WebSocket 是否已经建立。"""
+        if not bot:
+            return False
+        markers = []
+        for attr in ("_wsr_api_clients", "_wsr_event_clients"):
+            try:
+                value = getattr(bot, attr, None)
+            except Exception:
+                value = None
+            if value is not None:
+                markers.append(value)
+        if not markers:
+            # 其他 OneBot 实现没有这些内部字段时，保留原有兼容行为。
+            return True
+        return any(bool(value) for value in markers)
+
+    async def wait_until_ready(self, *, timeout=None):
+        """等待机器人连接完成，避免插件启动早于 OneBot 适配器。"""
+        timeout_seconds = self.BOT_READY_TIMEOUT_SECONDS if timeout is None else timeout
+        try:
+            timeout_seconds = max(0.0, float(timeout_seconds))
+        except (TypeError, ValueError):
+            timeout_seconds = self.BOT_READY_TIMEOUT_SECONDS
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        bot = self._get_bot(silent=True)
+        while bot and not self._bot_connection_ready(bot):
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(self.BOT_READY_POLL_INTERVAL_SECONDS, remaining))
+            bot = self._get_bot(silent=True)
+
+        if bot and self._bot_connection_ready(bot):
+            return bot
+        if bot:
+            raise RuntimeError("OneBot 适配器尚未连接，无法获取 QQ 空间登录态")
+        raise RuntimeError("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
+
+    def _get_bot(self, *, silent=False):
         adapter_id = str(self.owner._qq_adapter_id() or "").strip()
         if adapter_id:
             return self.owner.ctx_service.get_onebot_bot(
@@ -168,6 +213,8 @@ class QzoneClientGateway:
         if len(onebot_bots) == 1:
             return onebot_bots[0]
         if len(onebot_bots) > 1:
+            if silent:
+                return None
             logger.error(
                 "[日常分享] 检测到多个 OneBot 机器人实例，"
                 "请先在需要使用的机器人会话中执行空间命令"
@@ -185,8 +232,7 @@ class QzoneClientGateway:
                 payload = await self.owner.ctx_service.call_onebot_action(
                     bot, "get_cookies", domain=domain
                 )
-            except Exception as exc:
-                logger.debug(f"[日常分享] 读取 QQ 空间登录凭据失败({domain}): {exc}")
+            except Exception:
                 continue
             cookie = (
                 str(payload.get("cookies") or "").strip()
@@ -197,11 +243,10 @@ class QzoneClientGateway:
             if not domain_values:
                 continue
             values.update(domain_values)
-            logger.debug(
-                f"[日常分享] QQ 空间登录凭据字段({domain}): "
-                f"{','.join(sorted(domain_values))}"
-            )
         if not values:
+            logger.debug(
+                "[日常分享] QQ 空间登录态暂不可用，请确认 OneBot 已连接且支持 get_cookies"
+            )
             raise RuntimeError(
                 "机器人客户端未返回 QQ 空间登录态，请确认账号已登录且适配器支持读取登录态"
             )

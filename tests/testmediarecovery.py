@@ -1,4 +1,4 @@
-"""Durable media recovery uses public life contracts and never resubmits work."""
+"""持久化媒体恢复使用生活插件的公开接口契约，不重复提交任务。"""
 
 import asyncio
 import importlib
@@ -129,6 +129,140 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
     def journal(self, key="original"):
         return self.plugin.db.state["share_media_continuations"][key]
 
+    def enable_scheduled(self):
+        self.plugin.config["enable_auto_share"] = True
+        self.plugin.basic_conf["trigger_mode"] = "fixed_time"
+        self.manager.update_configs(
+            basic=self.plugin.basic_conf,
+            receiver={"users": [fixtures.USER_TARGET_1], "groups": []},
+        )
+
+    async def test_contact_wait_survives_reload_and_reuses_all_finished_media_once(
+        self,
+    ):
+        self.enable_scheduled()
+        self.manager.update_configs(
+            image={
+                "enable_ai_image": True,
+                "image_enabled_types": ["心情"],
+                "enable_ai_video": True,
+                "video_enabled_types": ["心情"],
+            },
+            tts={"enable_tts": True, "tts_enabled_types": ["心情"]},
+        )
+        coordinate = AsyncMock(
+            side_effect=[
+                {"allowed": True, "snapshot": "original-facts"},
+                {
+                    "allowed": False,
+                    "retryable": True,
+                    "reason": "该会话刚收到主动消息，稍后再联系",
+                },
+                {"allowed": True},  # 首次进入等待状态后释放预约。
+            ]
+        )
+        self.life.coordinate_share_contact = coordinate
+        with tempfile.TemporaryDirectory() as tmp:
+            image, video, audio = [
+                str(Path(tmp) / name)
+                for name in ("original.png", "original.mp4", "original.wav")
+            ]
+            for path in (image, video, audio):
+                Path(path).touch()
+            self.life.generate_share_image_task.return_value = {
+                "status": "ready",
+                "path": image,
+            }
+            self.life.generate_share_video_task.return_value = {
+                "status": "ready",
+                "url": video,
+            }
+            speech = AsyncMock(return_value=audio)
+            self.plugin.ctx_service.text_to_speech = speech
+            params = self.params(self.start_progress())
+            params["history_source"] = "scheduled"
+            self.assertFalse(
+                await self.manager.share.send_prepared_chat_share(**params)
+            )
+            key = next(iter(self.plugin.db.state["share_media_continuations"]))
+            self.assertEqual(self.journal(key)["status"], "waiting_contact")
+            self.assertTrue(
+                await self.service.has_pending_share(fixtures.USER_TARGET_1)
+            )
+            self.assertIn("成品已保留", self.progress()["message"])
+            self.assertEqual(self.sent, [])
+
+            # 恢复时复核原事实快照，并发送已保存的媒体成品。
+            self.plugin.db.state = json.loads(json.dumps(self.plugin.db.state))
+            self.service = self.service_class(self.plugin)
+            self.plugin.share_continuations = self.service
+            coordinate.side_effect = None
+            coordinate.return_value = {"allowed": True}
+            await self.service.recover_once()
+            await self.service.recover_once()
+
+        speech.assert_awaited_once()
+        self.life.generate_share_image_task.assert_awaited_once()
+        self.life.generate_share_video_task.assert_awaited_once()
+        self.life.get_share_image_task.assert_not_called()
+        self.life.get_share_video_task.assert_not_called()
+        self.assertEqual(self.journal(key)["status"], "completed")
+        self.assertNotIn("reason", self.journal(key))
+        self.assertEqual(len(self.plugin.db.history), 1)
+        self.assertEqual(len(self.sent), 3)
+        self.assertEqual(self.sent[0][1], ["保留原文案"])
+        self.assertEqual(self.sent[1][1][0].file, audio)
+        self.assertEqual(self.sent[2][1][0].source, ("file_video", video))
+        check = [
+            call
+            for call in coordinate.await_args_list
+            if call.kwargs.get("action") == "check"
+        ]
+        self.assertEqual(len(check), 2)
+        self.assertTrue(
+            all(call.kwargs["expected"] == "original-facts" for call in check)
+        )
+
+    async def test_waiting_contact_still_cancels_on_new_chat_without_resubmitting(self):
+        self.enable_scheduled()
+        job = await self.job()
+        job.update(
+            status="waiting_contact",
+            prepared_media=[None, None, None, None, ""],
+            contact_snapshot="original-facts",
+        )
+        job["params"]["history_source"] = "scheduled"
+        await self.service.save(job)
+        self.life.coordinate_share_contact = AsyncMock(
+            return_value={
+                "allowed": False,
+                "stale": True,
+                "retryable": True,
+                "reason": "新消息",
+            }
+        )
+        await self.service.recover_once()
+        await self.service.recover_once()
+        self.assertEqual(self.journal()["status"], "cancelled")
+        self.assertEqual(self.journal()["reason"], "新消息")
+        self.assertEqual(self.sent, [])
+        self.life.get_share_image_task.assert_not_called()
+        self.life.generate_share_image_task.assert_not_called()
+
+    async def test_missing_saved_media_fails_without_regeneration(self):
+        job = await self.job()
+        job.update(
+            status="waiting_contact",
+            prepared_media=[None, None, None, "/nonexistent/original.wav", ""],
+        )
+        await self.service.save(job)
+        await self.service.recover_once()
+        self.assertEqual(self.journal()["status"], "failed")
+        self.assertIn("原媒体成品文件不存在", self.journal()["reason"])
+        self.assertEqual(self.sent, [])
+        self.life.get_share_image_task.assert_not_called()
+        self.life.generate_share_image_task.assert_not_called()
+
     async def test_terminal_recovery_ends_progress_without_sending_or_resubmitting(
         self,
     ):
@@ -251,7 +385,7 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     star_cls=self.life,
                 )
             )
-            # Rebuild the bridge/service from a JSON journal, as on plugin reload.
+            # 从 JSON 任务记录重建桥接层和服务，模拟插件重载。
             self.plugin.db.state = json.loads(json.dumps(self.plugin.db.state))
             self.service = self.service_class(self.plugin)
             self.plugin.share_continuations = self.service

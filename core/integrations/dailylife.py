@@ -79,11 +79,17 @@ class DailyLifeBridge:
             return {"channel": "text", "valid": False}
         try:
             result = await method(text, target_umo)
-            return result if isinstance(result, dict) else {"channel": "text", "valid": False}
+            return (
+                result
+                if isinstance(result, dict)
+                else {"channel": "text", "valid": False}
+            )
         except Exception:
             return {"channel": "text", "valid": False}
 
-    async def related_memory_prompt(self, query: str, target_umo: str = "qzone_broadcast") -> str:
+    async def related_memory_prompt(
+        self, query: str, target_umo: str = "qzone_broadcast"
+    ) -> str:
         query = str(query or "").strip()[:1200]
         if not query:
             return ""
@@ -96,11 +102,21 @@ class DailyLifeBridge:
             self._memory_cache.move_to_end(key)
             return entry[1]
         try:
-            rows = await asyncio.wait_for(method(query, target_umo, limit=3), timeout=1.0)
-            lines = [f"- {str(row.get('occurred_at') or '')[:40]} {str(row.get('text') or '')[:400]}" for row in rows[:3] if isinstance(row, dict)]
+            rows = await asyncio.wait_for(
+                method(query, target_umo, limit=3), timeout=1.0
+            )
+            lines = [
+                f"- {str(row.get('occurred_at') or '')[:40]} {str(row.get('text') or '')[:400]}"
+                for row in rows[:3]
+                if isinstance(row, dict)
+            ]
         except Exception:
             return ""
-        prompt = "【本地相关记忆，仅作背景；纠正信息优先】\n" + "\n".join(lines) if lines else ""
+        prompt = (
+            "【本地相关记忆，仅作背景；纠正信息优先】\n" + "\n".join(lines)
+            if lines
+            else ""
+        )
         self._memory_cache[key] = (time.monotonic() + 15, prompt)
         self._memory_cache.move_to_end(key)
         while len(self._memory_cache) > 64:
@@ -113,10 +129,15 @@ class DailyLifeBridge:
             return {"allowed": True}
         try:
             result = await method(target_umo, **kwargs)
-            return result if isinstance(result, dict) else {"allowed": False}
+            if isinstance(result, dict) and isinstance(result.get("allowed"), bool):
+                return result
         except Exception as exc:
             logger.debug(f"[日常分享] 主动联系状态暂不可用：{type(exc).__name__}")
-            return {"allowed": False, "reason": "生活插件暂不可用，稍后再联系"}
+        return {
+            "allowed": False,
+            "retryable": True,
+            "reason": "生活插件暂不可用，稍后再联系",
+        }
 
     async def prepare_image(self, source: str) -> dict:
         method = getattr(self._plugin(), "prepare_share_image", None)
@@ -605,9 +626,21 @@ class DailyLifeBridge:
             legacy = getattr(plugin, "record_external_activity", None)
             if callable(legacy):
                 try:
-                    return bool(await legacy(target_umo, content, image_description=image_description, image_sent=image_sent, media_kind=media_kind, reason=reason, sync_memory=sync_memory))
+                    return bool(
+                        await legacy(
+                            target_umo,
+                            content,
+                            image_description=image_description,
+                            image_sent=image_sent,
+                            media_kind=media_kind,
+                            reason=reason,
+                            sync_memory=sync_memory,
+                        )
+                    )
                 except Exception as exc:
-                    logger.debug(f"[日常分享] 旧版生活插件活动回传失败，未自动重试：{type(exc).__name__}")
+                    logger.debug(
+                        f"[日常分享] 旧版生活插件活动回传失败，未自动重试：{type(exc).__name__}"
+                    )
                     return False
         job = current_share_job.get()
         identity = f"{job['id']}:{target_umo}" if job else uuid.uuid4().hex
@@ -617,8 +650,10 @@ class DailyLifeBridge:
             "target_umo": str(target_umo or "").strip(),
             "content": str(content or "").strip(),
             "image_description": str(image_description or "").strip(),
-            "image_sent": bool(image_sent), "media_kind": str(media_kind or ""),
-            "reason": str(reason or ""), "sync_memory": bool(sync_memory),
+            "image_sent": bool(image_sent),
+            "media_kind": str(media_kind or ""),
+            "reason": str(reason or ""),
+            "sync_memory": bool(sync_memory),
         }
         key = hashlib.sha256(receipt["event_id"].encode()).hexdigest()
         async with self._receipt_lock:
@@ -626,12 +661,18 @@ class DailyLifeBridge:
                 receipts = job.setdefault("external_activity_receipts", {})
                 receipt = receipts.setdefault(key, receipt)
             if self.db is not None:
-                pending = await self.db.get_context_state("external_activity_outbox", {})
+                pending = await self.db.get_context_state(
+                    "external_activity_outbox", {}
+                )
                 receipt = (pending or {}).get(key) or receipt
-                await self.db.update_context_state("external_activity_outbox", {key: receipt})
+                await self.db.update_context_state(
+                    "external_activity_outbox", {key: receipt}
+                )
             sent = await self._send_external_receipt(receipt)
             if sent and self.db is not None:
-                await self.db.update_context_state("external_activity_outbox", {key: None})
+                await self.db.update_context_state(
+                    "external_activity_outbox", {key: None}
+                )
             return sent
 
     async def _send_external_receipt(self, receipt: dict) -> bool:
@@ -651,7 +692,9 @@ class DailyLifeBridge:
             receipts = await self.db.get_context_state("external_activity_outbox", {})
             remaining = {}
             for key, receipt in (receipts or {}).items():
-                if isinstance(receipt, dict) and not await self._send_external_receipt(receipt):
+                if isinstance(receipt, dict) and not await self._send_external_receipt(
+                    receipt
+                ):
                     remaining[key] = receipt
             if receipts:
                 await self.db.set_context_state("external_activity_outbox", remaining)

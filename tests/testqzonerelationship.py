@@ -69,9 +69,7 @@ class QzoneRelationshipRoutingTests(unittest.TestCase):
 
     def test_cached_and_single_client_routes_use_actual_platform_id(self):
         bot = object()
-        service = qzone_service(
-            [Platform("custom-qq", bot)], cached="custom-qq"
-        )
+        service = qzone_service([Platform("custom-qq", bot)], cached="custom-qq")
         self.assertEqual(
             service.relationship_target("20002"), "custom-qq:FriendMessage:20002"
         )

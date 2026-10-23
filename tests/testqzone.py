@@ -2494,6 +2494,62 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.cookie_values["pt4_token"], "pt-token")
         self.assertEqual(ctx.cookie_values["ptcz"], "ptcz-value")
 
+    async def test_wait_until_ready_waits_for_aiocqhttp_reverse_connection(self):
+        service_module = _load_qzone_service()
+
+        class Bot:
+            _wsr_api_clients = {}
+            _wsr_event_clients = set()
+
+        bot = Bot()
+        ctx_service = types.SimpleNamespace(
+            get_bot_instance=lambda _adapter_id: bot,
+            bot_map={},
+            is_onebot_platform=lambda _key: False,
+            get_onebot_bot=lambda **_kwargs: bot,
+        )
+        service = _new_qzone_service(
+            service_module,
+            types.SimpleNamespace(
+                _cached_qq_adapter_id="", qzone_conf={}, ctx_service=ctx_service
+            ),
+        )
+
+        async def connect_later():
+            await asyncio.sleep(0.01)
+            bot._wsr_event_clients.add(object())
+
+        connector = asyncio.create_task(connect_later())
+        self.assertIs(
+            await service.wait_until_ready(timeout=0.2),
+            bot,
+        )
+        await connector
+
+    async def test_wait_until_ready_times_out_before_cookie_queries(self):
+        service_module = _load_qzone_service()
+
+        class Bot:
+            _wsr_api_clients = {}
+            _wsr_event_clients = set()
+
+        bot = Bot()
+        ctx_service = types.SimpleNamespace(
+            get_bot_instance=lambda _adapter_id: bot,
+            bot_map={},
+            is_onebot_platform=lambda _key: False,
+            get_onebot_bot=lambda **_kwargs: bot,
+        )
+        service = _new_qzone_service(
+            service_module,
+            types.SimpleNamespace(
+                _cached_qq_adapter_id="", qzone_conf={}, ctx_service=ctx_service
+            ),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "适配器尚未连接"):
+            await service.wait_until_ready(timeout=0)
+
     async def test_context_retries_after_failure(self):
         service_module = _load_qzone_service()
         service = _new_qzone_service(service_module)

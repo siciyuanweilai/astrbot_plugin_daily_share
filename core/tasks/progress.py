@@ -276,8 +276,8 @@ class TaskProgressService(TaskServiceBase):
             if reason not in reasons:
                 reasons.append(reason)
             failed_kinds.add(step.get("key"))
-        # The dashboard snapshot is transient and may belong to a newer share.
-        # Retain the original media failure in history even after a restart.
+        # 仪表盘快照是临时状态，可能已经属于更新的分享任务。
+        # 即使重启，也要在历史记录中保留原媒体任务的失败原因。
         job = current_share_job.get()
         for kind, (status, reason) in (job or {}).get("media_results", {}).items():
             if kind in failed_kinds or status not in {"error", "empty", "unavailable"}:

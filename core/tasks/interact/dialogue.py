@@ -371,7 +371,9 @@ class QzoneAutoPromptService:
         if life_context:
             prompt_parts.append(life_context)
         memory = await self._related_memory_prompt(
-            str(getattr(post, "text", "") or "") + "\n" + str(getattr(comment, "content", "") or "")
+            str(getattr(post, "text", "") or "")
+            + "\n"
+            + str(getattr(comment, "content", "") or "")
         )
         if memory:
             prompt_parts.append(memory)
@@ -420,7 +422,9 @@ class QzoneAutoPromptService:
         if life_context:
             prompt_parts.append(life_context)
         memory = await self._related_memory_prompt(
-            str(getattr(post, "text", "") or "") + "\n" + str(getattr(comment, "content", "") or "")
+            str(getattr(post, "text", "") or "")
+            + "\n"
+            + str(getattr(comment, "content", "") or "")
         )
         if memory:
             prompt_parts.append(memory)
