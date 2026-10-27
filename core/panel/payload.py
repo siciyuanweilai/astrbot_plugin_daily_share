@@ -19,7 +19,7 @@ def _field(
 _PAGE_BASIC_FIELDS: tuple[_FieldSpec, ...] = (
     _field("llm_provider_id", "str", ""),
     _field("llm_timeout", "int", 120, zero_as_default=True),
-    _field("trigger_mode", "raw", "llm_smart"),
+    _field("trigger_mode", "raw", "life_driven"),
     _field("fixed_times", "list", ["08:00", "20:00"]),
     _field("random_periods", "list", ["08:00-10:00", "19:00-21:00"]),
     _field("share_cron", "raw", "0 8,20 * * *"),
@@ -50,7 +50,7 @@ _PAGE_BRIEFING_FIELDS: tuple[_FieldSpec, ...] = (
 _PAGE_QZONE_FIELDS: tuple[_FieldSpec, ...] = (
     _field("enable_qzone", "bool", False),
     _field("qzone_api_timeout_seconds", "int", 120, zero_as_default=True),
-    _field("qzone_trigger_mode", "raw", "llm_smart"),
+    _field("qzone_trigger_mode", "raw", "life_driven"),
     _field("qzone_fixed_times", "list", ["20:00"]),
     _field("qzone_random_periods", "list", ["19:00-21:00"]),
     _field("qzone_cron", "raw", "0 20 * * *"),

@@ -37,6 +37,7 @@ def interaction(kind, *, posts_count=1, db=None):
         *testqzonecomment._interaction_args(module)
     )
     manager.config.qzone = {
+        "qzone_trigger_mode": "llm_smart",
         "enable_qzone": True,
         f"qzone_enable_auto_{kind}": True,
         f"qzone_auto_{kind}_limit": posts_count,

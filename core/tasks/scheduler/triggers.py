@@ -9,6 +9,7 @@ from ...database.keys import (
 )
 from ...schedule import normalize_schedule_mode
 from ..qinteract import QZONE_AUTO_INTERACTION_STATE_KEY
+from ..interact.intent import interaction_ready, living_interaction
 from .schedulerbase import SchedulerComponent
 
 
@@ -152,7 +153,7 @@ class TaskSchedulerTriggerService(SchedulerComponent):
 
         async def execute_delayed_qzone_auto_interaction():
             async def run_qzone_auto_interaction():
-                logger.info("[日常分享] 开始 QQ 空间自动互动任务...")
+                logger.debug("[日常分享] 开始检查 QQ 空间互动机会。")
                 await self.services.qzone_interaction.execute_qzone_auto_interaction()
 
             await self.schedule.delay._run_tracked_pending_job(
@@ -163,10 +164,14 @@ class TaskSchedulerTriggerService(SchedulerComponent):
                 locked_warning="[日常分享] 上一个 QQ 空间自动互动任务仍在进行，已跳过本次触发",
             )
 
+        if not await interaction_ready(self):
+            return
         await self.schedule.delay._schedule_or_execute_delayed(
             state_key=QZONE_AUTO_INTERACTION_STATE_KEY,
             state_updater=self.db.update_qzone_state,
-            delay_minutes=self.schedule.delay._read_delay_minutes(
+            delay_minutes=0
+            if living_interaction(self)
+            else self.schedule.delay._read_delay_minutes(
                 self.qzone_conf, "qzone_cron_random_delay"
             ),
             delayed_func=execute_delayed_qzone_auto_interaction,

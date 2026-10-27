@@ -421,7 +421,7 @@ class _Plugin:
         self._lock = asyncio.Lock()
         self.basic_conf = {"share_type": "auto"}
         self.extra_shares_conf = {}
-        self.qzone_conf = {}
+        self.qzone_conf = {"qzone_trigger_mode": "llm_smart"}
         self.image_conf = {}
         self.tts_conf = {}
         self.context_conf = {}
@@ -1770,6 +1770,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_tasks_module()
         plugin = _Plugin()
         plugin.qzone_conf = {
+            "qzone_trigger_mode": "llm_smart",
             "qzone_enable_auto_interaction": True,
             "qzone_enable_auto_comment": True,
             "qzone_enable_auto_reply": True,
@@ -1789,6 +1790,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_tasks_module()
         plugin = _Plugin()
         plugin.qzone_conf = {
+            "qzone_trigger_mode": "llm_smart",
             "qzone_enable_auto_interaction": True,
             "qzone_enable_auto_comment": True,
             "qzone_auto_interaction_cron": "15 */3 * * *",
@@ -1806,7 +1808,10 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_tasks_module()
         plugin = _Plugin()
         plugin.basic_conf = {"cron_random_delay": 0}
-        plugin.qzone_conf = {"qzone_cron_random_delay": 5}
+        plugin.qzone_conf = {
+            "qzone_trigger_mode": "llm_smart",
+            "qzone_cron_random_delay": 5,
+        }
         manager = _new_manager(mod, plugin)
         called = False
 
@@ -1842,7 +1847,10 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         delay_mod = sys.modules[f"{TASKS_MODULE_NAME}.scheduler.delay"]
         plugin = _Plugin()
         plugin.basic_conf = {"cron_random_delay": 0}
-        plugin.qzone_conf = {"qzone_cron_random_delay": 30}
+        plugin.qzone_conf = {
+            "qzone_trigger_mode": "llm_smart",
+            "qzone_cron_random_delay": 30,
+        }
         manager = _new_manager(mod, plugin)
         called = False
 

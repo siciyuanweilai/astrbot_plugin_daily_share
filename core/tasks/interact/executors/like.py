@@ -3,6 +3,7 @@ import asyncio
 from astrbot.api import logger
 
 from ..scan import _query_qzone_friend_posts
+from ..intent import interaction_ready, wants_interaction
 from ..task import (
     QzoneStatePersistenceError,
     _qzone_abort_query_failure,
@@ -91,6 +92,11 @@ async def execute_qzone_auto_like_task(
             logger.debug(f"[日常分享] QQ 空间自动点赞跳过: {target_error}")
             continue
 
+        if not await wants_interaction(
+            owner, "like", post
+        ) or not await interaction_ready(owner):
+            result["skipped"] += 1
+            continue
         try:
             await owner.plugin.qzone_service.like(post_key)
             _mark_qzone_post_processed(

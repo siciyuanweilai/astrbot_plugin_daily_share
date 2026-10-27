@@ -249,6 +249,7 @@ class AlbumAutoReplyTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 3,

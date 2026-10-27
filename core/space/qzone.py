@@ -21,6 +21,7 @@ from .gateway import QzoneClientGateway
 from .hfive.error import QzoneH5ErrorService
 from .hfive.packets import QzoneH5BaseService
 from .hfive.poster import QzoneH5RequestService
+from .mentions import normalized_qzone_publish_text, qzone_publish_text
 from .merge import QzoneFeedMergeService
 from .models import QzoneComment as QzoneComment
 from .models import QzoneContext, QzonePost
@@ -513,7 +514,7 @@ class QzoneService:
 
     @staticmethod
     def _normalized_publish_text(value: str) -> str:
-        return " ".join(str(value or "").strip().split())
+        return normalized_qzone_publish_text(value)
 
     async def _confirm_ambiguous_publish(
         self,
@@ -541,8 +542,13 @@ class QzoneService:
         return None
 
     async def publish_post(
-        self, *, text: str = "", images: list | None = None
+        self,
+        *,
+        text: str = "",
+        images: list | None = None,
+        mentions: list[dict[str, str]] | None = None,
     ) -> QzonePost:
+        text = qzone_publish_text(text, mentions)
         ctx = await self.context()
         pic_bos = []
         richvals = []

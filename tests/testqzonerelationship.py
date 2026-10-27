@@ -269,6 +269,7 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calls, ["qq-test:FriendMessage:20002"])
 
     async def test_reply_executor_without_triggering_session_uses_actual_actor(self):
+        self.owner.config.qzone["qzone_trigger_mode"] = "llm_smart"
         replyer = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.executors.replyer"]
         task = sys.modules[f"{TASKS_PACKAGE_NAME}.interact.task"]
         self.owner._qzone_send_auto_reply_result = AsyncMock()

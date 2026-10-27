@@ -12,6 +12,7 @@ from ..database.keys import (
     SOURCE_COMMAND,
 )
 from ..reaction import clear_processing, mark_failed, mark_processing, mark_success
+from ..space.mentions import qzone_publish_text
 from ..tasks.interact.receipt import record_qzone_interaction
 from ..tasks.interact.totals import qzone_interaction_outcome
 from ..tasks.interact.tracker import (
@@ -608,8 +609,9 @@ class PluginToolService(SupportComponent):
         content: str,
         images: list,
         self_uin: int,
+        mentions: list[dict[str, str]] | None = None,
     ) -> str:
-        text = str(content or "").strip()
+        text = qzone_publish_text(str(content or "").strip(), mentions)
         if not text and not images:
             return "说说内容或媒体不能为空。"
         post = await self.qzone_service.publish_post(text=text, images=images)
@@ -783,6 +785,7 @@ class PluginToolService(SupportComponent):
         pic_key: str = "",
         photo_t: str = "",
         comment_count: int = 10,
+        mentions: list[dict[str, str]] | None = None,
     ):
         if self._is_terminated:
             return ""
@@ -838,6 +841,7 @@ class PluginToolService(SupportComponent):
                 is_admin=is_admin,
                 sender_id=sender_id,
                 self_uin=self_uin,
+                mentions=mentions,
             )
             if marked_processing:
                 operation_succeeded = self.tools._qzone_mutating_action_succeeded(
@@ -871,7 +875,10 @@ class PluginToolService(SupportComponent):
         is_admin: bool,
         sender_id: str,
         self_uin: int,
+        mentions: list[dict[str, str]] | None = None,
     ) -> str:
+        if mentions and action_key != "publish":
+            return "mentions 仅用于发布说说时 @ 好友，请使用 action=publish。"
         if action_key == "list":
             return await self.tools._qzone_tool_list_posts(
                 event,
@@ -888,7 +895,11 @@ class PluginToolService(SupportComponent):
             )
         if action_key == "publish":
             return await self.tools._qzone_tool_publish_post(
-                event, content=content, images=images, self_uin=self_uin
+                event,
+                content=content,
+                images=images,
+                self_uin=self_uin,
+                mentions=mentions,
             )
         if action_key == "like":
             return await self.tools._qzone_tool_like_post(event, post_id=post_id)

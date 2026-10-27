@@ -7,6 +7,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType, TimePeriod
 from ...database.keys import QZONE_TARGET_ID
+from ..opportunity import opportunity_prompt
 
 if TYPE_CHECKING:
     from . import TaskQzoneService
@@ -43,7 +44,7 @@ class TaskQzoneContentService:
             period,
             QZONE_TARGET_ID,
             False,
-            post_ctx,
+            post_ctx + opportunity_prompt(QZONE_TARGET_ID),
             news_data,
             nickname="",
             recent_post_contents=recent_post_contents,

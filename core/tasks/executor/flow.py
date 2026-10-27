@@ -8,7 +8,8 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import ShareType, TimePeriod
 from ...constants import period_label, share_type_label
-from ...database.keys import SOURCE_SCHEDULED, SOURCE_SMART
+from ...database.keys import AUTONOMOUS_SOURCES, SOURCE_LIFE
+from ..opportunity import opportunity_prompt
 from ...integrations.contact import coordinate_share
 from ...toolkit import format_exception
 from ..continuation import preserve_share
@@ -148,7 +149,9 @@ class TaskExecutorService(TaskServiceBase):
             )
         )
         if is_group and "group_info" in content_context["hist_data"]:
-            if not specific_target and not self.ctx_service.check_group_strategy(
+            if (
+                not specific_target or history_source == SOURCE_LIFE
+            ) and not self.ctx_service.check_group_strategy(
                 content_context["group_info"]
             ):
                 logger.info(f"[日常分享] 因策略跳过群组 {uid}")
@@ -168,6 +171,7 @@ class TaskExecutorService(TaskServiceBase):
             )
             if memory:
                 content_context["life_prompt"] += "\n\n" + memory
+        content_context["life_prompt"] += opportunity_prompt(uid)
         content = await self.content_service.generate(
             stype,
             period,
@@ -441,7 +445,7 @@ class TaskExecutorService(TaskServiceBase):
             source_type or ("command" if event else "scheduled")
         ).strip()
         if exclude_custom_cron is None:
-            exclude_custom_cron = history_source in {SOURCE_SCHEDULED, SOURCE_SMART}
+            exclude_custom_cron = history_source in AUTONOMOUS_SOURCES
         targets = self.resolve_execute_share_targets(
             specific_target,
             target_scope,
@@ -476,7 +480,7 @@ class TaskExecutorService(TaskServiceBase):
                 break
             continuations = getattr(self.plugin, "share_continuations", None)
             if (
-                history_source in {SOURCE_SCHEDULED, SOURCE_SMART}
+                history_source in AUTONOMOUS_SOURCES
                 and continuations is not None
                 and await continuations.has_pending_share(uid)
             ):

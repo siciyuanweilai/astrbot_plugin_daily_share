@@ -328,7 +328,6 @@ h1 {
 }
 
 .bento-ribbon .dashboard-toggle {
-  --ribbon-width: 306px;
   --ribbon-accent: #418cab;
   --ribbon-wash: rgba(224, 250, 255, 0.84);
   --ribbon-bubble: rgba(157, 229, 207, 0.26);

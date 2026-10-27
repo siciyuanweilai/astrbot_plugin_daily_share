@@ -2,6 +2,7 @@ from astrbot.api import logger
 
 from ..candidate import _qzone_self_reply_candidates
 from ..errors import QzoneAutoInteractionRateLimited
+from ..intent import wants_interaction
 from ..scan import (
     _expand_qzone_photo_posts,
     _merge_qzone_posts_by_key,
@@ -48,6 +49,11 @@ async def _execute_qzone_auto_reply_candidates(
         if pending_reply:
             reply = pending_reply
         else:
+            if not await wants_interaction(
+                owner, "reply", post, comment, parent_comment
+            ):
+                result["skipped"] += 1
+                continue
             try:
                 reply = (
                     await owner._generate_qzone_auto_reply_thread(

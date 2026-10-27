@@ -128,7 +128,7 @@ export function createSettingsConfig({
           el.cfgBasicSmartQuietHours,
           el.cfgBasicSmartPrompt,
         ],
-        defaultMode: "llm_smart",
+        defaultMode: "life_driven",
       },
       briefing: {
         mode: el.cfgBriefingScheduleMode,
@@ -154,7 +154,7 @@ export function createSettingsConfig({
           el.cfgQzoneSmartQuietHours,
           el.cfgQzoneSmartPrompt,
         ],
-        defaultMode: "llm_smart",
+        defaultMode: "life_driven",
       },
     };
     return groups[kind] || null;
@@ -168,11 +168,26 @@ export function createSettingsConfig({
       fixed_time: "fixed",
       random_period: "random",
       llm_smart: "smart",
+      life_driven: "smart",
       cron: "cron",
     }[mode] || "smart";
     for (const key of ["fixed", "random", "smart", "cron"]) {
       for (const node of el.configForm?.querySelectorAll(`[data-schedule="${kind}-${key}"]`) || []) {
         node.hidden = key !== visibleKey;
+      }
+    }
+    const preference = controls.smart?.[2]?.closest?.("label");
+    if (preference) preference.hidden = mode !== "llm_smart";
+    if (kind === "qzone") {
+      const living = mode === "life_driven";
+      const clock = el.cfgQzoneAutoInteractionCron?.closest?.("label");
+      if (clock) clock.hidden = living;
+      for (const [input, automatic, probability] of [
+        [el.cfgQzoneSelfCommentProbability, "自评（0 关闭，大于 0 自主决定）", "自己的说说自动评论概率（%）"],
+        [el.cfgQzoneAutoCommentReplyProbability, "主动回评（0 关闭，大于 0 自主决定）", "回复其他用户评论概率（%）"],
+      ]) {
+        const label = input?.closest?.("label")?.querySelector("span");
+        if (label) label.textContent = living ? automatic : probability;
       }
     }
     const delayVisible = mode === "fixed_time" || mode === "cron";

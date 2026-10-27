@@ -458,6 +458,14 @@
   resize: vertical;
 }
 
+.qzone-publish-hint {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .qzone-media-strip {
   display: flex;
   flex-wrap: wrap;

@@ -75,7 +75,7 @@ class DashboardRouteStatusService(PanelComponent):
                     ),
                 },
                 "config": {
-                    "trigger_mode": self.basic_conf.get("trigger_mode", "llm_smart"),
+                    "trigger_mode": self.basic_conf.get("trigger_mode", "life_driven"),
                     "fixed_times": list(
                         self.basic_conf.get("fixed_times") or ["08:00", "20:00"]
                     ),
@@ -96,7 +96,7 @@ class DashboardRouteStatusService(PanelComponent):
                     "share_type": self.basic_conf.get("share_type", "自动"),
                     "qzone_enabled": bool(self.qzone_conf.get("enable_qzone", False)),
                     "qzone_trigger_mode": self.qzone_conf.get(
-                        "qzone_trigger_mode", "llm_smart"
+                        "qzone_trigger_mode", "life_driven"
                     ),
                     "qzone_fixed_times": list(
                         self.qzone_conf.get("qzone_fixed_times") or ["20:00"]

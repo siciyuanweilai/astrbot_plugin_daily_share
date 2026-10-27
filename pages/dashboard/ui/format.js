@@ -30,6 +30,7 @@ const triggerModeLabels = {
   fixed_time: "固定时间",
   random_period: "随机时段",
   llm_smart: "智能定时",
+  life_driven: "生活驱动",
   cron: "高级定时表达式",
 };
 

@@ -176,6 +176,11 @@ async def _qzone_prepare_task(
         logger.debug(disabled_log)
         return False, {}, {}, int(time.time())
 
+    from .intent import interaction_ready
+
+    if not await interaction_ready(owner):
+        return False, {}, {}, int(time.time())
+
     result["enabled"] = True
     now = int(time.time())
     state = await owner.db.get_qzone_state(state_key, {})

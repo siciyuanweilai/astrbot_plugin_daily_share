@@ -96,6 +96,7 @@ export function createQzoneComposer({
 
   async function publishQzone(event) {
     event.preventDefault();
+    if (state.qzonePublishing || state.qzoneMediaReading) return;
     const content = text(el.qzonePublishText?.value).trim();
     const media = state.qzoneMedia
       .map((item) => ({

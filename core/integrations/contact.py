@@ -6,6 +6,8 @@ from functools import wraps
 
 from astrbot.api import logger
 
+from ..database.keys import AUTONOMOUS_SOURCES
+
 current_contact = ContextVar("daily_share_contact", default=None)
 
 
@@ -29,7 +31,7 @@ async def contact(plugin, target, owner, *, action="reserve", expected=None):
 def coordinate_share(method):
     @wraps(method)
     async def run(self, *args, **kwargs):
-        if kwargs.get("history_source") not in {"scheduled", "smart"}:
+        if kwargs.get("history_source") not in AUTONOMOUS_SOURCES:
             return await method(self, *args, **kwargs)
         target = kwargs["uid"]
         owner = "share:" + uuid.uuid4().hex

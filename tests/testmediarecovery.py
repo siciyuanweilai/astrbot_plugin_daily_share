@@ -137,6 +137,36 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
             receiver={"users": [fixtures.USER_TARGET_1], "groups": []},
         )
 
+    async def test_living_mode_cancels_old_global_but_preserves_explicit_target_cron(
+        self,
+    ):
+        self.enable_scheduled()
+        self.plugin.basic_conf.update(
+            trigger_mode="life_driven", smart_schedule_quiet_hours=[]
+        )
+        job = await self.job()
+        job["params"]["history_source"] = "scheduled"
+        self.assertEqual(self.service.recovery_allowed(job), (False, True))
+        self.manager.update_configs(
+            receiver={
+                "users": {fixtures.USER_TARGET_1: {"cron": "0 12 * * *"}},
+                "groups": [],
+            }
+        )
+        self.assertEqual(self.service.recovery_allowed(job), (True, False))
+        job["params"]["history_source"] = "smart_schedule"
+        self.assertEqual(self.service.recovery_allowed(job), (False, True))
+
+    async def test_living_continuation_does_not_survive_switch_to_clock_mode(self):
+        self.enable_scheduled()
+        job = await self.job()
+        job["params"]["history_source"] = "life_driven"
+        self.assertEqual(self.service.recovery_allowed(job), (False, True))
+        self.plugin.basic_conf.update(
+            trigger_mode="life_driven", smart_schedule_quiet_hours=[]
+        )
+        self.assertEqual(self.service.recovery_allowed(job), (True, False))
+
     async def test_contact_wait_survives_reload_and_reuses_all_finished_media_once(
         self,
     ):

@@ -18,10 +18,6 @@
   min-width: 0;
 }
 
-.dashboard-view .topbar {
-  padding-right: 112px;
-}
-
 .topbar-actions {
   display: flex;
   align-items: center;

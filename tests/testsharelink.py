@@ -206,6 +206,7 @@ class ShareLinkTests(unittest.IsolatedAsyncioTestCase):
     def test_recovery_obeys_disabled_expired_and_smart_quiet_gates(self):
         smart = types.SimpleNamespace(is_quiet_time=lambda now, quiet: True)
         plugin = types.SimpleNamespace(
+            config={"enable_auto_share": True},
             qzone_conf={"enable_qzone": False, "qzone_trigger_mode": "llm_smart"},
             task_manager=types.SimpleNamespace(
                 schedule=types.SimpleNamespace(smart=smart)

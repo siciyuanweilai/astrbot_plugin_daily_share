@@ -206,7 +206,8 @@
 
             <section class="qzone-timeline">
               <form id="qzonePublishForm" class="qzone-composer">
-                <textarea id="qzonePublishText" rows="4" placeholder="写一点温柔日常，发到 QQ 空间..."></textarea>
+                <textarea id="qzonePublishText" rows="4" aria-describedby="qzonePublishHint" placeholder="写一点温柔日常，发到 QQ 空间..."></textarea>
+                <small id="qzonePublishHint" class="qzone-publish-hint">艾特好友：在正文任意位置插入 <code>@{uin:QQ号,nick:昵称}</code>，支持多个好友。</small>
                 <div id="qzoneMediaStrip" class="qzone-media-strip"></div>
                 <div class="qzone-composer-actions">
                   <label class="qzone-upload-button">
@@ -373,6 +374,7 @@
               <label class="setting-field">
                 <span>触发模式</span>
                 <select id="cfgBasicTriggerMode">
+                  <option value="life_driven">生活驱动</option>
                   <option value="fixed_time">固定时间</option>
                   <option value="random_period">随机时段</option>
                   <option value="llm_smart">智能定时</option>
@@ -392,8 +394,8 @@
                 <input id="cfgBasicShareCron" type="text" placeholder="0 8,20 * * *" />
               </label>
               <label class="setting-field" data-schedule="basic-smart">
-                <span>智能次数</span>
-                <input id="cfgBasicSmartMaxCount" type="number" min="1" max="6" step="1" />
+                <span title="生活驱动中是每日生成与发送尝试上限，可以全天不分享">每日分享上限</span>
+                <input id="cfgBasicSmartMaxCount" type="number" min="1" max="24" step="1" />
               </label>
               <label class="setting-field" data-schedule="basic-smart">
                 <span>勿扰时间</span>
@@ -573,7 +575,7 @@
               <h2 class="settings-section-title">空间</h2>
               <label class="setting-switch">
                 <input id="cfgQzoneEnabled" type="checkbox" />
-                <span>定时说说</span>
+                <span>自动说说</span>
               </label>
               <label class="setting-field">
                 <span>请求超时秒数</span>
@@ -582,6 +584,7 @@
               <label class="setting-field">
                 <span>触发模式</span>
                 <select id="cfgQzoneTriggerMode">
+                  <option value="life_driven">生活驱动</option>
                   <option value="fixed_time">固定时间</option>
                   <option value="random_period">随机时段</option>
                   <option value="llm_smart">智能定时</option>
@@ -605,8 +608,8 @@
                 <input id="cfgQzoneDelay" type="number" min="0" max="60" step="1" />
               </label>
               <label class="setting-field" data-schedule="qzone-smart">
-                <span>智能次数</span>
-                <input id="cfgQzoneSmartMaxCount" type="number" min="1" max="6" step="1" />
+                <span title="生活驱动中是每日生成与发送尝试上限，可以全天不分享">每日分享上限</span>
+                <input id="cfgQzoneSmartMaxCount" type="number" min="1" max="24" step="1" />
               </label>
               <label class="setting-field" data-schedule="qzone-smart">
                 <span>勿扰时间</span>
@@ -641,7 +644,7 @@
               </label>
               <label class="setting-switch">
                 <input id="cfgQzoneOwnPostLike" type="checkbox" />
-                <span>发布自己的说说后自动点赞</span>
+                <span>允许为自己的说说点赞</span>
               </label>
               <label class="setting-field">
                 <span>自己的说说自动评论概率（%）</span>
@@ -660,7 +663,7 @@
                 <span>点赞好友动态</span>
               </label>
               <label class="setting-field">
-                <span>点赞数量</span>
+                <span>单轮点赞上限</span>
                 <input id="cfgQzoneAutoLikeLimit" type="number" min="1" max="10" step="1" />
               </label>
               <label class="setting-switch">
@@ -668,7 +671,7 @@
                 <span>评论好友动态</span>
               </label>
               <label class="setting-field">
-                <span>评论数量</span>
+                <span>单轮评论上限</span>
                 <input id="cfgQzoneAutoCommentLimit" type="number" min="1" max="10" step="1" />
               </label>
               <label class="setting-field">
@@ -676,7 +679,7 @@
                 <input id="cfgQzoneAutoCommentReplyProbability" type="number" min="0" max="100" step="5" />
               </label>
               <label class="setting-field">
-                <span>每条动态概率回评人数上限</span>
+                <span>每条动态主动回评人数上限</span>
                 <input id="cfgQzoneAutoCommentReplyUserLimit" type="number" min="1" max="10" step="1" />
               </label>
               <label class="setting-field">

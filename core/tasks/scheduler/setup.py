@@ -3,7 +3,7 @@ from __future__ import annotations
 from astrbot.api import logger
 
 from ...config import CRON_TEMPLATES
-from ...database.keys import target_state_key
+from ...database.keys import QZONE_TARGET_ID, target_state_key
 from ...schedule import (
     BRIEFING_SCHEDULE,
     GLOBAL_SCHEDULE,
@@ -26,6 +26,10 @@ class TaskSchedulerSetupService(SchedulerComponent):
         self.setup_cleanup_tasks()
         self.setup_cron(generation=generation)
         self.setup_custom_target_crons()
+        if self.schedule.living.enabled("global") or self.schedule.living.enabled(
+            QZONE_TARGET_ID
+        ):
+            self.schedule.living.setup(generation=generation)
 
         enable_60s = self.extra_shares_conf.get("enable_60s_news", False)
         enable_ai = self.extra_shares_conf.get("enable_ai_news", False)

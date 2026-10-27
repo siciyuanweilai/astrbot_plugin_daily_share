@@ -198,6 +198,10 @@ def _load_dashboard_config_modules(config_module):
         (f"{dashboard_package_name}.payload", ROOT / "core" / "panel" / "payload.py"),
         (f"{apply_package_name}.field", ROOT / "core" / "panel" / "apply" / "field.py"),
         (
+            f"{apply_package_name}.scheduleapply",
+            ROOT / "core" / "panel" / "apply" / "scheduleapply.py",
+        ),
+        (
             f"{apply_package_name}.section",
             ROOT / "core" / "panel" / "apply" / "section.py",
         ),
@@ -550,6 +554,36 @@ class ConfigSchemaTests(unittest.TestCase):
                 ],
                 expected,
             )
+
+    def test_life_resource_limits_can_be_saved_without_changing_smart_schedule_limits(self):
+        import importlib
+
+        modules = _load_dashboard_config_modules(_load_config_module())
+        schedules = importlib.import_module("daily_share_schema_pkg.core.schedule")
+
+        class Plugin(
+            modules["scheduleapply"].DashboardApplyScheduleService,
+            modules["validation"].DashboardConfigValidationService,
+        ):
+            pass
+
+        runtime = SimpleNamespace()
+        plugin = Plugin(runtime)
+        runtime.validation = plugin
+        runtime.schedule_apply = plugin
+        for definition in (schedules.GLOBAL_SCHEDULE, schedules.QZONE_SCHEDULE):
+            for mode, count, expected in (
+                ("life_driven", 12, 12),
+                ("生活驱动", 24, 24),
+                ("life_driven", 30, 24),
+                ("llm_smart", 12, 6),
+            ):
+                with self.subTest(mode=mode, count=count, channel=definition.mode_key):
+                    target = {}
+                    plugin._page_apply_schedule_fields(target, {
+                        definition.mode_key: mode, definition.smart_max_key: count,
+                    }, definition)
+                    self.assertEqual(target[definition.smart_max_key], expected)
 
     def test_schedule_modes_use_current_qzone_auto_interaction_fields(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))

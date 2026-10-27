@@ -140,6 +140,8 @@ class TaskSchedulerCronService(SchedulerComponent):
             conf.get(definition.mode_key, definition.mode_default),
             definition.mode_default,
         )
+        if mode == "life_driven" and mode in definition.mode_options:
+            return
         if mode == "fixed_time":
             fixed_times = list(
                 conf.get(definition.fixed_key) or definition.fixed_default

@@ -203,7 +203,7 @@ def _interaction_args(module):
         lock=asyncio.Lock(),
         basic_conf={},
         extra_shares_conf={},
-        qzone_conf={},
+        qzone_conf={"qzone_trigger_mode": "llm_smart"},
         image_conf={},
         tts_conf={},
         context_conf={},
@@ -803,6 +803,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "qzone_auto_comment_prompt": "像熟人随口一句，别太正式。",
                     "qzone_auto_reply_prompt": "回得俏皮一点，但不要阴阳怪气。",
                 }
@@ -1202,6 +1203,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_limit": 2,
                 }
@@ -1809,6 +1811,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_provider": "qzone-vision-provider",
                 }
@@ -1918,6 +1921,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "qzone_enable_auto_comment_image_vision": True,
                     "qzone_auto_comment_image_vision_provider": "qzone-vision-provider",
                 }
@@ -2341,6 +2345,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -2422,6 +2427,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -2503,6 +2509,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -2569,6 +2576,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -2647,6 +2655,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -2715,6 +2724,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -2769,6 +2779,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -2829,6 +2840,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
@@ -2902,6 +2914,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
@@ -2975,6 +2988,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3037,6 +3051,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3104,6 +3119,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 2,
@@ -3165,6 +3181,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3226,6 +3243,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3289,6 +3307,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3348,6 +3367,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3416,6 +3436,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 1,
@@ -3504,6 +3525,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
@@ -3588,6 +3610,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
@@ -3666,6 +3689,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -3751,6 +3775,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -3822,6 +3847,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -3912,6 +3938,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4055,6 +4082,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4159,6 +4187,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4270,6 +4299,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4366,6 +4396,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4459,6 +4490,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4590,6 +4622,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4733,6 +4766,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4868,6 +4902,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 super().__init__(*_interaction_args(module))
                 self.llm_calls = 0
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -4994,6 +5029,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -5100,6 +5136,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -5195,6 +5232,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 1,
@@ -5305,6 +5343,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -5427,6 +5466,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -5537,6 +5577,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -5664,6 +5705,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -5792,6 +5834,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -5961,6 +6004,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -6068,6 +6112,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 2,
@@ -6187,6 +6232,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_reply": True,
                     "qzone_auto_reply_limit": 2,
@@ -6292,6 +6338,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -6356,6 +6403,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 1,
@@ -6422,6 +6470,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,
@@ -6488,6 +6537,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,
@@ -6543,6 +6593,7 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_interaction": True,
                     "qzone_enable_auto_like": True,

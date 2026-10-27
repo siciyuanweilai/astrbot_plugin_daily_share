@@ -35,6 +35,7 @@ const actionSourceLabels = {
   manual: "手动",
   scheduled: "定时",
   smart_schedule: "智能定时",
+  life_driven: "生活分享",
   command: "自然语言",
 };
 

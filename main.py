@@ -174,8 +174,16 @@ class DailySharePlugin(Star):
     ) -> None:
         self.dashboard_service.emit_dashboard_event(event_type, data)
 
-    async def publish_qzone(self, text: str = "", images: list | None = None):
-        return await self.support_service.publish_qzone(text=text, images=images)
+    async def publish_qzone(
+        self,
+        text: str = "",
+        images: list | None = None,
+        *,
+        mentions: list[dict[str, str]] | None = None,
+    ):
+        return await self.support_service.publish_qzone(
+            text=text, images=images, mentions=mentions
+        )
 
     def target_entry_matches(
         self, item, origin: str, real_id: str, candidates: set[str]
@@ -325,6 +333,7 @@ class DailySharePlugin(Star):
         pic_key: str = "",
         photo_t: str = "",
         comment_count: int = 10,
+        mentions: list[dict[str, str]] | None = None,
     ):
         """
         QQ 空间工具：查看、详情、发布和评论说说，也可读取或评论相册照片。
@@ -332,12 +341,13 @@ class DailySharePlugin(Star):
         所有权：用户说“我的说说”指当前说话用户的 QQ 空间；只有明确说“你的/机器人自己的说说”才指机器人自己的空间。
         串台边界：好友动态续评用 qzone_auto_interact.comment；机器人自己说说的评论回评用 qzone_auto_interact.reply。
         权限：普通用户只能查看、详情、点赞、评论自己 QQ 号的说说或相册照片；操作其他 QQ 号仅管理员可用。
+        发布提及：用户明确要求 @ 好友时传 mentions，使用用户提供或可核实上下文中的 QQ 号和昵称；缺少身份信息时先询问，不凭昵称猜 QQ 号，不默认添加提及。mentions 只用于 publish，不能用于评论或设置可见范围。
 
         Args:
             action (string): 标准动作枚举。list 表示查看说说；detail 表示查看详情；publish 表示发布文字或图片说说；like 表示点赞指定说说；comment 表示直发说说评论；auto_comment 表示自动生成说说评论；photo 表示读取相册照片及评论；photo_comment 表示按用户给出的正文发表评论到相册照片。只能填写 list、detail、publish、like、comment、auto_comment、photo、photo_comment。
             post_id (string): 说说 ID，来自 list/detail 返回中的 ID，格式为 uin:tid。点赞、评论、自动评论、详情必填。
             target_id (string): 可选，要查看的 QQ 号。留空表示查看自己的 QQ 空间说说；填 QQ 号表示查看该 QQ 空间说说。
-            content (string): 发布说说或评论的正文。publish/comment 必填。comment 时必须是用户明确要求发送的原文；需要模型代写评论时不要填写本参数直发，改用 action=auto_comment。
+            content (string): 发布说说或评论的正文。publish 时正文、图片和 mentions 至少提供一项；comment 必填且必须是用户明确要求发送的原文。需要模型代写评论时不要填写本参数直发，改用 action=auto_comment。
             images (array[string]): 发布说说附带的图片路径或图片 URL 列表，支持正文配图和转发配图，可留空。
             pos (number): 查看说说起始位置，默认 0。
             num (number): 查看说说数量，默认 5，最多 10。
@@ -345,6 +355,7 @@ class DailySharePlugin(Star):
             pic_key (string): 照片 picKey。photo/photo_comment 必填。
             photo_t (string): 照片查看器返回的 t，可选；有抓包值时填入。
             comment_count (number): photo 读取的评论数，默认 10，最多 50。
+            mentions (array[object]): publish 时要 @ 的好友列表，每项包含 uin（QQ 号字符串）和 nick（昵称），例如 [{"uin":"123456789","nick":"好友昵称"}]。可留空；自动添加到正文末尾，同一 QQ 号去重。需要正文内指定位置时可在 content 中使用 @{uin:123456789,nick:好友昵称}。
         """
         return await self.support_service.run_qzone_tool(
             event,
@@ -359,6 +370,7 @@ class DailySharePlugin(Star):
             pic_key=pic_key,
             photo_t=photo_t,
             comment_count=comment_count,
+            mentions=mentions,
         )
 
     @filter.llm_tool(name="qzone_auto_interact")

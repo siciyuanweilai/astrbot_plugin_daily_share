@@ -6,6 +6,7 @@ import time
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
+from ..schedule import QZONE_SCHEDULE, normalize_schedule_mode
 
 if TYPE_CHECKING:
     from .models import QzonePost
@@ -24,7 +25,7 @@ def self_comment_probability(conf: dict) -> int:
 
 
 class QzoneSelfPostService:
-    """仅处理刚确认发布的说说；预先保存抽签和提交标记，避免重复动作。"""
+    """仅处理刚确认发布的说说；预先保存意愿和提交标记，避免重复动作。"""
 
     def __init__(self, owner: QzoneService, plugin) -> None:
         self.owner = owner
@@ -83,10 +84,16 @@ class QzoneSelfPostService:
             if isinstance(state, dict) and post.key in state:
                 return
             conf = self.owner._qzone_config()
+            living = (
+                normalize_schedule_mode(
+                    conf.get("qzone_trigger_mode"), QZONE_SCHEDULE.mode_default
+                )
+                == "life_driven"
+            )
             like = bool(conf.get("qzone_auto_like_own_post", True))
             probability = self_comment_probability(conf)
             comment = probability > 0 and (
-                probability == 100 or random.random() * 100 < probability
+                living or probability == 100 or random.random() * 100 < probability
             )
             entry = {
                 "at": int(time.time()),
@@ -98,8 +105,18 @@ class QzoneSelfPostService:
 
         if like and not self.plugin._is_terminated:
             try:
-                await self.owner.like(post.key)
-                entry["like"] = "liked"
+                interaction = (
+                    self.plugin.task_manager.qzone_interaction if living else None
+                )
+                if living and not await interaction.wants_interaction(
+                    "self_like", post
+                ):
+                    entry["like"] = "skipped"
+                elif not living or await interaction.interaction_ready():
+                    await self.owner.like(post.key)
+                    entry["like"] = "liked"
+                else:
+                    entry["like"] = "cancelled"
             except Exception as exc:
                 entry["like"] = "failed"
                 logger.warning(f"[日常分享] 自己的说说点赞失败: {exc}")
@@ -108,6 +125,12 @@ class QzoneSelfPostService:
         if comment and not self.plugin._is_terminated:
             try:
                 interaction = self.plugin.task_manager.qzone_interaction
+                if living and not await interaction.wants_interaction(
+                    "self_comment", post
+                ):
+                    entry["comment"] = "skipped"
+                    await self._save(post.key, entry)
+                    return
                 content = await interaction.generate_qzone_self_comment(
                     post, image_count=image_count
                 )
@@ -117,8 +140,10 @@ class QzoneSelfPostService:
                     content = await clean(content, scene="qzone_comment")
                 if not str(content or "").strip():
                     raise ValueError("自评清洗后为空，停止提交")
-                if self.plugin._is_terminated or not self_comment_probability(
-                    self.owner._qzone_config()
+                if (
+                    self.plugin._is_terminated
+                    or (living and not await interaction.interaction_ready())
+                    or not self_comment_probability(self.owner._qzone_config())
                 ):
                     entry["comment"] = "cancelled"
                     await self._save(post.key, entry)

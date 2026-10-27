@@ -79,6 +79,7 @@ export function createQzoneUi({
       el.qzonePublishButton.classList.toggle("is-loading", state.qzonePublishing);
     }
     if (el.qzoneMediaInput) el.qzoneMediaInput.disabled = state.qzonePublishing || state.qzoneMediaReading;
+    if (el.qzonePublishText) el.qzonePublishText.disabled = state.qzonePublishing;
   }
 
   const composer = createQzoneComposer({

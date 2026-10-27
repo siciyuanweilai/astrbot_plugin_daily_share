@@ -21,7 +21,13 @@ _PAGE_PREFERENCES_DEFAULTS = {
     "sakura_enabled": True,
 }
 _PAGE_SHARE_TYPE_OPTIONS = {"自动", "问候", "新闻", "心情", "知识", "推荐"}
-_PAGE_TRIGGER_MODE_OPTIONS = {"fixed_time", "random_period", "llm_smart", "cron"}
+_PAGE_TRIGGER_MODE_OPTIONS = {
+    "life_driven",
+    "fixed_time",
+    "random_period",
+    "llm_smart",
+    "cron",
+}
 _PAGE_BRIEFING_SCHEDULE_MODE_OPTIONS = {
     "fixed_time",
     "random_period",
@@ -36,6 +42,7 @@ _PAGE_SHARE_SOURCE_LABELS = {
     "manual": "手动",
     "scheduled": "定时",
     "smart_schedule": "智能定时",
+    "life_driven": "生活分享",
     "command": "自然语言",
 }
 _PAGE_BASIC_SEQUENCE_DEFAULTS = {

@@ -85,6 +85,7 @@ class PhotoBatchTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(task_module))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_comment": True,
                     "qzone_auto_comment_limit": 10,

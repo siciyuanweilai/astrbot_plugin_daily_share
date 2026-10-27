@@ -291,6 +291,7 @@ class QzoneLikeServiceTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 super().__init__(*_interaction_args(tasks))
                 self.config.qzone = {
+                    "qzone_trigger_mode": "llm_smart",
                     "enable_qzone": True,
                     "qzone_enable_auto_like": True,
                     "qzone_auto_like_limit": 3,

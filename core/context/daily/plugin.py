@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import math
+
 from ...database.keys import QZONE_TARGET_ID
 from ...platform import parse_platform_session
 from ..contextbase import ContextComponent
@@ -101,4 +104,10 @@ class ContextLifePluginService(ContextComponent):
         body = body_prompt(public_data)
         if body:
             result["body_context"] = body
+        willingness = (raw_data.get("contact_rhythm") or {}).get("willingness")
+        if type(willingness) in (int, float) and math.isfinite(willingness):
+            # 公开互动只共享主动意愿，不带入该对象的私聊收发与等待信息。
+            result["initiative_context"] = json.dumps(
+                {"willingness": max(0, min(1, willingness))}, ensure_ascii=False
+            )
         return result

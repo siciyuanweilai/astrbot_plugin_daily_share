@@ -16,6 +16,8 @@ SOURCE_COMMAND = "command"
 SOURCE_MANUAL = "manual"
 SOURCE_SCHEDULED = "scheduled"
 SOURCE_SMART = "smart_schedule"
+SOURCE_LIFE = "life_driven"
+AUTONOMOUS_SOURCES = frozenset({SOURCE_SCHEDULED, SOURCE_SMART, SOURCE_LIFE})
 
 MEDIA_IMAGE = "image"
 MEDIA_VIDEO = "video"

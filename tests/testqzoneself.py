@@ -18,11 +18,14 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
             tid="self-post-1", uin=10001, name="测试 Bot", text="终于把房间收拾好了"
         )
         self.conf = {
+            "qzone_trigger_mode": "llm_smart",
             "qzone_auto_like_own_post": True,
             "qzone_self_comment_probability": 100,
             "qzone_enable_auto_interaction": False,
         }
         self.interaction = types.SimpleNamespace(
+            wants_interaction=AsyncMock(return_value=True),
+            interaction_ready=AsyncMock(return_value=True),
             generate_qzone_self_comment=AsyncMock(
                 return_value="维持整洁就看明天的我了"
             ),
@@ -85,10 +88,12 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
         self.service.comment.assert_not_awaited()
         self.interaction.record_qzone_self_comment.assert_not_awaited()
 
-    async def test_default_settings_enable_like_and_thirty_percent_comment(self):
+    async def test_default_living_settings_delegate_like_and_comment_to_intent(self):
         self.conf.clear()
-        with patch.object(self.self_module.random, "random", return_value=0.1):
+        with patch.object(self.self_module.random, "random") as roll:
             await self.self_post.run(self.post)
+        roll.assert_not_called()
+        self.assertEqual(self.interaction.wants_interaction.await_count, 2)
         self.service.like.assert_awaited_once()
         self.service.comment.assert_awaited_once()
 
@@ -101,6 +106,52 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
         self.interaction.generate_qzone_self_comment.assert_not_awaited()
         self.service.like.assert_awaited_once()
         self.assertEqual(self.entry["comment"], "skipped")
+
+    async def test_living_skips_like_and_comment_without_intent_and_does_not_reroll(
+        self,
+    ):
+        self.conf["qzone_trigger_mode"] = "life_driven"
+        self.interaction.wants_interaction.return_value = False
+        await self.self_post.run(self.post)
+        await self.self_post.run(self.post)
+        self.assertEqual(self.interaction.wants_interaction.await_count, 2)
+        self.service.like.assert_not_awaited()
+        self.service.comment.assert_not_awaited()
+        self.interaction.generate_qzone_self_comment.assert_not_awaited()
+        self.assertEqual(self.entry["like"], "skipped")
+        self.assertEqual(self.entry["comment"], "skipped")
+
+    async def test_living_uses_intent_instead_of_probability_roll(self):
+        self.conf.update(
+            qzone_trigger_mode="life_driven", qzone_self_comment_probability=1
+        )
+        with patch.object(self.self_module.random, "random") as roll:
+            await self.self_post.run(self.post)
+        roll.assert_not_called()
+        self.assertEqual(
+            [
+                call.args[0]
+                for call in self.interaction.wants_interaction.await_args_list
+            ],
+            ["self_like", "self_comment"],
+        )
+        self.service.like.assert_awaited_once()
+        self.service.comment.assert_awaited_once()
+
+    async def test_living_sleep_after_generation_stops_comment_submission(self):
+        self.conf.update(
+            qzone_trigger_mode="life_driven", qzone_auto_like_own_post=False
+        )
+
+        async def generate(*args, **kwargs):
+            self.interaction.interaction_ready.return_value = False
+            return "明天再慢慢收拾"
+
+        self.interaction.generate_qzone_self_comment.side_effect = generate
+        await self.self_post.run(self.post)
+        self.service.comment.assert_not_awaited()
+        self.interaction.record_qzone_self_comment.assert_not_awaited()
+        self.assertEqual(self.entry["comment"], "cancelled")
 
     async def test_zero_probability_only_likes_without_rng_or_model(self):
         self.conf["qzone_self_comment_probability"] = 0

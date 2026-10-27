@@ -13,6 +13,7 @@ from pathlib import Path
 from astrbot.api import logger
 
 from ..config import ShareType, TimePeriod
+from ..database.keys import AUTONOMOUS_SOURCES, SOURCE_LIFE, SOURCE_SCHEDULED
 from ..integrations.mediajob import (
     ShareMediaPending,
     current_share_job,
@@ -78,7 +79,7 @@ def preserve_share(kind: str):
             if ticket:
                 job["contact_snapshot"] = ticket.get("snapshot")
                 job["contact_owner"] = ticket["owner"]
-            elif params.get("history_source") in {"scheduled", "smart"}:
+            elif params.get("history_source") in AUTONOMOUS_SOURCES:
                 target = (
                     params.get("uid") or params.get("target_umo") or "qzone_broadcast"
                 )
@@ -217,7 +218,7 @@ class ShareContinuationService:
         job = current_share_job.get()
         if job is not None:
             params = job.get("params") or {}
-            if params.get("history_source") in {"scheduled", "smart"}:
+            if params.get("history_source") in AUTONOMOUS_SOURCES:
                 target = (
                     params.get("uid") or params.get("target_umo") or "qzone_broadcast"
                 )
@@ -264,7 +265,7 @@ class ShareContinuationService:
     def recovery_allowed(self, job: dict) -> tuple[bool, bool]:
         """恢复时继续遵守原有调度开关和免打扰时段。"""
         params = job.get("params") or {}
-        scheduled = params.get("history_source") in {"scheduled", "smart"}
+        scheduled = params.get("history_source") in AUTONOMOUS_SOURCES
         maximum_age = 7200 if scheduled else 86400
         if (
             job.get("created_at")
@@ -273,13 +274,15 @@ class ShareContinuationService:
             return False, True
         if not scheduled:
             return True, False
+        if not self.plugin.config.get("enable_auto_share", False):
+            return False, True
         if job["kind"] == "qzone":
             conf = self.plugin.qzone_conf
             if not conf.get("enable_qzone", False):
                 return False, True
             quiet = conf.get("qzone_smart_schedule_quiet_hours", ["23:30-07:30"])
             mode = normalize_schedule_mode(
-                conf.get("qzone_trigger_mode", "llm_smart"), "llm_smart"
+                conf.get("qzone_trigger_mode"), "life_driven"
             )
         else:
             if not self.plugin.config.get("enable_auto_share", False):
@@ -296,13 +299,27 @@ class ShareContinuationService:
                 "smart_schedule_quiet_hours", ["23:30-07:30"]
             )
             mode = normalize_schedule_mode(
-                self.plugin.basic_conf.get("trigger_mode", "llm_smart"), "llm_smart"
+                self.plugin.basic_conf.get("trigger_mode"), "life_driven"
             )
-        if (
-            mode == "llm_smart"
-            and self.plugin.task_manager.schedule.smart.is_quiet_time(
-                datetime.now(), quiet if isinstance(quiet, list) else []
-            )
+        source = params.get("history_source")
+        if source == SOURCE_LIFE and mode != "life_driven":
+            return False, True
+        if mode == "life_driven" and source != SOURCE_LIFE:
+            # 独立 cron 仍由用户明确指定；切换全局模式只取消旧的全局任务。
+            if (
+                job["kind"] == "qzone"
+                or source != SOURCE_SCHEDULED
+                or target
+                in self.plugin.task_manager.share.resolve_execute_share_targets(
+                    None, "all", exclude_custom_cron=True
+                )
+            ):
+                return False, True
+        if mode in {
+            "llm_smart",
+            "life_driven",
+        } and self.plugin.task_manager.schedule.smart.is_quiet_time(
+            datetime.now(), quiet if isinstance(quiet, list) else []
         ):
             return False, False
         return True, False

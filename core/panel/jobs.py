@@ -34,6 +34,8 @@ class DashboardJobsService(PanelComponent):
             ).strip()
 
         static_names = {
+            "life_share_observer": "生活分享观察（按经历判断）",
+            "life_qzone_observer": "空间内容观察（按意愿互动）",
             "auto_share": "全局定时分享",
             "qzone_share": "QQ 空间定时分享",
             "qzone_auto_interaction": "QQ 空间自动互动",
@@ -136,7 +138,7 @@ class DashboardJobsService(PanelComponent):
             for job in jobs
             if str(job.get("id") or "") and str(job.get("next_run_time") or "")
         }
-        hidden = set()
+        hidden = {"life_share_observer", "life_qzone_observer"}
 
         def hide_source_when_delayed(source_id: str, delayed_id: str):
             source_time = next_run_by_id.get(source_id, "")

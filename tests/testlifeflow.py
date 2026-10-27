@@ -181,6 +181,37 @@ class DailyLifeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(state[str(old_shoes.id)]["currently_worn"])
         self.assertTrue(state[str(new_shoes.id)]["currently_worn"])
 
+    async def test_browsing_context_keeps_scope_and_receipts_across_plugins(self):
+        self.life_plugin()
+        now = datetime(2026, 10, 24, 12)
+        await self.archive.save_day(DayRecord(date=now.date().isoformat()))
+        self.runtime._runtime_now = lambda: now
+        self.runtime.mark_page_status_changed = AsyncMock()
+        browser = self.runtime.bili_browsing
+        shared = dict(status="unfinished", position=60, impression="实验中控制变量的做法值得试试", share_worthy=True,
+                      evidence=[{"start": 0, "end": 60, "quote": "真实字幕中的实验过程", "source": "字幕"}])
+        own = browser.new_record({"bvid": "BV1xx411c7mD", "page": 1, "title": "有内容依据的实验视频", "url": "https://www.bilibili.com/video/BV1xx411c7mD", "duration": 300})
+        private = browser.new_record({"bvid": "BV1yy411c7mD", "page": 1, "title": "仅在私聊里分享的视频", "url": "https://www.bilibili.com/video/BV1yy411c7mD", "duration": 300}, scope=fixtures.USER_TARGET_1)
+        await browser._save(own, **shared)
+        await browser._save(private, **shared)
+        parser = importlib.import_module(f"{self.root}.context.daily.parser").ContextLifeParseService
+        with patch("core.runtime.mirror.export.life_now", return_value=now):
+            public = await self.bridge.get_share_context("")
+            self.assertEqual([item["bvid"] for item in public["bili_experiences"]], [own["bvid"]])
+            group = await self.bridge.get_share_context(fixtures.GROUP_TARGET_1)
+            self.assertEqual([item["bvid"] for item in group["bili_experiences"]], [own["bvid"]])
+            private_context = await self.bridge.get_share_context(fixtures.USER_TARGET_1)
+            self.assertEqual(len(private_context["bili_experiences"]), 2)
+            self.assertIn("真实字幕中的实验过程", parser.browsing_prompt(public))
+            self.runtime.external_activity = types.SimpleNamespace(record_external_activity_receipt=AsyncMock(return_value=True))
+            delivered = await self.bridge._send_external_receipt({"event_id": "share-video-once", "target_umo": fixtures.USER_TARGET_1, "content": own["url"], "occurred_at": now.isoformat()})
+            self.assertTrue(delivered)
+            after = await self.bridge.get_share_context(fixtures.USER_TARGET_1)
+            self.assertEqual([item["bvid"] for item in after["bili_experiences"]], [private["bvid"]])
+            # 私聊发送回执不会让另一个群失去自己的分享机会。
+            self.assertEqual(len((await self.bridge.get_share_context(fixtures.GROUP_TARGET_1))["bili_experiences"]), 1)
+        await browser.close()
+
     def install_media_provider(self, kind, artifact):
         listeners = {}
 

@@ -36,6 +36,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
             *_interaction_args(self.module)
         )
         self.manager.config.qzone = {
+            "qzone_trigger_mode": "llm_smart",
             "enable_qzone": True,
             "qzone_enable_auto_comment": True,
             "qzone_auto_comment_limit": 1,

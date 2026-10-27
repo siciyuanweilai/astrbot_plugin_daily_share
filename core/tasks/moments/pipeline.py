@@ -8,6 +8,7 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import ShareType, TimePeriod
 from ...constants import period_label, share_type_label
 from ...database.keys import (
+    AUTONOMOUS_SOURCES,
     QZONE_TARGET_ID,
     SOURCE_COMMAND,
     SOURCE_SCHEDULED,
@@ -112,7 +113,7 @@ class TaskQzoneFlowService:
         ).strip()
         continuations = getattr(self.owner.plugin, "share_continuations", None)
         if (
-            history_source in {"scheduled", "smart"}
+            history_source in AUTONOMOUS_SOURCES
             and continuations is not None
             and await continuations.has_pending_share(QZONE_TARGET_ID)
         ):

@@ -32,6 +32,7 @@ from .interact.formatting import (
     _qzone_summary_generation_failed_suffix as _qzone_summary_generation_failed_suffix,
 )
 from .interact.options import QzoneAutoInteractionConfig
+from .interact.intent import interaction_ready, wants_interaction
 from .interact.policy import QzoneAutoPolicyService
 from .interact.receipt import record_qzone_interaction
 from .interact.response import (
@@ -92,6 +93,12 @@ _QZONE_REPLY_ACTION_DELAY_SECONDS = 0.8
 
 class TaskQzoneAutoCommentService(TaskServiceBase):
     """QQ 空间自动互动任务能力。"""
+
+    async def wants_interaction(self, action, post, comment=None, parent=None) -> bool:
+        return await wants_interaction(self, action, post, comment, parent)
+
+    async def interaction_ready(self) -> bool:
+        return await interaction_ready(self)
 
     if TYPE_CHECKING:
 
@@ -204,6 +211,9 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             clean = getattr(bridge, "clean_expression_punctuation", None)
             if callable(clean):
                 reply = await clean(reply, scene="qzone_reply")
+            if not await interaction_ready(self):
+                result["skipped"] += 1
+                return _qzone_reply_skipped_payload(reply)
             submit_result = await self.plugin.qzone_service.reply_comment(
                 post.key,
                 comment,
@@ -374,6 +384,9 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             return result
         if not cfg.interaction_enabled:
             logger.debug("[日常分享] QQ 空间自动互动未开启，跳过。")
+            return result
+
+        if not await interaction_ready(self):
             return result
 
         result["enabled"] = True

@@ -7,6 +7,7 @@ from astrbot.api import logger
 from ..candidate import _qzone_friend_thread_comment_candidates
 from ..comments import QzoneCommentIndex, _post_has_self_comment
 from ..errors import QzoneAutoInteractionRateLimited
+from ..intent import interaction_ready, living_interaction, wants_interaction
 from ..receipt import record_qzone_interaction
 from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
 from ..task import (
@@ -105,7 +106,9 @@ def _qzone_auto_comment_reply_targets(
     pending = [item for item in candidates if item[0]]
     if pending:
         candidates = pending
-    elif not probability or random.random() * 100 >= probability:
+    elif not probability or (
+        not living_interaction(owner) and random.random() * 100 >= probability
+    ):
         return []
     selected = []
     users: set[int] = set()
@@ -134,6 +137,9 @@ async def _execute_qzone_auto_comment_reply(
 ) -> bool:
     reply = _qzone_pending_reply(processed, item_key)
     if not reply:
+        if not await wants_interaction(owner, "reply", post, comment):
+            result["skipped"] += 1
+            return False
         try:
             reply = await owner._generate_qzone_auto_reply(
                 post,
@@ -210,6 +216,11 @@ async def _execute_qzone_auto_comment_thread_reply(
         if pending_reply:
             reply = pending_reply
         else:
+            if not await wants_interaction(
+                owner, "reply", post, comment, parent_comment
+            ):
+                result["skipped"] += 1
+                continue
             try:
                 reply = await owner._generate_qzone_auto_reply_thread(
                     post,
@@ -337,6 +348,9 @@ async def _submit_qzone_auto_comment(
         clean = getattr(bridge, "clean_expression_punctuation", None)
         if callable(clean):
             comment = await clean(comment, scene="qzone_comment")
+        if not await interaction_ready(owner):
+            result["skipped"] += 1
+            return False
         await owner.plugin.qzone_service.comment(post_key, comment)
     except Exception as exc:
         if int(post.appid or 311) == 4 and getattr(exc, "submission_unknown", False):
@@ -541,6 +555,9 @@ async def _execute_qzone_auto_comment_new_posts(
         if pending_comment:
             comment = pending_comment
         else:
+            if not await wants_interaction(owner, "comment", post):
+                result["skipped"] += 1
+                continue
             try:
                 generated = await _generate_qzone_comment_target(
                     owner,

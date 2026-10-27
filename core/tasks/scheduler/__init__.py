@@ -6,6 +6,7 @@ from ..taskbase import TaskServiceBase
 from .auto import TaskSchedulerAutoService
 from .cron import TaskSchedulerCronService
 from .delay import TaskSchedulerDelayService
+from .living import TaskSchedulerLivingService
 from .random import TaskSchedulerRandomService
 from .recovery import TaskSchedulerRecoveryService
 from .setup import TaskSchedulerSetupService
@@ -22,6 +23,7 @@ class TaskSchedulerService(TaskServiceBase):
         self._build_tasks: set[asyncio.Task] = set()
         self.triggers = TaskSchedulerTriggerService(self)
         self.smart = TaskSchedulerSmartService(self)
+        self.living = TaskSchedulerLivingService(self)
         self.random = TaskSchedulerRandomService(self)
         self.recovery = TaskSchedulerRecoveryService(self)
         self.cron = TaskSchedulerCronService(self)

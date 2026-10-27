@@ -27,7 +27,10 @@ class DashboardApplyScheduleService(PanelComponent):
             raise RuntimeError(f"{definition.fixed_label}不能为空")
         if mode == "random_period" and not target.get(definition.random_key):
             raise RuntimeError(f"{definition.random_label}不能为空")
-        if mode == "llm_smart" and definition.smart_quiet_key not in target:
+        if (
+            mode in {"llm_smart", "life_driven"}
+            and definition.smart_quiet_key not in target
+        ):
             target[definition.smart_quiet_key] = list(definition.smart_quiet_default)
 
     def _page_apply_schedule_values(
@@ -73,7 +76,7 @@ class DashboardApplyScheduleService(PanelComponent):
                 source.get(smart_max_key),
                 definition.smart_max_default,
                 min_value=1,
-                max_value=6,
+                max_value=24 if normalize_schedule_mode(target.get(mode_key), definition.mode_default) == "life_driven" else 6,
             )
         if smart_quiet_key in source:
             target[smart_quiet_key] = self.validation._page_quiet_hours_value(

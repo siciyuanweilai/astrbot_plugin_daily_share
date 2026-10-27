@@ -252,16 +252,17 @@
         "hint": "一次 LLM 逻辑调用（包含降级与重试）的总等待时间；有备用模型时为后续调用预留时间。"
       },
       "trigger_mode": {
-        "description": "定时分享模式",
+        "description": "分享触发模式",
         "type": "string",
-        "default": "llm_smart",
+        "default": "life_driven",
         "options": [
+          "life_driven",
           "fixed_time",
           "random_period",
           "llm_smart",
           "cron"
         ],
-        "hint": "fixed_time=填写一个或多个 HH:MM 固定时间；random_period=每天在时间段内随机；llm_smart=每天智能生成分享计划，可包含单次分享类型；cron=高级表达式。"
+        "hint": "life_driven=有新生活经历时由角色决定分享、稍后再想或不分享，依赖 daily_life；fixed_time=固定时间；random_period=随机时段；llm_smart=预先生成当天时间表；cron=高级表达式。"
       },
       "fixed_times": {
         "description": "固定分享时间",
@@ -295,18 +296,18 @@
         "obvious_hint": false
       },
       "smart_schedule_max_count": {
-        "description": "智能定时每日次数",
+        "description": "每日分享上限",
         "type": "int",
         "default": 2,
         "slider": {
           "min": 1,
-          "max": 20,
+          "max": 24,
           "step": 1
         },
-        "hint": "仅在智能定时模式下生效。最多只能安排这么多次全局分享。"
+        "hint": "生活驱动：每日生成与发送尝试的资源上限（最多 24 次），失败或结果不明也计入；是否分享仍由角色决定。智能定时最多安排 6 次。"
       },
       "smart_schedule_quiet_hours": {
-        "description": "智能定时勿扰时间",
+        "description": "分享勿扰时间",
         "type": "list",
         "items": {
           "type": "string"
@@ -314,7 +315,7 @@
         "default": [
           "23:30-07:30"
         ],
-        "hint": "仅在智能定时模式下生效。格式：HH:MM-HH:MM，可跨天；生成时间会避开这些时间。"
+        "hint": "生活驱动和智能定时生效，格式 HH:MM-HH:MM，可跨天；勿扰结束只重新判断，不保证补发。"
       },
       "smart_schedule_prompt": {
         "description": "智能定时偏好",
@@ -895,16 +896,17 @@
         "hint": "QQ 空间发布、上传配图、查询和评论接口的单次请求总超时。大图上传超时时可调到 180-300 秒。"
       },
       "qzone_trigger_mode": {
-        "description": "说说定时模式",
+        "description": "说说触发模式",
         "type": "string",
-        "default": "llm_smart",
+        "default": "life_driven",
         "options": [
+          "life_driven",
           "fixed_time",
           "random_period",
           "llm_smart",
           "cron"
         ],
-        "hint": "fixed_time=填写 HH:MM 固定时间；random_period=每天在时间段内随机；llm_smart=每天智能生成说说计划，可包含单次说说类型；cron=高级表达式。"
+        "hint": "life_driven=有新生活经历时由角色决定分享、稍后再想或不分享，依赖 daily_life；fixed_time=固定时间；random_period=随机时段；llm_smart=预先生成当天时间表；cron=高级表达式。"
       },
       "qzone_fixed_times": {
         "description": "说说固定时间",
@@ -946,18 +948,18 @@
         "hint": "仅在固定时间或高级 cron 触发后生效，随机等待 0 到 60 分钟再发送；随机时段和智能定时不会再叠加延迟。设为 0 表示准点发送。"
       },
       "qzone_smart_schedule_max_count": {
-        "description": "说说智能定时每日次数",
+        "description": "说说每日分享上限",
         "type": "int",
         "default": 1,
         "slider": {
           "min": 1,
-          "max": 20,
+          "max": 24,
           "step": 1
         },
-        "hint": "仅在智能定时模式下生效。最多只能安排这么多次 QQ 空间说说。"
+        "hint": "生活驱动：每日生成与发送尝试的资源上限（最多 24 次），失败或结果不明也计入；是否分享仍由角色决定。智能定时最多安排 6 次。"
       },
       "qzone_smart_schedule_quiet_hours": {
-        "description": "说说智能定时勿扰时间",
+        "description": "说说勿扰时间",
         "type": "list",
         "items": {
           "type": "string"
@@ -965,7 +967,7 @@
         "default": [
           "23:30-07:30"
         ],
-        "hint": "仅在智能定时模式下生效。格式：HH:MM-HH:MM，可跨天；生成时间会避开这些时间。"
+        "hint": "生活驱动和智能定时生效，格式 HH:MM-HH:MM，可跨天；勿扰结束只重新判断，不保证补发。"
       },
       "qzone_smart_schedule_prompt": {
         "description": "说说智能定时偏好",
@@ -1001,28 +1003,32 @@
         "description": "发布自己的说说后自动点赞",
         "type": "bool",
         "default": true,
-        "hint": "说说确认发布成功后，在后台为自己点赞一次。适用于定时发布、手动发布和简报同步，独立于好友自动互动总开关。",
+        "hint": "允许发布后为自己点赞。生活驱动下先判断当时是否愿意，其他模式每条点赞一次；与好友自动互动总开关独立。",
         "obvious_hint": true
       },
       "qzone_self_comment_probability": {
         "description": "自己的说说自动评论概率",
         "type": "int",
         "default": 30,
-        "slider": {"min": 0, "max": 100, "step": 5},
-        "hint": "发布成功后按此概率自评一句，结合原文与人设补充想法或轻轻自嘲、吐槽。0% 关闭，100% 每条都尝试；每条说说只抽签一次，命中后调用模型，不额外识图。与自动点赞独立，不受好友自动互动总开关和数量上限影响。",
+        "slider": {
+          "min": 0,
+          "max": 100,
+          "step": 5
+        },
+        "hint": "生活驱动下，0 关闭自评，大于 0 时由角色决定是否还有想补充的，不保证每条自评。其他模式按此百分比抽签。每条说说只判断一次，提交结果不明也不会重复发送。",
         "obvious_hint": true
       },
       "qzone_enable_auto_interaction": {
         "description": "启用 QQ 空间自动互动",
         "type": "bool",
         "default": false,
-        "hint": "总开关。开启后，会按自动互动 cron 执行下方已启用的自动点赞、自动评论和自动回评，并使用 QQ 空间定时随机延迟。"
+        "hint": "总开关。生活驱动下定期检查新内容，结合生活注意力、关系与内容决定是否点赞、评论、回复；睡眠和免打扰时暂停。其他模式按自动互动 cron 检查。"
       },
       "qzone_auto_interaction_cron": {
         "description": "自动互动高级 cron",
         "type": "string",
         "default": "0 */2 * * *",
-        "hint": "使用 cron 表达式设置自动互动查询时间。触发后会使用 QQ 空间定时随机延迟(分钟)。"
+        "hint": "仅用于非生活驱动模式，设置自动互动查询时间，并使用 QQ 空间定时随机延迟。生活驱动下由后台观察内容，不按此时间执行动作。"
       },
       "qzone_auto_interaction_active_hours": {
         "description": "自动互动有效时间(小时)",
@@ -1039,7 +1045,7 @@
         "description": "启用好友动态自动点赞",
         "type": "bool",
         "default": false,
-        "hint": "开启后，会按顺序给可点赞的好友动态点赞；会跳过自己的动态、已点赞动态和已处理动态。"
+        "hint": "允许点赞好友动态。生活驱动下由角色决定是否认可和参与，不因动态可点赞就执行；跳过自己的、已点赞和已处理动态。"
       },
       "qzone_auto_like_limit": {
         "description": "单次最多点赞数量",
@@ -1050,13 +1056,13 @@
           "max": 10,
           "step": 1
         },
-        "hint": "一次查询最多实际点赞几条动态。建议 1-3 条，越小越自然。"
+        "hint": "每轮实际点赞的资源上限，不是需要完成的次数。"
       },
       "qzone_enable_auto_comment": {
         "description": "启用好友动态自动评论",
         "type": "bool",
         "default": false,
-        "hint": "开启后定时评论好友动态，并按下方概率独立回复其他用户的评论、接续已参与楼层中回复 Bot 的评论。主体评论与回评分别判断和防重；同一动态需要两者时，先发主体评论，再生成和发送概率回评。"
+        "hint": "允许评论好友动态及接续互动。生活驱动下先结合生活注意力、关系和楼层内容决定是否想说；其他模式保留概率回评。各类动作分别防重。"
       },
       "qzone_auto_comment_limit": {
         "description": "单次最多评论数量",
@@ -1078,14 +1084,18 @@
           "max": 100,
           "step": 5
         },
-        "hint": "每条好友说说或相册上传批次每轮抽取一次概率，命中后按下方人数上限回复不同用户的顶层评论。先发表主体评论，再结合原动态和楼层上下文回评。0% 关闭概率回评；主体评论与回评分别受单次评论数量上限约束。",
+        "hint": "生活驱动下，0 关闭主动回评其他用户，大于 0 时由角色按内容与关系判断。其他模式按此百分比抽签。回复 Bot 的后续楼层单独判断；主体评论与回评分开受数量上限约束。",
         "obvious_hint": true
       },
       "qzone_auto_comment_reply_user_limit": {
         "description": "每条动态概率回评人数上限",
         "type": "int",
         "default": 1,
-        "slider": {"min": 1, "max": 10, "step": 1},
+        "slider": {
+          "min": 1,
+          "max": 10,
+          "step": 1
+        },
         "hint": "同一条说说或同一批上传照片最多主动回评几位不同用户，默认 1 人。同一用户多条顶层评论只选最新的合格评论；已回评用户不重复参与，人数在防重记录有效期内累计。仍受单次评论数量限制；对方后续回复 Bot 的续评不占人数名额。",
         "obvious_hint": true
       },
@@ -1093,7 +1103,11 @@
         "description": "整组照片评论概率",
         "type": "int",
         "default": 100,
-        "slider": {"min": 0, "max": 100, "step": 5},
+        "slider": {
+          "min": 0,
+          "max": 100,
+          "step": 5
+        },
         "hint": "多图上传时，100% 始终评论整组照片，0% 始终选择单张照片，其他值随机切换。每批只发一条主体评论；回评始终跟随原评论所在位置。无法核实上传批次时沿用单张照片评论。"
       },
       "qzone_enable_auto_comment_image_vision": {

@@ -99,6 +99,7 @@ class DashboardConfigMetaService(PanelComponent):
     def _page_config_options(self) -> dict:
         return {
             "trigger_modes": [
+                {"value": "life_driven", "label": "生活驱动"},
                 {"value": "fixed_time", "label": "固定时间"},
                 {"value": "random_period", "label": "随机时段"},
                 {"value": "llm_smart", "label": "智能定时"},

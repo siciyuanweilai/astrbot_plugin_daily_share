@@ -4,6 +4,7 @@ from datetime import datetime
 from astrbot.api import logger
 
 from ..space.errors import QzoneImageUploadError, QzonePublishUnknownError
+from ..space.mentions import qzone_publish_text
 from .supportcomponent import RuntimeField, SupportComponent
 
 
@@ -13,8 +14,15 @@ class PluginQzoneService(SupportComponent):
     plugin = RuntimeField("plugin")
     qzone_service = RuntimeField("qzone_service")
 
-    async def publish_qzone(self, text: str = "", images: list | None = None):
+    async def publish_qzone(
+        self,
+        text: str = "",
+        images: list | None = None,
+        *,
+        mentions: list[dict[str, str]] | None = None,
+    ):
         """发布 QQ 空间说说，登录态失效时重新获取登录态再重试一次。"""
+        text = qzone_publish_text(text, mentions)
         service = self.qzone_service
         if service is None:
             raise RuntimeError("QQ 空间服务未初始化")

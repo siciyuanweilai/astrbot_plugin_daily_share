@@ -10,6 +10,7 @@ from ...database.keys import (
     target_state_key,
 )
 from .schedulerbase import SchedulerComponent
+from ...schedule import GLOBAL_SCHEDULE, QZONE_SCHEDULE, normalize_schedule_mode
 
 _RECENT_MISSED_JOB_WINDOW_SECONDS = 3600
 
@@ -137,6 +138,20 @@ class TaskSchedulerRecoveryService(SchedulerComponent):
             ),
         ]
         for state_key, job, job_id, delay, future_log, missed_log in jobs:
+            definition = {
+                GLOBAL_STATE_KEY: GLOBAL_SCHEDULE,
+                QZONE_STATE_KEY: QZONE_SCHEDULE,
+            }.get(state_key)
+            conf = self.qzone_conf if state_key == QZONE_STATE_KEY else self.basic_conf
+            if (
+                definition
+                and normalize_schedule_mode(
+                    conf.get(definition.mode_key), definition.mode_default
+                )
+                == "life_driven"
+            ):
+                await self.db.update_share_state(state_key, {"pending_delay_job": None})
+                continue
             state = await self.db.get_share_state(state_key, {})
             await self._recover_pending_delay_job(
                 state_key=state_key,

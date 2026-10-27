@@ -51,6 +51,7 @@ class TaskProgressService(TaskServiceBase):
             "command": "自然语言",
             "scheduled": "定时",
             "smart_schedule": "智能定时",
+            "life_driven": "生活分享",
         }.get(
             str(source_type or "").strip().lower(),
             str(source_type or "").strip() or "分享",

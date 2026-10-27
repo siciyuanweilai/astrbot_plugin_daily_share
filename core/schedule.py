@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-SCHEDULE_MODE_OPTIONS = frozenset({"fixed_time", "random_period", "llm_smart", "cron"})
+SCHEDULE_MODE_OPTIONS = frozenset(
+    {"life_driven", "fixed_time", "random_period", "llm_smart", "cron"}
+)
 SCHEDULE_MODE_ALIASES = {
+    "生活驱动": "life_driven",
     "固定时间": "fixed_time",
     "随机时段": "random_period",
     "智能定时": "llm_smart",
@@ -44,7 +47,7 @@ class ScheduleDefinition:
 
 GLOBAL_SCHEDULE = ScheduleDefinition(
     mode_key="trigger_mode",
-    mode_default="llm_smart",
+    mode_default="life_driven",
     mode_label="全局触发模式",
     fixed_key="fixed_times",
     fixed_default=("08:00", "20:00"),
@@ -64,6 +67,7 @@ GLOBAL_SCHEDULE = ScheduleDefinition(
 )
 
 BRIEFING_SCHEDULE = ScheduleDefinition(
+    mode_options=SCHEDULE_MODE_OPTIONS - {"life_driven"},
     mode_key="briefing_schedule_mode",
     mode_default="llm_smart",
     mode_label="早报触发模式",
@@ -86,7 +90,7 @@ BRIEFING_SCHEDULE = ScheduleDefinition(
 
 QZONE_SCHEDULE = ScheduleDefinition(
     mode_key="qzone_trigger_mode",
-    mode_default="llm_smart",
+    mode_default="life_driven",
     mode_label="空间触发模式",
     fixed_key="qzone_fixed_times",
     fixed_default=("20:00",),
