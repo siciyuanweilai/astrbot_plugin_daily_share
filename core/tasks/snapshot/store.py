@@ -48,7 +48,7 @@ class TaskNewsCacheStoreService:
         snapshot_data=None,
         image_url: str | None = None,
     ) -> bool:
-        """追加保存与成功发送新闻长图配对的结构化快照。"""
+        """兼容旧快照 API；正式发送由 ledger 的历史/快照事务统一提交。"""
         try:
             target = str(target_uid or "").strip()
             if not target or not isinstance(snapshot_data, dict):

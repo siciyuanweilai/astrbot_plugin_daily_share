@@ -221,13 +221,6 @@ def _qzone_image_context_cache_keys(
     return list(dict.fromkeys(keys))
 
 
-def _qzone_image_context_cache_key(
-    post, *, index: int, total: int, scope: str = ""
-) -> str:
-    keys = _qzone_image_context_cache_keys(post, index=index, total=total, scope=scope)
-    return keys[0] if keys else ""
-
-
 def _qzone_image_vision_cache_keys(
     post,
     image_url: str,
@@ -475,8 +468,8 @@ async def _qzone_image_refs_descriptions(
 
     logger.debug(f"[日常分享] {label}识别开始: {author}，图片 {len(image_refs)} 张")
     cache = _qzone_image_vision_cache(state)
+    original_items = list(cache.items())
     descriptions = []
-    cache_changed = False
     cache_updates = {}
     for index, (source, scope, image_url) in enumerate(image_refs, start=1):
         cache_keys = _qzone_image_vision_cache_keys(
@@ -496,7 +489,6 @@ async def _qzone_image_refs_descriptions(
             for key in cache_keys:
                 cache.pop(key, None)
                 cache[key] = cached
-            cache_changed = True
             logger.debug(
                 f"[日常分享] {label}识别命中缓存: 图{index}（{scope}），{cached}"
             )
@@ -514,13 +506,12 @@ async def _qzone_image_refs_descriptions(
         for key in cache_keys:
             cache[key] = description
             cache_updates[key] = description
-        cache_changed = True
         descriptions.append((index, scope, description))
         logger.debug(f"[日常分享] {label}识别成功: 图{index}（{scope}），{description}")
 
-    before_prune_size = len(cache)
     _prune_qzone_image_vision_cache(cache)
-    if cache_changed or len(cache) != before_prune_size:
+    # 热点顺序和别名均未变化时，不重复写库；顺序变化仍持久化以保留 LRU。
+    if list(cache.items()) != original_items:
         await _save_qzone_image_vision_cache(
             owner, state, state_key=state_key, updates=cache_updates
         )

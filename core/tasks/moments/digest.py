@@ -7,6 +7,7 @@ from astrbot.api.event import AstrMessageEvent
 
 from ...config import NEWS_SOURCE_MAP
 from ...database.keys import HISTORY_SHARE_NEWS, QZONE_STATE_KEY, QZONE_TARGET_ID
+from ..opportunity import opportunity_news
 
 if TYPE_CHECKING:
     from . import TaskQzoneService
@@ -26,6 +27,9 @@ class TaskQzoneNewsService:
         history_source: str,
         progress_id: str,
     ) -> tuple[bool, tuple[list, str] | None]:
+        selected = opportunity_news(QZONE_TARGET_ID)
+        if selected:
+            return True, selected
         state = await self.owner.db.get_share_state(QZONE_STATE_KEY, {})
         last_news_source = state.get("last_news_source")
         actual_source = news_source or self.owner.news_service.select_news_source(

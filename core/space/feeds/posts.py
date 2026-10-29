@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...concurrency import gather_readonly
 from ..models import QzonePost
 from ..parse import parse_feed_list
 
@@ -60,12 +61,14 @@ class QzoneFeedPostsService:
             raise RuntimeError(str(payload.get("message") or "获取 QQ 空间说说失败"))
         posts = parse_feed_list(payload.get("msglist") or [])
         if with_detail:
+            details = await gather_readonly(
+                *(self.owner._safe_post_detail(post) for post in posts)
+            )
             posts = [
-                self.owner._merge_post_detail(
-                    post, await self.owner._safe_post_detail(post)
-                )
-                for post in posts
+                self.owner._merge_post_detail(post, detail)
+                for post, detail in zip(posts, details)
             ]
-        self.owner._remember_posts(posts, detailed=with_detail)
+        # 详情成功时由 detail() 标记；失败回退的列表内容不能冒充完整详情。
+        self.owner._remember_posts(posts)
         self.owner._store_query_posts(cache_key, posts)
         return posts

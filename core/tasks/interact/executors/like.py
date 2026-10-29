@@ -2,8 +2,9 @@ import asyncio
 
 from astrbot.api import logger
 
+from ..intent import interaction_ready, mark_interaction_submission, wants_interaction
+from ..receipt import record_qzone_interaction
 from ..scan import _query_qzone_friend_posts
-from ..intent import interaction_ready, wants_interaction
 from ..task import (
     QzoneStatePersistenceError,
     _qzone_abort_query_failure,
@@ -98,7 +99,9 @@ async def execute_qzone_auto_like_task(
             result["skipped"] += 1
             continue
         try:
+            await mark_interaction_submission(owner, "like", post)
             await owner.plugin.qzone_service.like(post_key)
+            await mark_interaction_submission(owner, "like", post, completed=True)
             _mark_qzone_post_processed(
                 processed,
                 post,
@@ -112,6 +115,9 @@ async def execute_qzone_auto_like_task(
                 state,
                 processed,
                 result,
+            )
+            await record_qzone_interaction(
+                owner, post, "已确认点赞", scene="qzone_like"
             )
             owner.plugin.emit_dashboard_event(
                 "qzone",

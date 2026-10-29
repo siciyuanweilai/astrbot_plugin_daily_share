@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import importlib
 import importlib.util
 import sys
 import types
@@ -10,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = "daily_share_qzone_testpkg"
 SPACE_PACKAGE_NAME = f"{PACKAGE_NAME}.core.space"
-PARSER_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.parser"
+PARSER_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.parse"
 RELATION_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.relation"
 ENTRY_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.entry"
 H5_MODULE_NAME = f"{SPACE_PACKAGE_NAME}.h5"
@@ -68,7 +69,7 @@ def _load_qzone_parser():
 
     parser_spec = importlib.util.spec_from_file_location(
         PARSER_MODULE_NAME,
-        ROOT / "core" / "space" / "parser.py",
+        ROOT / "core" / "space" / "parse" / "__init__.py",
     )
     parser_module = importlib.util.module_from_spec(parser_spec)
     sys.modules[PARSER_MODULE_NAME] = parser_module
@@ -2983,6 +2984,11 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_publish_timeout_confirms_existing_post_without_resubmitting(self):
         service_module = _load_qzone_service()
+        submission = importlib.import_module(PACKAGE_NAME + ".core.submission")
+        phases = []
+
+        async def checkpoint(phase):
+            phases.append(phase)
 
         class Service(service_module.QzoneService):
             def __init__(self):
@@ -3005,6 +3011,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             async def _request(
                 self, method, url, *, params=None, data=None, headers=None, retry=True
             ):
+                if phases != ["submitting"]:
+                    raise AssertionError("请求前没有保存提交防重状态")
                 self.submit_calls += 1
                 if data.get("pic_bo") != "picbo" or data.get("richval") != "richval":
                     raise AssertionError("没有复用已上传图片参数")
@@ -3024,15 +3032,25 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         service = Service()
-        with patch.object(service_module.asyncio, "sleep", no_sleep):
-            post = await service.publish_post(text="测试", images=[b"image"])
+        token = submission.current_submission.set({"checkpoint": checkpoint})
+        try:
+            with patch.object(service_module.asyncio, "sleep", no_sleep):
+                post = await service.publish_post(text="测试", images=[b"image"])
+        finally:
+            submission.current_submission.reset(token)
 
         self.assertEqual(post.tid, "123")
         self.assertEqual(service.upload_calls, 1)
         self.assertEqual(service.submit_calls, 1)
+        self.assertEqual(phases, ["submitting", "completed"])
 
     async def test_publish_timeout_does_not_resubmit_when_result_is_unknown(self):
         service_module = _load_qzone_service()
+        submission = importlib.import_module(PACKAGE_NAME + ".core.submission")
+        phases = []
+
+        async def checkpoint(phase):
+            phases.append(phase)
 
         class Service(service_module.QzoneService):
             def __init__(self):
@@ -3053,11 +3071,43 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         service = Service()
-        with patch.object(service_module.asyncio, "sleep", no_sleep):
-            with self.assertRaisesRegex(RuntimeError, "状态未知.*停止自动重试"):
-                await service.publish_post(text="测试")
+        token = submission.current_submission.set({"checkpoint": checkpoint})
+        try:
+            with patch.object(service_module.asyncio, "sleep", no_sleep):
+                with self.assertRaisesRegex(RuntimeError, "状态未知.*停止自动重试"):
+                    await service.publish_post(text="测试")
+        finally:
+            submission.current_submission.reset(token)
 
         self.assertEqual(service.submit_calls, 1)
+        self.assertEqual(phases, ["submitting"])
+
+    async def test_image_upload_failure_keeps_opportunity_before_post_submission(self):
+        service_module = _load_qzone_service()
+        submission = importlib.import_module(PACKAGE_NAME + ".core.submission")
+        phases = []
+
+        async def checkpoint(phase):
+            phases.append(phase)
+
+        class Service(service_module.QzoneService):
+            async def context(self):
+                return service_module.QzoneContext(100000001, "skey", "p_skey")
+
+            async def _upload_image(self, image):
+                raise RuntimeError("上传接口暂不可用")
+
+            async def _submit_post(self, ctx, data):
+                raise AssertionError("上传失败不能提交说说")
+
+        service = Service(_qzone_plugin())
+        token = submission.current_submission.set({"checkpoint": checkpoint})
+        try:
+            with self.assertRaisesRegex(RuntimeError, "尚未提交说说"):
+                await service.publish_post(text="测试", images=[b"image"])
+        finally:
+            submission.current_submission.reset(token)
+        self.assertEqual(phases, [])
 
     async def test_reply_comment_rejects_synthetic_short_own_thread_reply_before_submit(
         self,

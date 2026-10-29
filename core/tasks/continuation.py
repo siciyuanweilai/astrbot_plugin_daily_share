@@ -22,6 +22,7 @@ from ..integrations.mediajob import (
     remember_media_task_result,
 )
 from ..schedule import normalize_schedule_mode
+from ..submission import mark_submission
 from ..integrations.contact import (
     ShareContactChanged,
     ShareContactPending,
@@ -114,11 +115,13 @@ def preserve_share(kind: str):
                 await service.finish(job, status="cancelled", reason=str(exc))
                 return False
             except ShareContactPending as exc:
+                await mark_submission("deferred")
                 job.update(status="waiting_contact", reason=str(exc))
                 await service.save(job)
                 service.update_waiting_progress(job)
                 return False
             except ShareMediaPending:
+                await mark_submission("deferred")
                 job["status"] = "pending"
                 await service.save(job)
                 service.update_waiting_progress(job)
@@ -128,6 +131,7 @@ def preserve_share(kind: str):
                 return False
             except asyncio.CancelledError:
                 if job["status"] != "submitting":
+                    await mark_submission("deferred")
                     job["status"] = (
                         "waiting_contact"
                         if "prepared_media" in job or job["status"] == "waiting_contact"

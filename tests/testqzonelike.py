@@ -165,11 +165,12 @@ class QzoneLikeServiceTests(unittest.IsolatedAsyncioTestCase):
                 post = module.QzonePost(
                     uin=20002, tid="post-1", appid=appid, unikey=key, curkey=key
                 )
-                service._remember_posts([post])
-                with patch.object(service, "_invalidate_qzone_cache") as invalidate:
-                    await service.like(post.key)
+                service._remember_posts([post], detailed=True)
+                service._store_query_posts(("recent",), [post])
+                await service.like(post.key)
                 self.assertTrue(post.liked)
-                invalidate.assert_called_once_with(post_id=post.key, target_id="20002")
+                self.assertIs(service._cached_detail_post(post.key), post)
+                self.assertTrue(service._cached_query_posts(("recent",))[0].liked)
                 self.assertEqual(len(service._session.calls), 1)
                 call = service._session.calls[0]
                 self.assertEqual(
@@ -308,6 +309,10 @@ class QzoneLikeServiceTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         manager = Manager()
+        record = AsyncMock(return_value=True)
+        manager.plugin.daily_life_bridge = types.SimpleNamespace(
+            record_public_activity=record
+        )
         with patch.object(tasks.asyncio, "sleep", AsyncMock()):
             result = await manager.execute_qzone_auto_like()
             self.assertEqual(
@@ -323,3 +328,5 @@ class QzoneLikeServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["liked"], 0)
             self.assertEqual(len(service._session.calls), 1)
         manager.plugin.call_llm.assert_not_called()
+        record.assert_awaited_once()
+        self.assertEqual(record.await_args.args[0]["scene"], "qzone_like")

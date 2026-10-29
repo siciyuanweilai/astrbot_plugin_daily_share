@@ -242,7 +242,7 @@ class ContextService:
 
     def get_bot_instance(self, adapter_id: str):
         """
-        从缓存中获取机器人实例
+        兼容旧调用：从缓存中获取实例；平台路由应使用 get_onebot_bot 等专用入口。
         """
         if adapter_id:
             return self.bot_map.get(adapter_id)

@@ -73,9 +73,6 @@ class PluginPermissionService(SupportComponent):
         parsed = self.task_manager.targets.parse_targets_config([value])
         return origin in parsed
 
-    def _parsed_target_matches(self, target_id: str, candidates: set[str]) -> bool:
-        return target_id in candidates
-
     def _is_configured_receiver_event(self, event: AstrMessageEvent) -> bool:
         if event is None:
             return False
@@ -103,19 +100,6 @@ class PluginPermissionService(SupportComponent):
             logger.warning(f"[日常分享] 接收对象权限判断失败: {exc}")
             return False
 
-    def _entries_match_receiver(self, entries, candidates: list[str]) -> bool:
-        origin, real_id, sender_id = candidates
-        values = entries.keys() if isinstance(entries, dict) else entries
-        return any(
-            self.permissions.target_entry_matches(
-                entry,
-                origin,
-                real_id,
-                [sender_id],
-            )
-            for entry in values
-        )
-
     def _plain_permission_denied(self, event: AstrMessageEvent, reason: str = ""):
         if event is None:
             raise RuntimeError("无法解析当前消息事件")
@@ -124,11 +108,4 @@ class PluginPermissionService(SupportComponent):
             "权限不足：当前会话不在接收对象配置中。"
             "请先把当前会话加入群聊、私聊或早报接收目标。"
             f"{suffix}"
-        )
-
-    @staticmethod
-    def _has_reply_component(event: AstrMessageEvent) -> bool:
-        return any(
-            component.__class__.__name__ == "Reply"
-            for component in event.get_messages()
         )

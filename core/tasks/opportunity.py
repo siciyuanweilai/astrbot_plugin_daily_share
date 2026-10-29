@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import unicodedata
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 
@@ -31,13 +32,41 @@ def recent(value, now):
         return False
 
 
+def progress_version(row: dict) -> str:
+    value = row.get("progress_version")
+    if isinstance(value, str) and value:
+        return value
+    fields = {}
+    for key in (
+        "state",
+        "detail",
+        "progress",
+        "artifact_version",
+        "owner",
+        "quantity",
+        "unit",
+        "delivery",
+        "available_at",
+    ):
+        value = row.get(key)
+        if isinstance(value, str):
+            value = "".join(
+                ch
+                for ch in value
+                if not ch.isspace() and not unicodedata.category(ch).startswith("P")
+            )
+        if value is not None:
+            fields[key] = value
+    return digest(fields)
+
+
 def share_material(data: dict, now: datetime) -> list[dict]:
     facts = data.get("current_facts") or {}
     if facts.get("valid") is not True:
         return []
     result = {}
 
-    def add(kind, identity, row):
+    def add(kind, identity, row, *, legacy_identity=None):
         fields = {
             key: compact(value, 400 if key == "evidence" else 240)
             for key, value in row.items()
@@ -58,6 +87,8 @@ def share_material(data: dict, now: datetime) -> list[dict]:
             return
         key = digest([kind, identity])
         result[key] = {"id": key, "kind": kind, **fields}
+        if legacy_identity is not None:
+            result[key]["legacy_id"] = digest([kind, legacy_identity])
 
     action = facts.get("current_action") or {}
     if (
@@ -125,8 +156,13 @@ def share_material(data: dict, now: datetime) -> list[dict]:
             }
             add(
                 kind,
-                [row.get("title"), row.get("state"), row.get("artifact_version")],
+                [row.get("event_id") or row.get("title"), progress_version(row)],
                 selected,
+                legacy_identity=[
+                    row.get("title"),
+                    row.get("state"),
+                    row.get("artifact_version"),
+                ],
             )
     for row in data.get("bili_experiences") or []:
         if (
@@ -166,3 +202,33 @@ def opportunity_prompt(target):
     return "\n【本次自主选中的分享材料】\n" + json.dumps(
         value["materials"], ensure_ascii=False
     )
+
+
+def opportunity_materials(target) -> list[dict]:
+    """仅返回当前任务、当前对象已确认选中的材料。"""
+    value = current_opportunity.get()
+    if not value or value["target"] != target:
+        return []
+    return [dict(row) for row in value["materials"]]
+
+
+def opportunity_query(target, fallback="") -> str:
+    rows = opportunity_materials(target)
+    if not rows:
+        return str(fallback or "")[:1000]
+    return "；".join(
+        compact(row.get(key), 160)
+        for row in rows
+        for key in ("activity", "title", "detail", "progress", "impression", "evidence")
+        if row.get(key)
+    )[:1000]
+
+
+def opportunity_news(target: str) -> tuple | None:
+    rows = [row for row in opportunity_materials(target) if row.get("kind") == "news"]
+    if not rows:
+        return None
+    source = rows[0]["source"]
+    return [
+        dict(row["news_item"]) for row in rows if row.get("source") == source
+    ], source

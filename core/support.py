@@ -274,11 +274,5 @@ class SupportService:
     async def save_config_and_refresh_runtime(self, *args, **kwargs):
         return await self.operations.save_config_and_refresh_runtime(*args, **kwargs)
 
-    def extract_news_link_urls(self, text: str) -> list[str]:
-        return self.operations.tool_context._extract_news_link_urls(text)
-
-    def ensure_news_link_urls_in_reply(self, reply: str, urls: list[str]) -> str:
-        return self.operations.tool_context._ensure_news_link_urls_in_reply(reply, urls)
-
 
 __all__ = ["SupportService"]

@@ -155,14 +155,6 @@ class ContentSupportService(ContentComponent):
     ) -> str:
         return build_private_target_prompt(call_name, detect_name, target_id)
 
-    def _build_recent_dynamics_prompt(self, recent_dynamics: str) -> str:
-        if not str(recent_dynamics or "").strip():
-            return ""
-        return (
-            f"\n【你最近发过的动态回顾】\n{recent_dynamics}\n"
-            "(注：请保持人设连贯，可以偶尔自然呼应之前的心情，但不要重复发过的内容)"
-        )
-
     def _build_structured_history_prompt(self, structured_history: str) -> str:
         structured_history = str(structured_history or "").strip()
         if not structured_history:

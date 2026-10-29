@@ -41,7 +41,6 @@ class ContentSocialService(ContentComponent):
             public_label=public_label,
             include_time=False,
         )
-        dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
 
@@ -69,7 +68,6 @@ class ContentSocialService(ContentComponent):
             user_info_prompt,
             ctx["life_hint"],
             ctx["structured_history_hint"],
-            dynamics_prompt,
             output=f"请生成{p_label}问候：",
         )
 
@@ -126,8 +124,6 @@ class ContentSocialService(ContentComponent):
         else:
             resonance_guide = "【私聊写法】面向当前对象，按已确认关系自然分享一点可信的心情，不预设亲密程度。"
 
-        dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
-
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         time_greeting_rule = ""
         if period in (TimePeriod.LATE_NIGHT, TimePeriod.DAWN):
@@ -167,7 +163,6 @@ class ContentSocialService(ContentComponent):
             user_info_prompt,
             ctx["life_hint"],
             ctx["structured_history_hint"],
-            dynamics_prompt,
             output="直接输出这次想分享的话：",
         )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...concurrency import gather_readonly
 from ..models import QzonePost
 from ..parse import parse_recent_feed_list
 
@@ -73,7 +74,7 @@ class QzoneFeedRecentService:
             "next_cursor": self.owner._friend_feeds_next_cursor(payload),
             **payload_meta,
         }
-        self.owner._remember_posts(posts, detailed=with_detail)
+        self.owner._remember_posts(posts)
         self.owner._store_query_posts(
             cache_key, posts, meta=self.owner._last_friend_feeds_meta
         )
@@ -82,8 +83,7 @@ class QzoneFeedRecentService:
     async def _query_recent_post_details(
         self, posts: list[QzonePost]
     ) -> list[QzonePost]:
-        detailed = []
-        for post in posts:
+        async def enrich(post):
             # 仅凭非说说动态的键无法重建 appid 和照片标识。
             if int(post.appid or 311) != 311:
                 self.owner._remember_posts([post])
@@ -94,7 +94,8 @@ class QzoneFeedRecentService:
                 detail.curkey = post.curkey or detail.curkey
                 detail.unikey = post.unikey or detail.unikey
                 detail.busi_param = detail.busi_param or post.busi_param
-                detailed.append(detail)
+                return detail
             except Exception:
-                detailed.append(post)
-        return detailed
+                return post
+
+        return await gather_readonly(*(enrich(post) for post in posts))

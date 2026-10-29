@@ -88,9 +88,10 @@ class ContentService:
         life_ctx: str,
         news_data: tuple[list, str] | None = None,
         nickname: str = "",
-        recent_dynamics: str = "",
+        recent_dynamics: str = "",  # 兼容旧调用；历史改由已确认发送记录按目标加载，此参数不进入上下文。
         structured_history: str = "",
         recent_post_contents: list[str] | None = None,
+        share_materials: list[dict] | None = None,
     ) -> str | None:
         """统一生成入口"""
         # 获取人设信息
@@ -163,8 +164,8 @@ class ContentService:
             "time_str": time_str,
             "nickname": call_name,
             "detect_name": detect_name,
-            "recent_dynamics": "",
             "recent_post_contents": recent_post_contents or [],
+            "share_materials": share_materials or [],
         }
 
         try:

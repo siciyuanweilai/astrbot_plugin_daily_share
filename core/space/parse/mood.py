@@ -346,6 +346,7 @@ def parse_feedinfo_html(
     context_tid: str = "",
     context_time: int = 0,
 ) -> QzonePost | None:
+    # 保留旧单条 HTML 解析 API，运行时统一走 parse_recent_feed_list。
     raw_html = str(markup or "").strip()
     if not raw_html:
         return None

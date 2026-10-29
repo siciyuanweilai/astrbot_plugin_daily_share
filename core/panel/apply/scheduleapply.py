@@ -76,7 +76,12 @@ class DashboardApplyScheduleService(PanelComponent):
                 source.get(smart_max_key),
                 definition.smart_max_default,
                 min_value=1,
-                max_value=24 if normalize_schedule_mode(target.get(mode_key), definition.mode_default) == "life_driven" else 6,
+                max_value=24
+                if normalize_schedule_mode(
+                    target.get(mode_key), definition.mode_default
+                )
+                == "life_driven"
+                else 6,
             )
         if smart_quiet_key in source:
             target[smart_quiet_key] = self.validation._page_quiet_hours_value(

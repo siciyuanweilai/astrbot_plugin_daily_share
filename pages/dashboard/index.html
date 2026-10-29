@@ -436,6 +436,7 @@
 
             <section id="settings-sequence" class="settings-section" data-settings-section="sequence" aria-label="全局序列">
               <h2 class="settings-section-title">序列</h2>
+              <p class="settings-section-note" data-type-sequence-note="basic">自动分享按时段序列轮换类型，智能定时优先用指定类型，生活驱动按真实材料自主选择。</p>
               <label class="setting-field">
                 <span>凌晨</span>
                 <textarea id="cfgDawnSequence" rows="3" placeholder="心情"></textarea>
@@ -473,7 +474,7 @@
             <section id="settings-context" class="settings-section" data-settings-section="context" aria-label="上下文设置">
               <h2 class="settings-section-title">上下文</h2>
               <label class="setting-field">
-                <span>参考历史数</span>
+                <span>近期已发分享参考数</span>
                 <input id="cfgReferenceHistoryCount" type="number" min="0" max="10" step="1" />
               </label>
               <label class="setting-switch">
@@ -698,6 +699,7 @@
 
             <section id="settings-qzone-sequence" class="settings-section" data-settings-section="qzoneSequence" aria-label="空间序列">
               <h2 class="settings-section-title">空间序列</h2>
+              <p class="settings-section-note" data-type-sequence-note="qzone">自动说说按时段序列轮换类型，智能定时优先用指定类型，生活驱动按真实材料自主选择。</p>
               <label class="setting-field">
                 <span>凌晨</span>
                 <textarea id="cfgQzoneDawnSequence" rows="3" placeholder="心情"></textarea>
@@ -812,7 +814,7 @@
               </label>
               <label class="setting-switch">
                 <input id="cfgTtsFollowLife" type="checkbox" />
-                <span>跟随生活插件选择语音</span>
+                <span>跟随 daily_life 选择文字或语音</span>
               </label>
               <label class="setting-switch">
                 <input id="cfgAudioOnly" type="checkbox" />

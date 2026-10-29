@@ -9,10 +9,10 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import ShareType, TimePeriod
 from ...constants import period_label, share_type_label
 from ...database.keys import AUTONOMOUS_SOURCES, SOURCE_LIFE
-from ..opportunity import opportunity_prompt
 from ...integrations.contact import coordinate_share
 from ...toolkit import format_exception
 from ..continuation import preserve_share
+from ..opportunity import opportunity_materials, opportunity_prompt, opportunity_query
 from ..taskbase import TaskServiceBase
 from .artwork import TaskExecutorMediaService
 from .newsitem import TaskExecutorNewsService
@@ -167,7 +167,7 @@ class TaskExecutorService(TaskServiceBase):
         )
         if callable(memory_getter):
             memory = await memory_getter(
-                str(post_context or life_ctx or "")[:1000], uid
+                opportunity_query(uid, post_context or life_ctx), uid
             )
             if memory:
                 content_context["life_prompt"] += "\n\n" + memory
@@ -180,9 +180,9 @@ class TaskExecutorService(TaskServiceBase):
             content_context["life_prompt"],
             news_data,
             nickname=nickname,
-            recent_dynamics=content_context["recent_dynamics"],
             structured_history=content_context.get("structured_history", ""),
             recent_post_contents=content_context.get("recent_post_contents", []),
+            share_materials=opportunity_materials(uid),
         )
         if content:
             self.services.progress.complete_share_progress_step(

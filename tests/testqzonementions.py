@@ -270,9 +270,7 @@ class MentionHostTests(unittest.IsolatedAsyncioTestCase):
         result = await host.publish_qzone(text="正文，带有标点。")
 
         self.assertIs(result, post)
-        service.publish_post.assert_awaited_once_with(
-            text="清洗后的正文", images=[]
-        )
+        service.publish_post.assert_awaited_once_with(text="清洗后的正文", images=[])
         bridge.clean_expression_punctuation.assert_awaited_once_with(
             "正文，带有标点。", scene="qzone_post"
         )

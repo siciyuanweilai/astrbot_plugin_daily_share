@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 
 from astrbot.api import logger
@@ -17,6 +18,7 @@ async def record_qzone_interaction(
     target_comment=None,
     parent_comment=None,
     photo_key: str = "",
+    event_key: str = "",
 ) -> None:
     try:
         bridge = getattr(owner.plugin, "daily_life_bridge", None)
@@ -24,7 +26,7 @@ async def record_qzone_interaction(
         if not callable(record):
             return
         digest = hashlib.sha256(
-            f"{scene}:{post.key}:{comment_id}:{content}".encode()
+            (event_key or f"{scene}:{post.key}:{comment_id}:{content}").encode()
         ).hexdigest()
 
         def incoming(comment):
@@ -80,4 +82,26 @@ async def record_qzone_interaction(
             }
         )
     except Exception as exc:
-        logger.warning(f"[日常分享] 公开互动已成功，回执登记失败：{type(exc).__name__}")
+        logger.warning(f"[日常分享] 空间活动回执登记失败：{type(exc).__name__}")
+
+
+async def record_qzone_observation(owner, post, *, comment=None, parent=None) -> None:
+    """只登记实际进入意愿判断的文字，不推断图片、情绪或关系变化。"""
+    material = [str(post.key), str(getattr(post, "text", "") or "")[:1600]]
+    for row in (parent, comment):
+        if row is not None:
+            material.extend(
+                [
+                    str(getattr(row, "tid", "") or ""),
+                    str(getattr(row, "content", "") or "")[:1200],
+                ]
+            )
+    await record_qzone_interaction(
+        owner,
+        post,
+        "看到公开动态及所列评论文字",
+        scene="qzone_observation",
+        target_comment=comment,
+        parent_comment=parent,
+        event_key=json.dumps(material, ensure_ascii=False),
+    )

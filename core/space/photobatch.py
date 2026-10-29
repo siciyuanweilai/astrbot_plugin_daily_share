@@ -42,6 +42,8 @@ async def refresh_batch_comments(service, post: QzonePost) -> QzonePost:
     if cached is not None and cached.photo_batch_topic_id == post.photo_batch_topic_id:
         post.comments = batch_comments(post, cached.comments)
         return post
+    scope, revision = service._cache_bot, service._cache_revision
+    complete = False
     post.comments = batch_comments(post, post.comments)
     try:
         ctx = await service.context()
@@ -81,7 +83,10 @@ async def refresh_batch_comments(service, post: QzonePost) -> QzonePost:
         post.comments = batch_comments(
             post, parse_comments(_feed_html_comment_items(data["feeds"]))
         )
+        complete = True
     except RuntimeError as exc:
         logger.debug(f"[日常分享] 整组照片评论补读失败，保留动态自带评论: {exc}")
-    service._remember_posts([post], detailed=True)
+    service._ensure_bot_cache_scope()
+    if scope is service._cache_bot and revision == service._cache_revision:
+        service._remember_posts([post], detailed=complete)
     return post

@@ -10,6 +10,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from ...platformsession import create_message_session
 from ...qqofficial import ensure_qq_official_background_send
 from ...toolkit import format_exception
+from ...submission import mark_submission
 from ..taskbase import TaskServiceBase
 from .stage import TaskDeliveryStatusService
 
@@ -44,7 +45,9 @@ class TaskDeliveryChainService(TaskServiceBase):
         )
 
         if event and self.services.targets.event_matches_target(event, str(uid)):
+            await mark_submission()
             await asyncio.wait_for(self.send_event(event, chain), timeout=timeout)
+            await mark_submission("completed")
             return
 
         ensure_qq_official_background_send(binding, str(uid))
@@ -61,17 +64,21 @@ class TaskDeliveryChainService(TaskServiceBase):
             session = create_message_session(
                 binding.platform_id, message_type, parsed[1]
             )
+            await mark_submission()
             await asyncio.wait_for(
                 binding.instance.send_by_session(session, chain),
                 timeout=timeout,
             )
+            await mark_submission("completed")
             return
 
+        await mark_submission()
         sent = await asyncio.wait_for(
             self.plugin.context.send_message(uid, chain), timeout=timeout
         )
         if not sent:
             raise RuntimeError(f"未找到目标平台实例或消息未发送: {uid}")
+        await mark_submission("completed")
 
     def _is_probable_delivery_timeout(self, error: Exception) -> bool:
         detail = f"{type(error).__name__}: {error}".lower()

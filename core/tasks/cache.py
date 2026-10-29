@@ -58,7 +58,7 @@ class TaskNewsCacheService(TaskServiceBase):
     async def commit_sent_news_snapshot(
         self, target_uid, snapshot_data=None, image_url=None
     ):
-        """追加保存与成功发送新闻长图配对的结构化快照。"""
+        """兼容旧快照 API；正式发送由 ledger 的历史/快照事务统一提交。"""
         return await self.store.commit_sent_news_snapshot(
             target_uid, snapshot_data, image_url
         )

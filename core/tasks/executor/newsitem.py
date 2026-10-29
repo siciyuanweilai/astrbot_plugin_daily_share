@@ -4,6 +4,7 @@ from astrbot.api.event import AstrMessageEvent
 from ...config import NEWS_SOURCE_MAP, ShareType
 from ...database.keys import target_state_key
 from ...toolkit import format_exception
+from ..opportunity import opportunity_news
 from ..taskbase import TaskServiceBase
 
 
@@ -23,6 +24,9 @@ class TaskExecutorNewsService(TaskServiceBase):
         if stype != ShareType.NEWS:
             return True, None
 
+        selected = opportunity_news(uid)
+        if selected:
+            return True, selected
         state = await self.db.get_share_state(target_state_key(uid), {})
         last_news_source = state.get("last_news_source")
         current_news_source = news_source or self.news_service.select_news_source(

@@ -21,19 +21,6 @@ _PAGE_PREFERENCES_DEFAULTS = {
     "sakura_enabled": True,
 }
 _PAGE_SHARE_TYPE_OPTIONS = {"自动", "问候", "新闻", "心情", "知识", "推荐"}
-_PAGE_TRIGGER_MODE_OPTIONS = {
-    "life_driven",
-    "fixed_time",
-    "random_period",
-    "llm_smart",
-    "cron",
-}
-_PAGE_BRIEFING_SCHEDULE_MODE_OPTIONS = {
-    "fixed_time",
-    "random_period",
-    "llm_smart",
-    "cron",
-}
 _PAGE_NEWS_RANDOM_MODE_OPTIONS = {"fixed", "random", "config", "time_based"}
 _PAGE_CONTEXT_STRATEGY_OPTIONS = {"cautious", "active", "minimal"}
 _PAGE_RECENT_ACTION_LIMIT = 8

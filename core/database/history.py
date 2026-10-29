@@ -21,6 +21,14 @@ class DatabaseHistoryService(DatabaseRepository):
         degraded=False,
         degradation_reason="",
     ):
+        media_url = str(media_url or "").strip()
+        media_path = str(media_path or "").strip()
+        # 所有发布入口共用写入规则，本地文件不能作为浏览器 URL 保存。
+        if media_url and not media_url.lower().startswith(
+            ("http://", "https://", "data:", "base64://")
+        ):
+            media_path = media_path or media_url
+            media_url = ""
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._execute_write(
             """

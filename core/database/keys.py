@@ -20,7 +20,6 @@ SOURCE_LIFE = "life_driven"
 AUTONOMOUS_SOURCES = frozenset({SOURCE_SCHEDULED, SOURCE_SMART, SOURCE_LIFE})
 
 MEDIA_IMAGE = "image"
-MEDIA_VIDEO = "video"
 MEDIA_TEXT = "text"
 
 

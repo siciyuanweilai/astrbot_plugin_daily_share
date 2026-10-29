@@ -84,7 +84,7 @@ def _load_dashboard_qzone_module():
 
     qzone_spec = importlib.util.spec_from_file_location(
         QZONE_MODULE_NAME,
-        ROOT / "core" / "panel" / "zoneview.py",
+        ROOT / "tests" / "qzonefixture.py",
     )
     qzone_module = importlib.util.module_from_spec(qzone_spec)
     sys.modules[QZONE_MODULE_NAME] = qzone_module

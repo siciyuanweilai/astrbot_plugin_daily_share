@@ -59,7 +59,6 @@ class TaskCommandLocalRunService:
             content_context["life_prompt"],
             news_data,
             nickname=nickname,
-            recent_dynamics=content_context["recent_dynamics"],
             structured_history=content_context.get("structured_history", ""),
             recent_post_contents=content_context.get("recent_post_contents", []),
         )

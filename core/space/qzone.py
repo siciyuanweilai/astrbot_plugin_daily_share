@@ -237,6 +237,7 @@ class QzoneService:
         self._h5_transport = ""
         self._h5_transport_logged = False
         self._post_cache: dict[str, QzonePost] = {}
+        self._cache_revision = 0
         self._post_detail_cache_at: dict[str, float] = {}
         self._query_cache: dict[
             tuple, tuple[float, list[QzonePost], dict[str, Any]]
@@ -248,7 +249,6 @@ class QzoneService:
         self.cookies = QzoneH5CookieService(self)
         self.timeline = QzoneFeedQueryService(self)
         self.errors = QzoneH5ErrorService(self)
-        self.packets = QzoneH5BaseService(self)
         self.requests = QzoneH5RequestService(self)
         self.replies = QzoneCommentReplyService(self)
         self.comment_tools = QzoneCommentUtilService(self)
@@ -259,12 +259,10 @@ class QzoneService:
         self.posts = QzoneFeedPostsService(self)
         self.home = QzoneFeedHomeService(self)
         self.recent = QzoneFeedRecentService(self)
-        self.merge = QzoneFeedMergeService(self)
         self.reply_targets = QzoneReplyTargetService(self)
         self.reply_payloads = QzoneReplyPayloadService(self)
         self.reply_verification = QzoneReplyVerifyService(self)
         self.reply_plans = QzoneReplyPlanService(self)
-        self.reply_identity = QzoneReplyIdentityService(self)
         self.photos = QzonePhotoService(self)
 
     async def close(self):
@@ -571,6 +569,9 @@ class QzoneService:
             pic_bos=pic_bos,
             richvals=richvals,
         )
+        from ..submission import mark_submission
+
+        await mark_submission()
         submit_started_at = int(time.time())
         try:
             payload = await self._submit_post(ctx, data)
@@ -599,6 +600,7 @@ class QzoneService:
                 )
                 if confirmed is not None:
                     logger.info("[日常分享] 已从最新动态确认 QQ 空间说说发布成功。")
+                    await mark_submission("completed")
                     self._remember_posts([confirmed])
                     self.self_post.schedule(confirmed, image_count=len(images or []))
                     return confirmed
@@ -607,6 +609,7 @@ class QzoneService:
                 ) from exc
             else:
                 raise RuntimeError(f"QQ 空间说说发布失败: {message}") from exc
+        await mark_submission("completed")
         raw_data = payload.get("data")
         publish_data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
         post = QzonePost(
@@ -669,7 +672,14 @@ class QzoneService:
                 f"ret={payload.get('ret')}, http={payload.get('_http_status')}）"
             )
         post.liked = True
-        self._invalidate_qzone_cache(post_id=post.key, target_id=str(post.uin))
+        # 点赞结果明确时同步现有对象，保留后续评论可复用的列表和详情。
+        for cached in self._post_cache.values():
+            if cached.key == post.key:
+                cached.liked = True
+        for _at, posts, _meta in self._query_cache.values():
+            for cached in posts:
+                if cached.key == post.key:
+                    cached.liked = True
 
     async def delete_post(self, post_id: str) -> None:
         post = self._require_post(post_id)
@@ -742,9 +752,13 @@ class QzoneService:
     ) -> None:
         now = time.monotonic()
         for post in posts:
+            previous = self._post_cache.pop(post.key, None)
             self._post_cache[post.key] = post
             if detailed:
                 self._post_detail_cache_at[post.key] = now
+            elif previous is not post:
+                # 列表摘要替换完整对象后，旧的详情标记不再适用。
+                self._post_detail_cache_at.pop(post.key, None)
         self._prune_post_cache()
 
     @staticmethod
@@ -763,6 +777,8 @@ class QzoneService:
         if time.monotonic() - cached_at > self.QUERY_CACHE_TTL_SECONDS:
             self._query_cache.pop(cache_key, None)
             return None
+        self._query_cache.pop(cache_key)
+        self._query_cache[cache_key] = entry
         if meta:
             self._last_friend_feeds_meta = dict(meta)
         logger.debug("[日常分享] QQ 空间说说列表命中缓存")
@@ -775,6 +791,7 @@ class QzoneService:
         *,
         meta: dict[str, Any] | None = None,
     ) -> None:
+        self._query_cache.pop(cache_key, None)
         self._query_cache[cache_key] = (
             time.monotonic(),
             list(posts or []),
@@ -794,6 +811,7 @@ class QzoneService:
             self._post_detail_cache_at.pop(old_key, None)
 
     def _clear_qzone_cache(self) -> None:
+        self._cache_revision += 1
         self._post_cache.clear()
         self._post_detail_cache_at.clear()
         self._query_cache.clear()
@@ -812,6 +830,8 @@ class QzoneService:
             self._post_detail_cache_at.pop(key, None)
             return None
         logger.debug(f"[日常分享] QQ 空间说说详情命中缓存: {key}")
+        self._post_cache.pop(key)
+        self._post_cache[key] = post
         return post
 
     def _invalidate_qzone_cache(
@@ -821,6 +841,7 @@ class QzoneService:
         target_id: str = "",
         drop_post: bool = False,
     ) -> None:
+        self._cache_revision += 1
         target = str(target_id or "").strip()
         post_key = str(post_id or "").strip()
         if post_key and not target and ":" in post_key:

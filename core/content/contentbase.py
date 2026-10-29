@@ -77,9 +77,6 @@ class ContentComponent:
     def _build_user_prompt(self, *args, **kwargs):
         return self.service.support._build_user_prompt(*args, **kwargs)
 
-    def _build_recent_dynamics_prompt(self, *args, **kwargs):
-        return self.service.support._build_recent_dynamics_prompt(*args, **kwargs)
-
     async def _agent_brainstorm_topic(self, *args, **kwargs):
         return await self.service.topic._agent_brainstorm_topic(*args, **kwargs)
 

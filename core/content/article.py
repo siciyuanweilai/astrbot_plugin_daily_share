@@ -140,7 +140,6 @@ class ContentNewsService(ContentComponent):
         user_info_prompt: str,
         news_text: str,
         common_rules: str,
-        dynamics_prompt: str,
         is_group: bool,
     ) -> str:
         organization_title = "【组织方式】" if share_count > 1 else ""
@@ -193,7 +192,6 @@ class ContentNewsService(ContentComponent):
             user_info_prompt,
             ctx["life_hint"],
             ctx["structured_history_hint"],
-            dynamics_prompt,
             f"{source_name}（含 API 摘要/检索真相）：\n{news_text}",
             output="直接输出：",
         )
@@ -218,14 +216,22 @@ class ContentNewsService(ContentComponent):
 
         items_limit = self.news_conf.get("news_items_count", 5)
         selected_to_search = news_list[:items_limit]
+        if not selected_to_search:
+            return None
 
         search_results = await self._collect_news_backgrounds(
             selected_to_search,
             source_name=source_name,
             target_umo=ctx.get("target_id", ""),
         )
-        share_count = self._resolve_news_share_count(
-            self.news_conf.get("news_share_count", "1-2")
+        share_count = max(
+            1,
+            min(
+                len(selected_to_search),
+                self._resolve_news_share_count(
+                    self.news_conf.get("news_share_count", "1-2")
+                ),
+            ),
         )
         news_text = self._build_news_source_text(
             source_name, selected_to_search, search_results
@@ -257,7 +263,6 @@ class ContentNewsService(ContentComponent):
             public_label=public_label,
             include_time=False,
         )
-        dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         prompt = self._build_news_prompt(
             ctx=ctx,
@@ -267,7 +272,6 @@ class ContentNewsService(ContentComponent):
             user_info_prompt=user_info_prompt,
             news_text=news_text,
             common_rules=common_rules,
-            dynamics_prompt=dynamics_prompt,
             is_group=is_group,
         )
 

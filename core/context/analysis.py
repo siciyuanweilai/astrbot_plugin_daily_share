@@ -4,6 +4,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .contextbase import ContextComponent
+from .relevance import relevant_messages
 from .shared import DAILY_SHARE_SOURCE, datetime, time
 
 
@@ -83,7 +84,7 @@ class ContextHistoryAnalysisService(ContextComponent):
             return 0
 
     def format_structured_history_context(
-        self, history_data: dict[str, Any], *, limit: int = 6
+        self, history_data: dict[str, Any], *, limit: int = 6, query: str = ""
     ) -> str:
         if not history_data or not history_data.get("messages"):
             return ""
@@ -94,10 +95,21 @@ class ContextHistoryAnalysisService(ContextComponent):
         )
         if not flow:
             return ""
+        older = relevant_messages(messages[: -max(1, int(limit or 6))], query)
+        related = "\n".join(
+            self._format_structured_history_line(row, is_group=is_group)
+            for row in older
+        )
+        if related:
+            related = (
+                "\n【与本次材料相关的较早原话，按原时间理解】\n"
+                + related
+                + "\n【最近消息】\n"
+            )
         return (
             "<structured_history>\n"
-            "  <note>最近真实消息流，优先判断谁对谁说话、@、回复和媒体；不是长期记忆。</note>\n"
-            f"{flow}\n"
+            "  <note>真实消息流，优先判断谁对谁说话、@、回复和媒体；较早原话按原时间理解，不当作当前事实。</note>\n"
+            f"{related}{flow}\n"
             "</structured_history>"
         )
 

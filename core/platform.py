@@ -129,11 +129,3 @@ def find_platform_instance_by_types(context_obj, platform_types: Iterable[str]):
         if binding.platform_type in expected and not binding.conflicted
     ]
     return matches[0].instance if len(matches) == 1 else None
-
-
-def is_onebot_instance(inst) -> bool:
-    return get_platform_type(inst).lower() in ONEBOT_PLATFORM_TYPES
-
-
-def is_weixin_oc_instance(inst) -> bool:
-    return get_platform_type(inst).lower() == WEIXIN_PLATFORM_TYPE

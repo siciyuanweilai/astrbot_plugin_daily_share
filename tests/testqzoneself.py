@@ -25,6 +25,7 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
         }
         self.interaction = types.SimpleNamespace(
             wants_interaction=AsyncMock(return_value=True),
+            interaction_state=AsyncMock(return_value={"decision": "skip"}),
             interaction_ready=AsyncMock(return_value=True),
             generate_qzone_self_comment=AsyncMock(
                 return_value="维持整洁就看明天的我了"
@@ -147,11 +148,77 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
             self.interaction.interaction_ready.return_value = False
             return "明天再慢慢收拾"
 
+        self.interaction.interaction_state.return_value = {
+            "decision": "act",
+            "status": "preparing",
+        }
         self.interaction.generate_qzone_self_comment.side_effect = generate
         await self.self_post.run(self.post)
         self.service.comment.assert_not_awaited()
         self.interaction.record_qzone_self_comment.assert_not_awaited()
-        self.assertEqual(self.entry["comment"], "cancelled")
+        self.assertEqual(self.entry["comment"], "waiting")
+
+    async def test_wait_survives_restart_and_only_submits_once(self):
+        self.conf["qzone_trigger_mode"] = "life_driven"
+        self.interaction.wants_interaction.return_value = False
+        self.interaction.interaction_state.return_value = {
+            "decision": "wait",
+            "review_at": 0,
+        }
+        await self.self_post.run(self.post, image_count=2)
+        self.assertEqual(self.entry["comment"], "waiting")
+        self.service.comment.assert_not_awaited()
+        self.entry["review"] = {"like": 0, "comment": 0}
+        self.interaction.wants_interaction.return_value = True
+        restarted = self.self_module.QzoneSelfPostService(self.service, self.plugin)
+        await restarted.review_pending()
+        await restarted.review_pending()
+        self.service.like.assert_awaited_once()
+        self.service.comment.assert_awaited_once()
+        self.interaction.generate_qzone_self_comment.assert_awaited_once()
+        call = self.interaction.generate_qzone_self_comment.await_args
+        self.assertEqual(call.args[0].key, self.post.key)
+        self.assertEqual(call.kwargs["image_count"], 2)
+
+    async def test_review_during_sleep_does_not_consume_wait_checks(self):
+        self.conf["qzone_trigger_mode"] = "life_driven"
+        self.interaction.wants_interaction.return_value = False
+        self.interaction.interaction_state.return_value = {"decision": "wait"}
+        await self.self_post.run(self.post)
+        self.entry["review"] = {"like": 0, "comment": 0}
+        checks = dict(self.entry["checks"])
+        self.interaction.interaction_ready.return_value = False
+        await self.self_post.review_pending()
+        self.assertEqual(self.entry["checks"], checks)
+
+    async def test_wait_expires_and_unknown_submission_is_never_reopened(self):
+        self.conf["qzone_trigger_mode"] = "life_driven"
+        self.interaction.wants_interaction.return_value = False
+        self.interaction.interaction_state.return_value = {"decision": "wait"}
+        await self.self_post.run(self.post)
+        self.entry["at"] -= 7 * 3600
+        self.entry["like"] = "submitting"
+        self.entry["review"]["comment"] = 0
+        await self.self_post.review_pending()
+        self.assertEqual(self.entry["like"], "submitting")
+        self.assertEqual(self.entry["comment"], "expired")
+        self.service.like.assert_not_awaited()
+        self.service.comment.assert_not_awaited()
+
+    async def test_preparation_failures_have_a_finite_retry_budget(self):
+        self.conf.update(
+            qzone_trigger_mode="life_driven", qzone_auto_like_own_post=False
+        )
+        self.interaction.generate_qzone_self_comment.side_effect = RuntimeError(
+            "模型暂时不可用"
+        )
+        for _ in range(5):
+            if self.post.key in self.plugin.db.state.get(self.state_key, {}):
+                self.entry["review"]["comment"] = 0
+            await self.self_post.run(self.post)
+        self.assertEqual(self.interaction.generate_qzone_self_comment.await_count, 3)
+        self.assertEqual(self.entry["comment"], "exhausted")
+        self.service.comment.assert_not_awaited()
 
     async def test_zero_probability_only_likes_without_rng_or_model(self):
         self.conf["qzone_self_comment_probability"] = 0

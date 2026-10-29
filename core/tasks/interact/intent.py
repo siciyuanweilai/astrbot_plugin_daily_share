@@ -8,10 +8,12 @@ from datetime import datetime
 
 from astrbot.api import logger
 
+from ...concurrency import gather_readonly
 from ...database.keys import QZONE_TARGET_ID
 from ...schedule import QZONE_SCHEDULE, normalize_schedule_mode
 from ..opportunity import SHANGHAI, compact, digest
 from .identity import qzone_relationship_target
+from .receipt import record_qzone_observation
 
 _STATE = "living_interaction_intents"
 
@@ -50,6 +52,56 @@ async def interaction_ready(owner):
     )
 
 
+def interaction_material(action, post, comment=None, parent=None):
+    return {
+        "action": action,
+        "post_id": str(post.key),
+        "post": compact(getattr(post, "text", ""), 1000),
+        "author": compact(getattr(post, "name", ""), 60),
+        "image_count": len(getattr(post, "images", []) or []),
+        "comment_id": str(getattr(comment, "tid", "")),
+        "comment_author": compact(getattr(comment, "nickname", ""), 60),
+        "comment_author_id": str(getattr(comment, "uin", "")),
+        "comment": compact(getattr(comment, "content", ""), 500),
+        "parent_id": str(getattr(parent, "tid", "")),
+        "parent_author": compact(getattr(parent, "nickname", ""), 60),
+        "parent": compact(getattr(parent, "content", ""), 300),
+    }
+
+
+def interaction_key(action, post, comment=None, parent=None):
+    return digest(interaction_material(action, post, comment, parent))
+
+
+async def interaction_state(owner, action, post) -> dict:
+    states = await owner.plugin.db.get_qzone_state(_STATE, {})
+    return dict(states.get(interaction_key(action, post)) or {})
+
+
+async def mark_interaction_submission(
+    owner, action, post, comment=None, parent=None, *, key="", completed=False
+):
+    """实际提交前落盘；结果不明时保留防重，不能按准备阶段的租期重发。"""
+    if not living_interaction(owner):
+        return
+    key = key or interaction_key(action, post, comment, parent)
+    states = await owner.plugin.db.get_qzone_state(_STATE, {})
+    previous = states.get(key) or {}
+    await owner.plugin.db.merge_cache_entries(
+        "qzone",
+        _STATE,
+        {
+            key: {
+                **previous,
+                "at": datetime.now(SHANGHAI).timestamp(),
+                "decision": "act",
+                "status": "completed" if completed else "submitting",
+            }
+        },
+        max_items=512,
+    )
+
+
 async def wants_interaction(owner, action, post, comment=None, parent=None):
     if not living_interaction(owner):
         return True
@@ -60,42 +112,50 @@ async def wants_interaction(owner, action, post, comment=None, parent=None):
         lock = plugin._life_interaction_intent_lock = asyncio.Lock()
     try:
         async with lock:
-            if not await interaction_ready(owner):
-                return False
-            material = {
-                "action": action,
-                "post_id": str(post.key),
-                "post": compact(getattr(post, "text", ""), 1000),
-                "author": compact(getattr(post, "name", ""), 60),
-                "image_count": len(getattr(post, "images", []) or []),
-                "comment_id": str(getattr(comment, "tid", "")),
-                "comment_author": compact(getattr(comment, "nickname", ""), 60),
-                "comment_author_id": str(getattr(comment, "uin", "")),
-                "comment": compact(getattr(comment, "content", ""), 500),
-                "parent_id": str(getattr(parent, "tid", "")),
-                "parent_author": compact(getattr(parent, "nickname", ""), 60),
-                "parent": compact(getattr(parent, "content", ""), 300),
-            }
+            material = interaction_material(action, post, comment, parent)
             key = digest(material)
             states = await plugin.db.get_qzone_state(_STATE, {})
             previous = states.get(key) or {}
             now = datetime.now(SHANGHAI).timestamp()
-            if previous.get("decision") in {"act", "skip"} or now < previous.get(
-                "review_at", 0
+            # 旧 act 没有提交阶段信息，保守沿用防重，避免升级后补发。
+            if previous.get("decision") == "skip" or (
+                previous.get("decision") == "act"
+                and previous.get("status") != "preparing"
             ):
                 return False
+            attempts = previous.get("attempts", 0)
+            if attempts >= 3 or now < previous.get("review_at", 0):
+                return False
+            if not await interaction_ready(owner):
+                return False
+            observed = bool(previous.get("observed"))
+            if not observed and not action.startswith("self_"):
+                await record_qzone_observation(
+                    owner, post, comment=comment, parent=parent
+                )
+                observed = True
             # 先落失败退避；模型异常不放行，也不转成固定套话。
             await plugin.db.merge_cache_entries(
                 "qzone",
                 _STATE,
-                {key: {"at": now, "decision": "wait", "review_at": now + 300}},
+                {
+                    key: {
+                        "at": now,
+                        "decision": "wait",
+                        "review_at": now + 300,
+                        "attempts": attempts,
+                        "observed": observed,
+                    }
+                },
                 max_items=512,
             )
             target = (
                 qzone_relationship_target(owner, comment or post) or QZONE_TARGET_ID
             )
-            context = await owner.ctx_service.get_qzone_interaction_context(target)
-            persona = await plugin.content_service.get_persona_info(QZONE_TARGET_ID)
+            context, persona = await gather_readonly(
+                owner.ctx_service.get_qzone_interaction_context(target),
+                plugin.content_service.get_persona_info(QZONE_TARGET_ID),
+            )
             payload = {
                 "now": datetime.now(SHANGHAI).isoformat(timespec="minutes"),
                 "material": material,
@@ -130,8 +190,18 @@ async def wants_interaction(owner, action, post, comment=None, parent=None):
                 {
                     key: {
                         "at": now,
+                        "observed": observed,
                         "decision": decision["decision"],
-                        "review_at": now + max(10, min(180, minutes)) * 60,
+                        "status": "preparing"
+                        if decision["decision"] == "act"
+                        else "decided",
+                        "attempts": attempts + (decision["decision"] == "act"),
+                        "review_at": now
+                        + (
+                            300
+                            if decision["decision"] == "act"
+                            else max(10, min(180, minutes)) * 60
+                        ),
                     }
                 },
                 max_items=512,

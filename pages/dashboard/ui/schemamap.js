@@ -6,7 +6,7 @@ export const settingsSectionSchema = {
   sequence: {
     section: "basic_conf",
     title: "全局时段序列",
-    hint: "当本次分享类型为自动时，会按当前时段的序列循环选择分享类型；智能定时若指定具体类型，会优先使用计划类型。",
+    hint: "自动分享按时段序列轮换类型，智能定时优先用指定类型，生活驱动按真实材料自主选择。",
   },
   briefing: { section: "extra_shares" },
   content: { section: "content_library" },
@@ -23,7 +23,7 @@ export const settingsSectionSchema = {
   qzoneSequence: {
     section: "qzone_conf",
     title: "QQ空间时段序列",
-    hint: "当本次说说类型为自动时，会按当前时段的序列循环选择说说类型；智能定时若指定具体类型，会优先使用计划类型。",
+    hint: "自动说说按时段序列轮换类型，智能定时优先用指定类型，生活驱动按真实材料自主选择。",
   },
 };
 

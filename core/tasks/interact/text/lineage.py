@@ -96,17 +96,6 @@ def _qzone_comment_ids(comment) -> set[str]:
     }
 
 
-def _qzone_reply_target_ids(comment) -> set[str]:
-    return {
-        value
-        for value in (
-            str(getattr(comment, "reply_to_tid", "") or "").strip(),
-            str(getattr(comment, "raw_reply_to_tid", "") or "").strip(),
-        )
-        if value
-    }
-
-
 def _same_qzone_comment(left, right) -> bool:
     if left is right:
         return True

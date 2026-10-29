@@ -739,7 +739,10 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     with patch.object(records_module.logger, "warning") as warning:
                         if source == "tool":
                             result = await self.manager.share.send_prepared_chat_share(
-                                **{**self.params(progress_id), "history_source": source},
+                                **{
+                                    **self.params(progress_id),
+                                    "history_source": source,
+                                },
                                 event=event,
                             )
                         else:

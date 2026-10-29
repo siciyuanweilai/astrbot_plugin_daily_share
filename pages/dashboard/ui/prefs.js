@@ -178,6 +178,11 @@ export function createSettingsConfig({
     }
     const preference = controls.smart?.[2]?.closest?.("label");
     if (preference) preference.hidden = mode !== "llm_smart";
+    if (kind === "basic" || kind === "qzone") {
+      const field = kind === "basic" ? el.cfgBasicShareType : el.cfgQzoneShareType;
+      const label = field?.closest?.("label")?.querySelector("span");
+      if (label) label.textContent = mode === "life_driven" ? "传统调度/手动默认类型（生活驱动自主选择）" : "默认类型";
+    }
     if (kind === "qzone") {
       const living = mode === "life_driven";
       const clock = el.cfgQzoneAutoInteractionCron?.closest?.("label");

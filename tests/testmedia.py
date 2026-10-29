@@ -6,6 +6,7 @@ import tempfile
 import time
 import types
 import unittest
+from io import BytesIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -176,6 +177,145 @@ def _new_plugin_with_support(mod):
 
 
 class DashboardMediaPreviewTests(unittest.TestCase):
+    def assert_image_payload_decodes(self, source):
+        from PIL import Image
+
+        self.assertTrue(source.startswith("data:image/"))
+        with Image.open(BytesIO(base64.b64decode(source.split(",", 1)[1]))) as image:
+            image.load()
+            self.assertEqual(image.size, (1, 1))
+
+    def test_shared_temp_image_is_readable_but_not_deletable(self):
+        from PIL import Image
+
+        mod = _load_main_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "data"
+            data_dir = root / "plugin_data" / "astrbot_plugin_daily_share"
+            path = root / "temp" / "media_image.png"
+            path.parent.mkdir(parents=True)
+            Image.new("RGB", (1, 1), "pink").save(path)
+            plugin = _new_dashboard_service(mod)
+            plugin.data_dir = data_dir
+            plugin.db = _DomainStateDb()
+            item = {"media_type": "image", "media_path": str(path)}
+            self.assert_image_payload_decodes(
+                asyncio.run(plugin.media_preview._page_media_preview_url(item))
+            )
+            result = asyncio.run(
+                plugin.media_files._page_delete_local_media_files([item])
+            )
+            self.assertTrue(path.is_file())
+            self.assertEqual(result["deleted"], 0)
+            self.assertEqual(result["skipped"], 1)
+
+    def test_new_history_classifies_local_image_references(self):
+        _load_main_module()
+        db_module = importlib.import_module("astrbot_plugin_daily_share.core.db")
+
+        async def check(data_dir):
+            db = db_module.DatabaseManager(data_dir)
+            try:
+                cases = [
+                    (
+                        "/AstrBot/data/temp/share.png",
+                        "",
+                        "",
+                        "/AstrBot/data/temp/share.png",
+                    ),
+                    (
+                        "file:///AstrBot/data/temp/share.png",
+                        "",
+                        "",
+                        "file:///AstrBot/data/temp/share.png",
+                    ),
+                    ("Temp/share.png", "", "", "Temp/share.png"),
+                    ("/old.png", "Temp/share.png", "", "Temp/share.png"),
+                    (
+                        "https://example.com/share.png?token=1",
+                        "",
+                        "https://example.com/share.png?token=1",
+                        "",
+                    ),
+                    (
+                        "data:image/png;base64," + PNG_1X1,
+                        "",
+                        "data:image/png;base64," + PNG_1X1,
+                        "",
+                    ),
+                ]
+                for ref, path, expected_url, expected_path in cases:
+                    with self.subTest(ref=ref):
+                        await db.add_sent_history(
+                            "qzone",
+                            "qzone",
+                            "测试",
+                            True,
+                            media_type="image",
+                            media_url=ref,
+                            media_path=path,
+                        )
+                        row = (await db.get_recent_history(1))[0]
+                        self.assertEqual(row["media_url"], expected_url)
+                        self.assertEqual(row["media_path"], expected_path)
+            finally:
+                await db.close()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            asyncio.run(check(Path(tmp)))
+
+    def test_new_local_image_history_loads_thumbnail_and_view(self):
+        from PIL import Image
+
+        mod = _load_main_module()
+        db_module = importlib.import_module("astrbot_plugin_daily_share.core.db")
+
+        async def check(root):
+            data_dir = root / "plugin_data" / "astrbot_plugin_daily_share"
+            plugin = _new_dashboard_service(mod)
+            plugin.data_dir = data_dir
+            db = db_module.DatabaseManager(data_dir)
+            plugin.db = db
+            paths = [
+                data_dir / "Temp" / "share.png",
+                data_dir.parent
+                / "astrbot_plugin_daily_life"
+                / "generated"
+                / "images"
+                / "share.png",
+                root / "temp" / "media_image.png",
+            ]
+            try:
+                for path in paths:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    Image.new("RGB", (1, 1), "pink").save(path)
+                    for ref in (str(path), path.as_uri()):
+                        with self.subTest(ref=ref):
+                            await db.add_sent_history(
+                                "qzone",
+                                "qzone",
+                                "测试",
+                                True,
+                                media_type="image",
+                                media_url=ref,
+                            )
+                            item = (await db.get_recent_history(1))[0]
+                            self.assertEqual(item["media_url"], "")
+                            self.assertEqual(item["media_path"], ref)
+                            self.assert_image_payload_decodes(
+                                await plugin.media_preview._page_media_preview_url(item)
+                            )
+                            view = await plugin.media_preview._page_view_image_payload(
+                                item, item["id"]
+                            )
+                            self.assertEqual(view["delivery"], "data")
+                            self.assert_image_payload_decodes(view["view_url"])
+            finally:
+                await db.close()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            asyncio.run(check(Path(tmp) / "data"))
+
     def test_dashboard_exposes_runtime_health_state(self):
         status_source = (
             ROOT / "core" / "panel" / "routes" / "statusview.py"
@@ -581,10 +721,10 @@ class DashboardMediaPreviewTests(unittest.TestCase):
         mod = _load_main_module()
         plugin = _new_plugin_with_support(mod)
 
-        urls = plugin.support_service.extract_news_link_urls(
+        urls = plugin.support_service.operations.tool_context._extract_news_link_urls(
             "标题：目标新闻\n短链接：http://qdls.top/?c=abc123\n摘要：内容"
         )
-        reply = plugin.support_service.ensure_news_link_urls_in_reply(
+        reply = plugin.support_service.operations.tool_context._ensure_news_link_urls_in_reply(
             "这条新闻是这样。", urls
         )
 

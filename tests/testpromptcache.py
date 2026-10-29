@@ -71,7 +71,6 @@ class PromptPrefixTests(unittest.IsolatedAsyncioTestCase):
                                 user_info_prompt=f"person-{token}",
                                 news_text=f"evidence-{token}",
                                 common_rules=common,
-                                dynamics_prompt="",
                                 is_group=False,
                             )
                         )

@@ -62,7 +62,9 @@ class DashboardMediaPreviewService(PanelComponent):
     async def _page_view_image_payload(self, item: dict, history_id: int) -> dict:
         media_url = str(item.get("media_url") or "").strip()
         path = await asyncio.to_thread(
-            self.media_files._page_resolve_media_path, item.get("media_path", "")
+            self.media_files._page_resolve_media_path,
+            item.get("media_path", ""),
+            allow_shared_temp=True,
         )
         if not path and media_url:
             return {"delivery": "url", "view_url": media_url}
@@ -85,7 +87,9 @@ class DashboardMediaPreviewService(PanelComponent):
             return ""
 
         path = await asyncio.to_thread(
-            self.media_files._page_resolve_media_path, item.get("media_path", "")
+            self.media_files._page_resolve_media_path,
+            item.get("media_path", ""),
+            allow_shared_temp=True,
         )
         if not path:
             return media_url

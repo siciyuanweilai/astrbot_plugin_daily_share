@@ -64,26 +64,34 @@ class ContentRecommendationService(ContentComponent):
 
         # 0. 获取配置
         allow_detail = self.context_conf.get("group_share_schedule", False)
-        # 随机选择大类和子类
-        categories = [
-            (name, tags)
-            for name, tags in self.rec_cats.items()
-            if isinstance(tags, (list, tuple)) and tags
-        ]
-        if not categories:
-            logger.warning("[内容服务] 推荐库未配置有效分类，取消推荐分享")
-            return None
-        rec_type, tags = random.choice(categories)
-        sub_style = random.choice(tags)
-
         target_id = ctx["target_id"]
+        if ctx.get("share_materials"):
+            selected = await self.service.topic.select_life_topic(ctx, kind="rec")
+            if not selected:
+                logger.info("[内容服务] 本次经历暂无合适的推荐主题，保留自主选择")
+                return None
+            rec_type, sub_style, target_work = selected
+        else:
+            # 随机选择大类和子类
+            categories = [
+                (name, tags)
+                for name, tags in self.rec_cats.items()
+                if isinstance(tags, (list, tuple)) and tags
+            ]
+            if not categories:
+                logger.warning("[内容服务] 推荐库未配置有效分类，取消推荐分享")
+                return None
+            rec_type, tags = random.choice(categories)
+            sub_style = random.choice(tags)
 
-        logger.info(f"[内容服务] 推荐方向: {rec_type} ({sub_style})")
+            target_id = ctx["target_id"]
 
-        # 使用智能发散选题
-        target_work = await self._agent_brainstorm_topic(
-            rec_type, sub_style, target_id, life_context=ctx.get("life_hint", "")
-        )
+            logger.info(f"[内容服务] 推荐方向: {rec_type} ({sub_style})")
+
+            # 使用智能发散选题
+            target_work = await self._agent_brainstorm_topic(
+                rec_type, sub_style, target_id, life_context=ctx.get("life_hint", "")
+            )
         if not target_work:
             logger.warning("[内容服务] 无法生成推荐作品名，取消分享")
             return None
@@ -120,7 +128,6 @@ class ContentRecommendationService(ContentComponent):
             public_label=public_label,
             include_time=False,
         )
-        dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         opening_guide = self._recommendation_opening_guide(is_qzone, is_group)
@@ -160,7 +167,6 @@ class ContentRecommendationService(ContentComponent):
             user_info_prompt,
             ctx["life_hint"],
             ctx["structured_history_hint"],
-            dynamics_prompt,
             output="直接输出推荐内容：",
         )
 

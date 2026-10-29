@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from html import unescape
 from typing import Any
@@ -261,8 +260,3 @@ def parse_message_board(payload: dict[str, Any], *, start: int = 0) -> dict[str,
         "has_more": start + len(items) < total if total else False,
         "message": clean_qzone_text(payload.get("message")),
     }
-
-
-def compact_html_text(value: Any, *, limit: int = 160) -> str:
-    text = re.sub(r"\s+", " ", clean_qzone_text(value)).strip()
-    return f"{text[:limit]}..." if len(text) > limit else text

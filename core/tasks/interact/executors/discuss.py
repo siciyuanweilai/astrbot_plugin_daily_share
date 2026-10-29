@@ -7,7 +7,13 @@ from astrbot.api import logger
 from ..candidate import _qzone_friend_thread_comment_candidates
 from ..comments import QzoneCommentIndex, _post_has_self_comment
 from ..errors import QzoneAutoInteractionRateLimited
-from ..intent import interaction_ready, living_interaction, wants_interaction
+from ..intent import (
+    interaction_key,
+    interaction_ready,
+    living_interaction,
+    mark_interaction_submission,
+    wants_interaction,
+)
 from ..receipt import record_qzone_interaction
 from ..scan import _expand_qzone_photo_posts, _query_qzone_friend_posts
 from ..task import (
@@ -333,6 +339,8 @@ async def _submit_qzone_auto_comment(
     state: dict,
     processed: dict,
     result: dict,
+    *,
+    intent_key: str = "",
 ) -> bool:
     """仅捕获提交异常；已确认的动作落库后才执行联动和回执。
 
@@ -351,7 +359,13 @@ async def _submit_qzone_auto_comment(
         if not await interaction_ready(owner):
             result["skipped"] += 1
             return False
+        await mark_interaction_submission(owner, "comment", post, key=intent_key)
+        if intent_key and intent_key != interaction_key("comment", post):
+            await mark_interaction_submission(owner, "comment", post)
         await owner.plugin.qzone_service.comment(post_key, comment)
+        await mark_interaction_submission(
+            owner, "comment", post, key=intent_key, completed=True
+        )
     except Exception as exc:
         if int(post.appid or 311) == 4 and getattr(exc, "submission_unknown", False):
             _mark_qzone_post_processed(
@@ -552,6 +566,7 @@ async def _execute_qzone_auto_comment_new_posts(
         ):
             result["skipped"] += 1
             continue
+        intent_key = interaction_key("comment", post)
         if pending_comment:
             comment = pending_comment
         else:
@@ -579,7 +594,14 @@ async def _execute_qzone_auto_comment_new_posts(
                 logger.warning(f"[日常分享] QQ 空间自动评论生成失败: {exc}")
                 continue
         if await _submit_qzone_auto_comment(
-            owner, post, comment, photo_key, state, processed, result
+            owner,
+            post,
+            comment,
+            photo_key,
+            state,
+            processed,
+            result,
+            intent_key=intent_key,
         ):
             break
 

@@ -1,3 +1,5 @@
+"""旧面板独立容器，仅由测试按 core.panel 包名加载。"""
+
 from __future__ import annotations
 
 import asyncio

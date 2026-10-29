@@ -11,6 +11,7 @@ from typing import Any
 
 from astrbot.api import logger
 
+from ..concurrency import KeyedLocks
 from .delivery import ShareDeliveryBridge
 from .mediajob import (
     ShareMediaPending,
@@ -37,6 +38,9 @@ class DailyLifeBridge:
         self._receipt_lock = asyncio.Lock()
         self._search_notices: set[str] = set()
         self._memory_cache = OrderedDict()
+        self._memory_locks = KeyedLocks()
+        self._memory_plugin = None
+        self._memory_revision = 0
         self._media_results: ContextVar[dict[str, tuple[str, str]]] = ContextVar(
             f"daily_share_media_results_{id(self)}",
             default={},
@@ -93,18 +97,30 @@ class DailyLifeBridge:
         query = str(query or "").strip()[:1200]
         if not query:
             return ""
-        method = getattr(self._plugin(), "search_share_memories", None)
+        plugin = self._plugin()
+        if plugin is not self._memory_plugin:
+            self._memory_plugin = plugin
+            self._invalidate_memory_cache()
+        method = getattr(plugin, "search_share_memories", None)
         if not callable(method):
             return ""
+        target_umo = str(target_umo or "").strip()
         key = (target_umo, query)
+        revision = self._memory_revision
+        async with self._memory_locks.hold((revision, key)):
+            return await self._related_memory_prompt(method, key, revision)
+
+    def _invalidate_memory_cache(self) -> None:
+        self._memory_revision += 1
+        self._memory_cache.clear()
+
+    async def _related_memory_prompt(self, method, key: tuple, revision: int) -> str:
         entry = self._memory_cache.get(key)
-        if entry and time.monotonic() < entry[0]:
+        if revision == self._memory_revision and entry and time.monotonic() < entry[0]:
             self._memory_cache.move_to_end(key)
             return entry[1]
         try:
-            rows = await asyncio.wait_for(
-                method(query, target_umo, limit=3), timeout=1.0
-            )
+            rows = await asyncio.wait_for(method(key[1], key[0], limit=3), timeout=1.0)
             lines = [
                 f"- {str(row.get('occurred_at') or '')[:40]} {str(row.get('text') or '')[:400]}"
                 for row in rows[:3]
@@ -117,10 +133,12 @@ class DailyLifeBridge:
             if lines
             else ""
         )
-        self._memory_cache[key] = (time.monotonic() + 15, prompt)
-        self._memory_cache.move_to_end(key)
-        while len(self._memory_cache) > 64:
-            self._memory_cache.popitem(last=False)
+        # 新活动或插件重载后，旧检索不得重新填回已失效的记忆缓存。
+        if revision == self._memory_revision:
+            self._memory_cache[key] = (time.monotonic() + 15, prompt)
+            self._memory_cache.move_to_end(key)
+            while len(self._memory_cache) > 64:
+                self._memory_cache.popitem(last=False)
         return prompt
 
     async def coordinate_contact(self, target_umo: str, **kwargs) -> dict:
@@ -507,7 +525,7 @@ class DailyLifeBridge:
             return text
 
     async def record_public_activity(self, receipt: dict) -> bool:
-        self._memory_cache.clear()
+        self._invalidate_memory_cache()
         event_id = str(receipt.get("event_id") or "")
         if not event_id:
             return False
@@ -553,6 +571,8 @@ class DailyLifeBridge:
                 f"[日常分享] 公开活动回传失败，保留本地回执：{type(exc).__name__}"
             )
             return False
+        finally:
+            self._invalidate_memory_cache()
 
     async def _call_media(self, method_name: str, label: str, *args, **kwargs) -> str:
         media_kind = next(
@@ -620,7 +640,7 @@ class DailyLifeBridge:
         reason: str,
         sync_memory: bool,
     ) -> bool:
-        self._memory_cache.clear()
+        self._invalidate_memory_cache()
         plugin = self._plugin()
         if not callable(getattr(plugin, "record_external_activity_receipt", None)):
             legacy = getattr(plugin, "record_external_activity", None)
@@ -642,6 +662,8 @@ class DailyLifeBridge:
                         f"[日常分享] 旧版生活插件活动回传失败，未自动重试：{type(exc).__name__}"
                     )
                     return False
+                finally:
+                    self._invalidate_memory_cache()
         job = current_share_job.get()
         identity = f"{job['id']}:{target_umo}" if job else uuid.uuid4().hex
         receipt = {
@@ -684,6 +706,8 @@ class DailyLifeBridge:
         except Exception as exc:
             logger.debug(f"[日常分享] 活动回执待补录：{type(exc).__name__}")
             return False
+        finally:
+            self._invalidate_memory_cache()
 
     async def flush_external_receipts(self) -> None:
         if self.db is None:

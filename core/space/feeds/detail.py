@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
+from ...concurrency import KeyedLocks
 from ..models import QzonePost
 from ..parse import parse_feed_item
 from ..parse.photo import photo_thread_comments
@@ -16,12 +18,37 @@ class QzoneFeedDetailService:
 
     def __init__(self, owner: QzoneService) -> None:
         self.owner = owner
+        self._locks = KeyedLocks()
+        self._slots = asyncio.Semaphore(3)
 
     async def detail(self, post_id: str) -> QzonePost:
         post = self.owner._require_post(post_id)
-        cached = self.owner._cached_detail_post(post.key)
-        if cached is not None:
-            return cached
+        scope = self.owner._cache_bot
+        async with self._locks.hold((id(scope), post.key)):
+            self._ensure_scope(scope)
+            cached = self.owner._cached_detail_post(post.key)
+            if cached is not None:
+                return cached
+            async with self._slots:
+                self._ensure_scope(scope)
+                post = self.owner._require_post(post.key)
+                revision = self.owner._cache_revision
+                result = await self._fetch_detail(post)
+            self._ensure_scope(scope)
+            # 评论或删除等写入期间取得的旧详情不能恢复已失效缓存。
+            # 整组照片由补读方法按实际成功结果管理详情标记，失败仍返回原动态。
+            if revision == self.owner._cache_revision and not (
+                int(post.appid or 311) == 4 and post.photo_comment_scope == "batch"
+            ):
+                self.owner._remember_posts([result], detailed=True)
+            return result
+
+    def _ensure_scope(self, scope) -> None:
+        self.owner._ensure_bot_cache_scope()
+        if scope is not self.owner._cache_bot:
+            raise RuntimeError("QQ 空间实例已变化，请重新读取动态")
+
+    async def _fetch_detail(self, post: QzonePost) -> QzonePost:
         if int(post.appid or 311) != 311:
             if int(post.appid) == 4 and post.photo_comment_scope == "batch":
                 return await refresh_batch_comments(self.owner, post)
@@ -60,7 +87,6 @@ class QzoneFeedDetailService:
                     )
                     for item in self.owner._merge_comments(post.comments, comments)
                 ]
-            self.owner._remember_posts([post], detailed=True)
             return post
 
         ctx = await self.owner.context()
@@ -130,7 +156,6 @@ class QzoneFeedDetailService:
         if not parsed:
             raise RuntimeError(last_message or "QQ 空间详情解析失败")
         parsed = self.owner._merge_post_detail(post, parsed)
-        self.owner._remember_posts([parsed], detailed=True)
         return parsed
 
     @staticmethod

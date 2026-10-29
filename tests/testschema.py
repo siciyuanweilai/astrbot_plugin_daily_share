@@ -555,7 +555,9 @@ class ConfigSchemaTests(unittest.TestCase):
                 expected,
             )
 
-    def test_life_resource_limits_can_be_saved_without_changing_smart_schedule_limits(self):
+    def test_life_resource_limits_can_be_saved_without_changing_smart_schedule_limits(
+        self,
+    ):
         import importlib
 
         modules = _load_dashboard_config_modules(_load_config_module())
@@ -580,9 +582,14 @@ class ConfigSchemaTests(unittest.TestCase):
             ):
                 with self.subTest(mode=mode, count=count, channel=definition.mode_key):
                     target = {}
-                    plugin._page_apply_schedule_fields(target, {
-                        definition.mode_key: mode, definition.smart_max_key: count,
-                    }, definition)
+                    plugin._page_apply_schedule_fields(
+                        target,
+                        {
+                            definition.mode_key: mode,
+                            definition.smart_max_key: count,
+                        },
+                        definition,
+                    )
                     self.assertEqual(target[definition.smart_max_key], expected)
 
     def test_schedule_modes_use_current_qzone_auto_interaction_fields(self):

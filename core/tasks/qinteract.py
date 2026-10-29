@@ -31,8 +31,13 @@ from .interact.formatting import _clean_auto_comment_text as _clean_auto_comment
 from .interact.formatting import (
     _qzone_summary_generation_failed_suffix as _qzone_summary_generation_failed_suffix,
 )
+from .interact.intent import (
+    interaction_ready,
+    interaction_state,
+    mark_interaction_submission,
+    wants_interaction,
+)
 from .interact.options import QzoneAutoInteractionConfig
-from .interact.intent import interaction_ready, wants_interaction
 from .interact.policy import QzoneAutoPolicyService
 from .interact.receipt import record_qzone_interaction
 from .interact.response import (
@@ -60,9 +65,6 @@ from .interact.tracker import (
     QZONE_AUTO_COMMENT_DEFAULT_COOLDOWN_HOURS as QZONE_AUTO_COMMENT_DEFAULT_COOLDOWN_HOURS,
 )
 from .interact.tracker import (
-    QZONE_AUTO_COMMENT_DEFAULT_CRON as QZONE_AUTO_COMMENT_DEFAULT_CRON,
-)
-from .interact.tracker import (
     QZONE_AUTO_COMMENT_STATE_KEY as QZONE_AUTO_COMMENT_STATE_KEY,
 )
 from .interact.tracker import (
@@ -81,9 +83,6 @@ from .interact.tracker import (
     QZONE_AUTO_REPLY_DEFAULT_COOLDOWN_HOURS as QZONE_AUTO_REPLY_DEFAULT_COOLDOWN_HOURS,
 )
 from .interact.tracker import (
-    QZONE_AUTO_REPLY_DEFAULT_CRON as QZONE_AUTO_REPLY_DEFAULT_CRON,
-)
-from .interact.tracker import (
     QZONE_AUTO_REPLY_STATE_KEY as QZONE_AUTO_REPLY_STATE_KEY,
 )
 from .taskbase import TaskServiceBase
@@ -99,6 +98,9 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
 
     async def interaction_ready(self) -> bool:
         return await interaction_ready(self)
+
+    async def interaction_state(self, action, post) -> dict:
+        return await interaction_state(self, action, post)
 
     if TYPE_CHECKING:
 
@@ -214,11 +216,17 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             if not await interaction_ready(self):
                 result["skipped"] += 1
                 return _qzone_reply_skipped_payload(reply)
+            await mark_interaction_submission(
+                self, "reply", post, comment, parent_comment
+            )
             submit_result = await self.plugin.qzone_service.reply_comment(
                 post.key,
                 comment,
                 reply,
                 parent_comment=parent_comment,
+            )
+            await mark_interaction_submission(
+                self, "reply", post, comment, parent_comment, completed=True
             )
         except Exception as exc:
             exc_text = str(exc or "")

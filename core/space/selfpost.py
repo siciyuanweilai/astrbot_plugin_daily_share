@@ -6,14 +6,16 @@ import time
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
+
 from ..schedule import QZONE_SCHEDULE, normalize_schedule_mode
+from .models import QzonePost
 
 if TYPE_CHECKING:
-    from .models import QzonePost
     from .qzone import QzoneService
 
 SELF_POST_STATE_KEY = "qzone_self_post"
 SELF_POST_STATE_LIMIT = 500
+_RETRYABLE = {"pending", "selected", "waiting", "preparing"}
 
 
 def self_comment_probability(conf: dict) -> int:
@@ -24,8 +26,17 @@ def self_comment_probability(conf: dict) -> int:
     return max(0, min(100, value))
 
 
+def _living(conf: dict) -> bool:
+    return (
+        normalize_schedule_mode(
+            conf.get("qzone_trigger_mode"), QZONE_SCHEDULE.mode_default
+        )
+        == "life_driven"
+    )
+
+
 class QzoneSelfPostService:
-    """仅处理刚确认发布的说说；预先保存意愿和提交标记，避免重复动作。"""
+    """确认发布后独立互动；只复查尚未提交的等待，提交未知永久保留防重。"""
 
     def __init__(self, owner: QzoneService, plugin) -> None:
         self.owner = owner
@@ -33,7 +44,6 @@ class QzoneSelfPostService:
         self._claim_lock = asyncio.Lock()
 
     def schedule(self, post: QzonePost, *, image_count: int = 0) -> None:
-        # 后续动作不能向发布层抛错，否则可能触发重新登录、重复发布。
         try:
             conf = self.owner._qzone_config()
             if not (
@@ -62,11 +72,62 @@ class QzoneSelfPostService:
             max_items=SELF_POST_STATE_LIMIT,
         )
 
+    async def review_pending(self) -> None:
+        """由现有生活观察器唤醒，重启后仍只恢复新版记录中的等待。"""
+        if self.plugin._is_terminated or not _living(self.owner._qzone_config()):
+            return
+        states = await self.plugin.db.get_qzone_state(SELF_POST_STATE_KEY, {})
+        now = time.time()
+        candidates = [
+            row
+            for row in states.values()
+            if isinstance(row, dict)
+            and row.get("version") == 2
+            and row.get("living")
+            and any(
+                row.get(action) in _RETRYABLE
+                and now >= row.get("review", {}).get(action, 0)
+                for action in ("like", "comment")
+            )
+        ]
+        if (
+            candidates
+            and not await self.plugin.task_manager.qzone_interaction.interaction_ready()
+        ):
+            return
+        for row in candidates[:4]:
+            await self.run(
+                QzonePost(**row["post"]), image_count=row.get("image_count", 0)
+            )
+
     async def run(self, post: QzonePost, *, image_count: int = 0) -> None:
         try:
-            await self._run(post, image_count=image_count)
+            # 同一实例的发布回调和观察器不能并发领取同一动作。
+            async with self._claim_lock:
+                await self._run(post, image_count=image_count)
         except Exception as exc:
             logger.warning(f"[日常分享] 说说已发布，自互动未完成: {exc}")
+
+    async def _wait(self, post, entry, action, interaction) -> None:
+        reader = getattr(interaction, "interaction_state", None)
+        if not callable(reader):
+            entry[action] = "skipped"
+        else:
+            intent = await reader("self_" + action, post)
+            if intent.get("decision") == "skip":
+                entry[action] = "skipped"
+            elif (
+                intent.get("decision") == "act" and intent.get("status") != "preparing"
+            ):
+                entry[action] = "unconfirmed"
+            elif intent.get("attempts", 0) >= 3:
+                entry[action] = "exhausted"
+            else:
+                entry[action] = "waiting"
+                entry["review"][action] = max(
+                    time.time() + 300, intent.get("review_at", 0)
+                )
+        await self._save(post.key, entry)
 
     async def _run(self, post: QzonePost, *, image_count: int) -> None:
         if (
@@ -76,94 +137,132 @@ class QzoneSelfPostService:
             or int(post.appid) != 311
         ):
             return
-        ctx = await self.owner.context()
-        if int(post.uin) != int(ctx.uin):
-            return
-        async with self._claim_lock:
-            state = await self.plugin.db.get_qzone_state(SELF_POST_STATE_KEY, {})
-            if isinstance(state, dict) and post.key in state:
+        state = await self.plugin.db.get_qzone_state(SELF_POST_STATE_KEY, {})
+        entry = state.get(post.key)
+        conf = self.owner._qzone_config()
+        living = _living(conf)
+        if entry is not None:
+            # 升级不重开旧版的一次性决定，也不恢复已经开始的平台提交。
+            if entry.get("version") != 2 or not entry.get("living"):
                 return
-            conf = self.owner._qzone_config()
-            living = (
-                normalize_schedule_mode(
-                    conf.get("qzone_trigger_mode"), QZONE_SCHEDULE.mode_default
-                )
-                == "life_driven"
-            )
-            like = bool(conf.get("qzone_auto_like_own_post", True))
+            if not living or time.time() - entry["at"] > 6 * 3600:
+                for action in ("like", "comment"):
+                    if entry.get(action) in _RETRYABLE:
+                        entry[action] = "expired"
+                await self._save(post.key, entry)
+                return
+        else:
             probability = self_comment_probability(conf)
-            comment = probability > 0 and (
+            selected = probability > 0 and (
                 living or probability == 100 or random.random() * 100 < probability
             )
             entry = {
+                "version": 2,
+                "living": living,
                 "at": int(time.time()),
-                "like": "pending" if like else "disabled",
-                "comment": "selected" if comment else "skipped",
+                "like": "pending"
+                if conf.get("qzone_auto_like_own_post", True)
+                else "disabled",
+                "comment": "selected" if selected else "skipped",
+                "review": {},
+                "checks": {},
+                "attempts": {},
+                "image_count": image_count,
+                "post": {
+                    name: getattr(post, name)
+                    for name in ("tid", "uin", "name", "text", "images", "create_time")
+                },
             }
-            # 持久化失败即停止，不能发送后丢失防重记录。
-            await self._save(post.key, entry)
-
-        if like and not self.plugin._is_terminated:
-            try:
-                interaction = (
-                    self.plugin.task_manager.qzone_interaction if living else None
-                )
-                if living and not await interaction.wants_interaction(
-                    "self_like", post
-                ):
-                    entry["like"] = "skipped"
-                elif not living or await interaction.interaction_ready():
-                    await self.owner.like(post.key)
-                    entry["like"] = "liked"
-                else:
-                    entry["like"] = "cancelled"
-            except Exception as exc:
-                entry["like"] = "failed"
-                logger.warning(f"[日常分享] 自己的说说点赞失败: {exc}")
-            await self._save(post.key, entry)
-
-        if comment and not self.plugin._is_terminated:
-            try:
-                interaction = self.plugin.task_manager.qzone_interaction
-                if living and not await interaction.wants_interaction(
-                    "self_comment", post
-                ):
-                    entry["comment"] = "skipped"
-                    await self._save(post.key, entry)
-                    return
-                content = await interaction.generate_qzone_self_comment(
-                    post, image_count=image_count
-                )
-                bridge = getattr(self.plugin, "daily_life_bridge", None)
-                clean = getattr(bridge, "clean_expression_punctuation", None)
-                if callable(clean):
-                    content = await clean(content, scene="qzone_comment")
-                if not str(content or "").strip():
-                    raise ValueError("自评清洗后为空，停止提交")
-                if (
-                    self.plugin._is_terminated
-                    or (living and not await interaction.interaction_ready())
-                    or not self_comment_probability(self.owner._qzone_config())
-                ):
-                    entry["comment"] = "cancelled"
-                    await self._save(post.key, entry)
-                    return
-                # 发送前保存正文；超时、取消或结果不明均不自动再次提交。
-                entry.update(comment="submitting", content=content)
-                await self._save(post.key, entry)
-                await self.owner.comment(post.key, content)
-                entry["comment"] = "commented"
-            except Exception as exc:
-                entry["comment"] = "unconfirmed"
-                logger.warning(f"[日常分享] 说说自评未完成，停止自动重试: {exc}")
-            await self._save(post.key, entry)
-            if entry["comment"] == "commented":
-                await interaction.record_qzone_self_comment(post, content)
-
+        eligible = [
+            action
+            for action in ("like", "comment")
+            if entry.get(action) in _RETRYABLE
+            and time.time() >= entry["review"].get(action, 0)
+        ]
+        if not eligible:
+            return
+        ctx = await self.owner.context()
+        if int(post.uin) != int(ctx.uin):
+            return
+        await self._save(post.key, entry)
+        interaction = self.plugin.task_manager.qzone_interaction
         actions = []
-        if entry["like"] == "liked":
-            actions.append("已点赞")
-        if entry["comment"] == "commented":
-            actions.append("已自评")
+        for action in eligible:
+            current = self.owner._qzone_config()
+            enabled = (
+                current.get("qzone_auto_like_own_post", True)
+                if action == "like"
+                else self_comment_probability(current)
+            )
+            if not enabled:
+                entry[action] = "cancelled"
+                await self._save(post.key, entry)
+                continue
+            if (
+                entry["checks"].get(action, 0) >= 24
+                or entry["attempts"].get(action, 0) >= 3
+            ):
+                entry[action] = "exhausted"
+                await self._save(post.key, entry)
+                continue
+            entry["checks"][action] = entry["checks"].get(action, 0) + 1
+            entry.update({action: "preparing"})
+            entry["review"][action] = time.time() + 300
+            await self._save(post.key, entry)
+            if living and not await interaction.wants_interaction(
+                "self_" + action, post
+            ):
+                await self._wait(post, entry, action, interaction)
+                continue
+            entry["attempts"][action] = entry["attempts"].get(action, 0) + 1
+            content = ""
+            try:
+                if action == "comment":
+                    content = await interaction.generate_qzone_self_comment(
+                        post, image_count=image_count
+                    )
+                    bridge = getattr(self.plugin, "daily_life_bridge", None)
+                    clean = getattr(bridge, "clean_expression_punctuation", None)
+                    if callable(clean):
+                        content = await clean(content, scene="qzone_comment")
+                    if not str(content or "").strip():
+                        raise ValueError("自评清洗后为空，停止提交")
+                current = self.owner._qzone_config()
+                enabled = (
+                    current.get("qzone_auto_like_own_post", True)
+                    if action == "like"
+                    else self_comment_probability(current)
+                )
+                if self.plugin._is_terminated or not enabled:
+                    entry[action] = "cancelled"
+                elif living and not _living(current):
+                    entry[action] = "cancelled"
+                elif living and not await interaction.interaction_ready():
+                    await self._wait(post, entry, action, interaction)
+                    continue
+                else:
+                    # 只有到这里才可能调用平台；取消和超时保留此标记，不再次提交。
+                    entry[action] = "submitting"
+                    if content:
+                        entry["content"] = content
+                    await self._save(post.key, entry)
+                    if action == "like":
+                        await self.owner.like(post.key)
+                        entry[action] = "liked"
+                    else:
+                        await self.owner.comment(post.key, content)
+                        entry[action] = "commented"
+                    actions.append("已点赞" if action == "like" else "已自评")
+            except Exception as exc:
+                submitted = entry[action] == "submitting"
+                entry[action] = (
+                    ("failed" if action == "like" else "unconfirmed")
+                    if submitted or not living
+                    else "waiting"
+                )
+                logger.warning(f"[日常分享] 说说自互动未完成：{type(exc).__name__}")
+            await self._save(post.key, entry)
+            if action == "comment" and entry[action] == "commented":
+                await interaction.record_qzone_self_comment(post, content)
         if actions:
             logger.info(f"[日常分享] 自己的说说：{'，'.join(actions)}。")

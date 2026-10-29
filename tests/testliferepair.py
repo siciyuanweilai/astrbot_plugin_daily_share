@@ -203,11 +203,8 @@ class LifeRepairTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_related_memory_is_cached_and_target_isolated(self):
         lookup = AsyncMock(return_value=[{"text": "摄影记忆", "kind": "memory"}])
-        context = types.SimpleNamespace(
-            get_all_stars=lambda: [
-                _metadata(types.SimpleNamespace(search_share_memories=lookup))
-            ]
-        )
+        plugin = types.SimpleNamespace(search_share_memories=lookup)
+        context = types.SimpleNamespace(get_all_stars=lambda: [_metadata(plugin)])
         bridge = DailyLifeBridge(context)
         for target in (
             "qq:FriendMessage:a",

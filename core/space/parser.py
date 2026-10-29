@@ -1,3 +1,5 @@
+"""旧解析导入路径的兼容层；新代码统一使用 core.space.parse。"""
+
 from __future__ import annotations
 
 from .parse import (

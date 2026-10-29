@@ -3205,8 +3205,10 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(result)
                 self.assertEqual(calls, [target])
                 args, kwargs = plugin.content_service.calls[-1]
-                self.assertEqual(args[4], "当前在休息")
-                self.assertEqual(kwargs["recent_dynamics"], "")
+                self.assertTrue(args[4].startswith("当前在休息"))
+                self.assertIn("向当前对象已确认发出的历史分享", args[4])
+                self.assertIn("旧分享正文", args[4])
+                self.assertNotIn("recent_dynamics", kwargs)
                 self.assertEqual(kwargs["recent_post_contents"], ["旧分享正文"])
                 self.assertEqual(media, ["完整穿搭资料"])
 
@@ -3255,7 +3257,9 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(context_calls, ["share_context"])
         args, kwargs = plugin.content_service.calls[-1]
-        self.assertEqual(args[4], "当前提着双皮奶往回走")
+        self.assertTrue(args[4].startswith("当前提着双皮奶往回走"))
+        self.assertIn("以前的长篇文艺说说", args[4])
+        self.assertIn("不是当前生活事实", args[4])
         self.assertEqual(kwargs.get("recent_dynamics", ""), "")
         self.assertEqual(kwargs["recent_post_contents"], ["以前的长篇文艺说说"])
         self.assertEqual(image_calls[0]["life_ctx"], "完整穿搭和外观资料")
@@ -3859,7 +3863,7 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             is_group=False,
         )
         self.assertEqual(result["recent_post_contents"], [f"{USER_TARGET_1}原文0"])
-        self.assertEqual(result["recent_dynamics"], "")
+        self.assertNotIn("recent_dynamics", result)
 
         manager.update_configs(context={"reference_history_count": 0})
         self.assertEqual(await context.get_recent_post_contents(USER_TARGET_1), [])

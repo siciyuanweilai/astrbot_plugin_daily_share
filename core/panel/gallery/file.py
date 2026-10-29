@@ -14,7 +14,9 @@ class DashboardMediaFileService(PanelComponent):
     media_files = RuntimeField("media_files")
     media_kind = RuntimeField("media_kind")
 
-    def _page_resolve_media_path(self, media_path: str) -> Path | None:
+    def _page_resolve_media_path(
+        self, media_path: str, *, allow_shared_temp: bool = False
+    ) -> Path | None:
         media_path = self.media_kind._page_local_media_ref(media_path)
         if not media_path:
             return None
@@ -31,6 +33,11 @@ class DashboardMediaFileService(PanelComponent):
             (daily_life_data_dir / "generated" / "images").resolve(strict=False),
             (daily_life_data_dir / "generated" / "videos").resolve(strict=False),
         ]
+        # AstrBot 的消息附件在共享 temp 目录中，面板只允许读取，不能删除。
+        if allow_shared_temp and self.data_dir.parent.name == "plugin_data":
+            allowed_roots.append(
+                (self.data_dir.parent.parent / "temp").resolve(strict=False)
+            )
 
         for candidate in candidates:
             try:

@@ -31,25 +31,33 @@ class ContentKnowledgeService(ContentComponent):
 
         # 0. 获取配置
         allow_detail = self.context_conf.get("group_share_schedule", False)
-        # 随机选择大类和子类
-        categories = [
-            (name, tags)
-            for name, tags in self.knowledge_cats.items()
-            if isinstance(tags, (list, tuple)) and tags
-        ]
-        if not categories:
-            logger.warning("[内容服务] 知识库未配置有效分类，取消知识分享")
-            return None
-        main_cat, tags = random.choice(categories)
-        sub_cat = random.choice(tags)
         target_id = ctx["target_id"]
+        if ctx.get("share_materials"):
+            selected = await self.service.topic.select_life_topic(ctx, kind="knowledge")
+            if not selected:
+                logger.info("[内容服务] 本次经历暂无合适的知识主题，保留自主选择")
+                return None
+            main_cat, sub_cat, target_keyword = selected
+        else:
+            # 随机选择大类和子类
+            categories = [
+                (name, tags)
+                for name, tags in self.knowledge_cats.items()
+                if isinstance(tags, (list, tuple)) and tags
+            ]
+            if not categories:
+                logger.warning("[内容服务] 知识库未配置有效分类，取消知识分享")
+                return None
+            main_cat, tags = random.choice(categories)
+            sub_cat = random.choice(tags)
+            target_id = ctx["target_id"]
 
-        logger.info(f"[内容服务] 知识方向: {main_cat} - {sub_cat}")
+            logger.info(f"[内容服务] 知识方向: {main_cat} - {sub_cat}")
 
-        # 使用智能发散选题
-        target_keyword = await self._agent_brainstorm_topic(
-            main_cat, sub_cat, target_id, life_context=ctx.get("life_hint", "")
-        )
+            # 使用智能发散选题
+            target_keyword = await self._agent_brainstorm_topic(
+                main_cat, sub_cat, target_id, life_context=ctx.get("life_hint", "")
+            )
         if not target_keyword:
             logger.warning("[内容服务] 无法生成知识关键词，取消分享")
             return None
@@ -86,7 +94,6 @@ class ContentKnowledgeService(ContentComponent):
             public_label=public_label,
             include_time=False,
         )
-        dynamics_prompt = self._build_recent_dynamics_prompt(ctx.get("recent_dynamics"))
 
         target_str = public_label if is_qzone else ("群聊" if is_group else "私聊")
         opening_guide = self._knowledge_opening_guide(is_qzone, is_group)
@@ -119,7 +126,6 @@ class ContentKnowledgeService(ContentComponent):
             user_info_prompt,
             ctx["life_hint"],
             ctx["structured_history_hint"],
-            dynamics_prompt,
             output="直接输出分享内容：",
         )
 

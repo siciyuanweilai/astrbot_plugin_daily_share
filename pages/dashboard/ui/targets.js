@@ -416,7 +416,7 @@ export function createTargetsUi({
       const seqLabel = document.createElement("label");
       seqLabel.className = "target-field";
       const seqText = document.createElement("span");
-      seqText.textContent = "独立序列";
+      seqText.textContent = "独立定时类型序列";
       const seqInput = document.createElement("input");
       seqInput.value = targetSequenceDisplay(item.sequence || "自动");
       seqInput.placeholder = "自动 / 新闻,心情";
@@ -427,7 +427,7 @@ export function createTargetsUi({
       const cronLabel = document.createElement("label");
       cronLabel.className = "target-field";
       const cronText = document.createElement("span");
-      cronText.textContent = "独立定时";
+      cronText.textContent = "独立定时（填写后不参与生活驱动）";
       const cronInput = document.createElement("input");
       cronInput.value = item.cron || "";
       cronInput.placeholder = "留空跟随全局，可填 08:30 或高级定时表达式";

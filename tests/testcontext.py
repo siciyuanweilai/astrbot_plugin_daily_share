@@ -980,14 +980,18 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         _, service = _service()
         raw = await _DailyLifePlugin().get_share_context()
         raw["contact_rhythm"] = {
-            "willingness": 0.85, "ready": False,
-            "unanswered_contacts": 4, "last_received_at": "PRIVATE_RECEIPT",
+            "willingness": 0.85,
+            "ready": False,
+            "unanswered_contacts": 4,
+            "last_received_at": "PRIVATE_RECEIPT",
         }
         service.daily_life_bridge = types.SimpleNamespace(
             get_share_context=lambda target: asyncio.sleep(0, result=raw)
         )
         result = await service.get_qzone_interaction_context("bot:FriendMessage:u1")
-        self.assertEqual(json.loads(result["initiative_context"]), {"willingness": 0.85})
+        self.assertEqual(
+            json.loads(result["initiative_context"]), {"willingness": 0.85}
+        )
         rendered = json.dumps(result, ensure_ascii=False)
         self.assertNotIn("PRIVATE_RECEIPT", rendered)
         self.assertNotIn("unanswered_contacts", rendered)
