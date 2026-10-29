@@ -12,7 +12,7 @@ from ..database.keys import (
     SOURCE_COMMAND,
 )
 from ..reaction import clear_processing, mark_failed, mark_processing, mark_success
-from ..space.mentions import qzone_publish_text
+from ..space.mentions import clean_qzone_post_text, qzone_publish_text
 from ..tasks.interact.receipt import record_qzone_interaction
 from ..tasks.interact.totals import qzone_interaction_outcome
 from ..tasks.interact.tracker import (
@@ -611,7 +611,12 @@ class PluginToolService(SupportComponent):
         self_uin: int,
         mentions: list[dict[str, str]] | None = None,
     ) -> str:
-        text = qzone_publish_text(str(content or "").strip(), mentions)
+        bridge = getattr(getattr(self, "plugin", None), "daily_life_bridge", None)
+        text = await clean_qzone_post_text(
+            str(content or "").strip(),
+            getattr(bridge, "clean_expression_punctuation", None),
+        )
+        text = qzone_publish_text(text, mentions)
         if not text and not images:
             return "说说内容或媒体不能为空。"
         post = await self.qzone_service.publish_post(text=text, images=images)

@@ -195,11 +195,5 @@ class TaskCommandLocalRunService:
         self.owner.services.executor_helpers.records.log_partial_send_errors(
             target_umo, media_result
         )
-        if event:
-            await (
-                self.owner.services.executor_helpers.records.notify_partial_send_errors(
-                    event, media_result
-                )
-            )
         finish_progress(True, "分享完成")
         return True

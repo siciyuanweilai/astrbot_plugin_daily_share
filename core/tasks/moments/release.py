@@ -64,7 +64,7 @@ class TaskQzonePublishService:
         )
         if image_downgraded:
             self.owner.services.progress.fail_share_progress_step(
-                progress_id, "image", "配图发布失败，继续发送"
+                progress_id, "image", "配图发布失败"
             )
         logger.info("[日常分享] 成功分享内容到 QQ 空间！")
 

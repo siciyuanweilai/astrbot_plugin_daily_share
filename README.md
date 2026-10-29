@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.4-ef6f8f" alt="版本 1.2.4"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.5-ef6f8f" alt="版本 1.2.5"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.2.4 版本更新**：新增生活驱动分享与 QQ 空间互动，结合真实经历和角色意愿决定是否表达；接入 B站浏览感受，支持正文任意位置 @ 好友，并统一首页与设置页样式。生活驱动依赖 daily_life，其他定时模式仍可独立使用。详见 [更新日志](./CHANGELOG.md)。
+> **v1.2.5 版本更新**：修复生活分享决策调用错误，完善媒体任务等待与恢复；媒体失败时仅保留具体原因，不再向接收方发送重复提示。详见 [更新日志](./CHANGELOG.md)。
 
 ---
 
@@ -183,7 +183,7 @@
 | 语音 | 适用于问候、心情等允许类型，可配置仅发送语音 |
 | 个人微信图片 | 使用独立发送副本，适配个人微信发送要求 |
 
-媒体生成失败时继续发送其余可用内容；已受理的异步任务会等待原任务结果，超时或重载后可续接。只有确认送达后才记入成功历史并回传活动与记忆，详见[与 daily_life 联动](#daily-life)。
+媒体生成失败时继续发送其余可用内容；异步任务尚未完成或结果暂时无法确认时，保留原任务继续查询，超时或重载后可续接。等待不代表已发送或保证续发成功。只有确认送达后才记入成功历史并回传活动与记忆；局部媒体失败仅在日志、面板进度和历史记录保留具体原因，不向接收方额外发送失败提示。任务丢失或成品文件缺失则记录失败，详见[与 daily_life 联动](#daily-life)。
 
 ## 🧭 平台与目标
 

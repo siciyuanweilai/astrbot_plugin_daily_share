@@ -321,10 +321,6 @@ class TaskExecutorService(TaskServiceBase):
         self.services.executor_helpers.records.log_partial_send_errors(
             uid, media_result
         )
-        if event and tool_event:
-            await self.services.executor_helpers.records.notify_partial_send_errors(
-                event, media_result
-            )
         self.services.progress.finish_share_progress(
             progress_id, success=True, message="分享完成"
         )

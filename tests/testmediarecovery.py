@@ -8,7 +8,7 @@ import types
 import unittest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from tests import testfailure as fixtures
 
@@ -292,6 +292,13 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.sent, [])
         self.life.get_share_image_task.assert_not_called()
         self.life.generate_share_image_task.assert_not_called()
+        self.assertEqual(len(self.plugin.db.history), 1)
+        self.assertFalse(self.plugin.db.history[0][1]["success"])
+        self.assertIn(
+            "原媒体成品文件不存在", self.plugin.db.history[0][1]["error_reason"]
+        )
+        await self.service.recover_once()
+        self.assertEqual(len(self.plugin.db.history), 1)
 
     async def test_terminal_recovery_ends_progress_without_sending_or_resubmitting(
         self,
@@ -385,6 +392,8 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.life.get_share_image_task.return_value = {"status": "pending"}
         await self.service.recover_once()
         self.assertIn("等待原任务成品", self.progress()["message"])
+        self.assertIn("本次分享尚未发送", self.progress()["message"])
+        self.assertNotIn("已受理", self.progress()["message"])
         self.assertEqual(self.journal()["media_results"]["image"], ["pending", ""])
         self.assertEqual(self.sent, [])
         self.life.generate_share_image_task.assert_not_called()
@@ -444,6 +453,7 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.plugin.db.history), 1)
         self.assertEqual(self.journal(key)["status"], "completed")
         self.assertEqual(self.journal(key)["media_results"]["image"], ["ok", ""])
+        self.assertFalse(self.progress()["degraded"])
 
     async def test_confirmed_image_failure_survives_restart_as_degraded_history(self):
         job = await self.job()
@@ -526,6 +536,9 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
             "视频任务已取消", self.plugin.db.history[0][1]["degradation_reason"]
         )
         self.assertEqual(self.progress()["status"], "done")
+        self.assertTrue(self.progress()["degraded"])
+        self.assertEqual(self.progress()["stage_label"], "已完成")
+        self.assertIn("视频任务已取消", self.progress()["message"])
 
     async def test_video_recovery_delivers_video_not_first_frame_once(self):
         self.manager.update_configs(
@@ -566,6 +579,7 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.plugin.db.history), 1)
         self.assertFalse(self.plugin.db.history[0][1]["degraded"])
         self.assertEqual(self.progress()["status"], "done")
+        self.assertFalse(self.progress()["degraded"])
 
     async def test_independent_job_cannot_inherit_previous_media_error(self):
         self.bridge._set_media_result("image", "error", "另一任务的失败原因")
@@ -673,6 +687,116 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.journal()["status"], "failed")
         self.assertIsNone(self.mediajob.current_share_job.get())
         self.assertEqual(self.service.active, set())
+        self.assertEqual(len(self.plugin.db.history), 1)
+        self.assertEqual(self.plugin.db.history[0][1]["error_reason"], "test")
+
+    async def test_pending_notice_does_not_report_failure_or_promise_delivery(self):
+        module = importlib.import_module(self.service_class.__module__)
+        with patch.object(module.logger, "info") as info:
+            self.assertFalse(
+                await self.manager.share.send_prepared_chat_share(
+                    **self.params(self.start_progress())
+                )
+            )
+        notices = " ".join(str(call.args[0]) for call in info.call_args_list)
+        self.assertIn("仍在生成", notices)
+        self.assertIn("成品就绪并满足发送条件后尝试续发", notices)
+        self.assertNotIn("稍后继续分享", notices)
+        self.assertEqual(self.plugin.db.history, [])
+        job = next(iter(self.plugin.db.state["share_media_continuations"].values()))
+        self.assertEqual(job["status"], "pending")
+
+    async def test_partial_delivery_keeps_failure_details_out_of_chat(self):
+        reason = "Grok 视频任务失败：test-task，internal_error: V2 上传文件被上游拒绝"
+        self.manager.update_configs(
+            image={
+                "enable_ai_image": True,
+                "image_enabled_types": ["心情"],
+                "enable_ai_video": True,
+                "video_enabled_types": ["心情"],
+                "separate_send": True,
+            }
+        )
+        self.life.generate_share_video_task.return_value = {
+            "status": "failed",
+            "error": reason,
+        }
+        records_module = importlib.import_module(
+            self.manager.executor_helpers.records.__class__.__module__
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "original.png")
+            Path(path).touch()
+            self.life.generate_share_image_task.return_value = {
+                "status": "ready",
+                "path": path,
+            }
+            for source in ("tool", "command"):
+                with self.subTest(source=source):
+                    event = fixtures._Event(unified_msg_origin=fixtures.USER_TARGET_1)
+                    progress_id = self.start_progress()
+                    sent_before = len(self.sent)
+                    with patch.object(records_module.logger, "warning") as warning:
+                        if source == "tool":
+                            result = await self.manager.share.send_prepared_chat_share(
+                                **{**self.params(progress_id), "history_source": source},
+                                event=event,
+                            )
+                        else:
+                            result = await self.manager.command_share.send_prepared_command_share(
+                                target_umo=fixtures.USER_TARGET_1,
+                                target_type_enum=self.mod.ShareType.MOOD,
+                                period=self.mod.TimePeriod.NIGHT,
+                                life_ctx="原生活快照",
+                                news_data=None,
+                                need_image=True,
+                                need_video=True,
+                                need_voice=False,
+                                history_source=source,
+                                progress_id=progress_id,
+                                content="保留原文案",
+                                event=event,
+                            )
+                    self.assertTrue(result)
+                    self.assertEqual(event.sent, [])
+                    self.assertEqual(
+                        [item[1] for item in self.sent[sent_before:]],
+                        [["保留原文案"], [("file_image", path)]],
+                    )
+                    history = self.plugin.db.history[-1][1]
+                    self.assertTrue(history["success"])
+                    self.assertTrue(history["degraded"])
+                    self.assertEqual(history["degradation_reason"], f"视频：{reason}")
+                    self.assertEqual(self.progress()["message"], f"视频：{reason}")
+                    warning.assert_called_once()
+                    log = warning.call_args.args[0]
+                    self.assertIn(reason, log)
+                    self.assertNotIn("已发送可用内容", log)
+                    self.assertNotIn("继续发送", log)
+
+    async def test_partial_delivery_history_survives_old_dashboard(self):
+        job = await self.job()
+        token = self.mediajob.current_share_job.set(job)
+        records = self.manager.executor_helpers.records
+        try:
+            self.start_progress()
+            await records.record_share_history(
+                target_id=fixtures.USER_TARGET_1,
+                share_type="mood",
+                content="原文案",
+                success=True,
+                source_type="command",
+                media_result={"text_sent": True},
+                degradation_reason="视频未生成：上游未返回有效成品",
+            )
+            self.assertTrue(self.plugin.db.history[0][1]["degraded"])
+            self.assertNotIn("media_type", self.plugin.db.history[0][1])
+            self.manager.progress.finish_share_progress(
+                job["params"]["progress_id"], success=True
+            )
+            self.assertEqual(self.progress()["status"], "running")
+        finally:
+            self.mediajob.current_share_job.reset(token)
 
 
 if __name__ == "__main__":

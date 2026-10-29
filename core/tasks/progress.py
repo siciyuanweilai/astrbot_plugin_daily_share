@@ -295,9 +295,17 @@ class TaskProgressService(TaskServiceBase):
             return
         status = "done" if success else "error"
         progress = self.state.share_progress
+        degradation_reason = ""
         if isinstance(progress, dict):
             if progress.get("id") != job_id:
                 return
+            if success:
+                degradation_reason = self.share_progress_degradation_reason(job_id)
+                job = current_share_job.get()
+                if (job or {}).get("params", {}).get("progress_id") == job_id:
+                    degradation_reason = (
+                        job.get("degradation_reason") or degradation_reason
+                    )
             for step in progress.get("steps", []):
                 if step.get("status") == "skipped":
                     continue
@@ -305,11 +313,20 @@ class TaskProgressService(TaskServiceBase):
                     step["status"] = "done"
                 elif not success and step.get("status") == "running":
                     step["status"] = "error"
+        if degradation_reason:
+            message = degradation_reason
         self.update_share_progress(
             job_id,
             "done" if success else "error",
             status=status,
             message=message or ("分享完成" if success else "分享失败"),
+            extra={
+                "degraded": bool(degradation_reason),
+                "degradation_reason": degradation_reason,
+                "stage_label": self._PROGRESS_STAGE_LABELS[
+                    "done" if success else "error"
+                ],
+            },
         )
 
     def get_share_progress_snapshot(self) -> dict:

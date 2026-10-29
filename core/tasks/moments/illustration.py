@@ -68,7 +68,11 @@ class TaskQzoneMediaService:
                         )
                     else:
                         self.owner.services.progress.fail_share_progress_step(
-                            progress_id, "image", "配图生成失败，继续发送"
+                            progress_id,
+                            "image",
+                            self.owner.services.executor_helpers.media._media_failure_message(
+                                "image", "配图生成失败"
+                            ),
                         )
                 except ShareMediaPending:
                     raise
@@ -77,7 +81,7 @@ class TaskQzoneMediaService:
                         "[日常分享] QQ 空间配图生成失败", e, with_traceback=False
                     )
                     self.owner.services.progress.fail_share_progress_step(
-                        progress_id, "image", "配图生成失败，继续发送"
+                        progress_id, "image", "配图生成失败"
                     )
             else:
                 logger.info(
@@ -114,7 +118,7 @@ class TaskQzoneMediaService:
         except Exception as e:
             logger.warning(f"[日常分享] QQ 空间获取新闻配图失败: {format_exception(e)}")
             self.owner.services.progress.fail_share_progress_step(
-                progress_id, "image", "新闻配图获取失败，继续发送"
+                progress_id, "image", "新闻配图获取失败"
             )
 
         return target_local_img

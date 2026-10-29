@@ -1,6 +1,6 @@
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent
 
+from ...integrations.mediajob import current_share_job, media_error_message
 from ...toolkit import log_exception
 from ..taskbase import TaskServiceBase
 
@@ -39,11 +39,14 @@ class TaskHelperRecordService(TaskServiceBase):
                 label = str(
                     item.get("stage_label") or item.get("stage") or "媒体"
                 ).strip()
-                message = str(item.get("message") or "发送失败").strip()
+                message = media_error_message(item.get("message"), "发送失败")
                 reason = f"{label}发送失败：{message}"
                 if reason not in degradation_reasons:
                     degradation_reasons.append(reason)
         resolved_degradation_reason = "；".join(degradation_reasons)
+        job = current_share_job.get()
+        if job is not None and success:
+            job["degradation_reason"] = resolved_degradation_reason
         snapshot = self.services.snapshots.prepare_news_snapshot_record(
             news_snapshot_data,
             news_image_url,
@@ -75,18 +78,23 @@ class TaskHelperRecordService(TaskServiceBase):
                 self.services.snapshots.invalidate_news_context_prompt(
                     record["target_id"]
                 )
-            return
-        await self.db.add_sent_history(
-            target_id=target_id,
-            share_type=getattr(share_type, "value", share_type),
-            content=content,
-            success=success,
-            error_reason=error_reason or None,
-            source_type=source_type,
-            degraded=bool(resolved_degradation_reason),
-            degradation_reason=resolved_degradation_reason,
-            **visual,
-        )
+        else:
+            await self.db.add_sent_history(
+                target_id=target_id,
+                share_type=getattr(share_type, "value", share_type),
+                content=content,
+                success=success,
+                error_reason=error_reason or None,
+                source_type=source_type,
+                degraded=bool(resolved_degradation_reason),
+                degradation_reason=resolved_degradation_reason,
+                **visual,
+            )
+        if resolved_degradation_reason:
+            logger.warning(
+                f"[日常分享] 目标 {target_id}："
+                f"{media_error_message(resolved_degradation_reason, '媒体未完成')}"
+            )
 
     async def record_share_failure(
         self,
@@ -155,16 +163,6 @@ class TaskHelperRecordService(TaskServiceBase):
             return self.image_history_kwargs(resolved_image)
         return {}
 
-    def _partial_send_error_labels(self, media_result: dict | None = None) -> list:
-        labels = []
-        for item in (media_result or {}).get("partial_errors", []):
-            if item.get("probable_sent"):
-                continue
-            label = str(item.get("stage_label") or item.get("stage") or "媒体").strip()
-            if label and label not in labels:
-                labels.append(label)
-        return labels
-
     def log_partial_send_errors(
         self, target_id: str, media_result: dict | None = None
     ) -> None:
@@ -177,23 +175,3 @@ class TaskHelperRecordService(TaskServiceBase):
         )
         logger.warning(f"[日常分享] {target_id} 部分发送异常: {summary}")
 
-    async def notify_partial_send_errors(
-        self, event: AstrMessageEvent, media_result: dict | None = None
-    ) -> None:
-        labels = self._partial_send_error_labels(media_result)
-        if not event or not labels:
-            return
-        try:
-            await self.send_event(
-                event,
-                event.plain_result(
-                    f"内容已发送，{'、'.join(labels)}未送达，请查看日志。"
-                ),
-            )
-        except Exception as exc:
-            log_exception(
-                "[日常分享] 部分发送异常提示发送失败",
-                exc,
-                level="debug",
-                with_traceback=False,
-            )

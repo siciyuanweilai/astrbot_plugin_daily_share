@@ -191,7 +191,7 @@ class TaskArchitectureTests(unittest.TestCase):
             plugin.task_manager.executor_helpers.media._media_failure_message(
                 "image", "配图生成失败"
             ),
-            "生活插件未安装、未启用或正在重载，无法使用配图能力，继续发送文案",
+            "生活插件未安装、未启用或正在重载，无法使用配图能力",
         )
 
         context.get_all_stars = lambda: [
@@ -218,7 +218,7 @@ class TaskArchitectureTests(unittest.TestCase):
             plugin.task_manager.executor_helpers.media._media_failure_message(
                 "image", "配图生成失败"
             ),
-            "生活插件正在初始化、重载或停止，继续发送文案",
+            "生活插件正在初始化、重载或停止",
         )
 
     def test_main_plugin_exposes_contact_alias_service_contract(self):

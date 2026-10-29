@@ -167,6 +167,12 @@ class LivingTests(unittest.IsolatedAsyncioTestCase):
             "life_driven",
         )
 
+    async def test_living_decision_uses_llm_target_parameter(self):
+        await self.consider()
+        kwargs = self.plugin.call_llm.await_args.kwargs
+        self.assertEqual(kwargs["umo"], self.target)
+        self.assertNotIn("target_umo", kwargs)
+
     async def test_failure_consumes_attempt_without_repeating_material(self):
         self.plugin.call_llm.return_value = self.share_decision()
         self.manager.share.execute_share.side_effect = RuntimeError("结果未确认")
@@ -282,6 +288,9 @@ class LivingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(
             await self.intent.wants_interaction(self.owner, "comment", self.post)
         )
+        kwargs = self.plugin.call_llm.await_args.kwargs
+        self.assertEqual(kwargs["umo"], "qzone_broadcast")
+        self.assertNotIn("target_umo", kwargs)
         self.assertFalse(
             await self.intent.wants_interaction(self.owner, "comment", self.post)
         )

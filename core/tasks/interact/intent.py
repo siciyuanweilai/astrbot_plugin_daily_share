@@ -111,7 +111,7 @@ async def wants_interaction(owner, action, post, comment=None, parent=None):
                     + json.dumps(payload, ensure_ascii=False)
                 ),
                 system_prompt=persona.get("prompt", ""),
-                target_umo=QZONE_TARGET_ID,
+                umo=QZONE_TARGET_ID,
                 timeout=20,
                 max_retries=0,
             )

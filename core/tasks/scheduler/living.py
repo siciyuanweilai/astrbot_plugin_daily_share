@@ -195,7 +195,7 @@ class TaskSchedulerLivingService(SchedulerComponent):
         raw = await self.plugin.call_llm(
             prompt=_RULES + "\n" + json.dumps(payload, ensure_ascii=False),
             system_prompt=persona.get("prompt", ""),
-            target_umo=target,
+            umo=target,
             timeout=30,
             max_retries=0,
         )

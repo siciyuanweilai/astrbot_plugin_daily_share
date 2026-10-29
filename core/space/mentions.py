@@ -52,6 +52,18 @@ def qzone_publish_text(text: str = "", mentions: Any = None) -> str:
     return f"{content.rstrip()}\n{suffix}" if content.strip() else suffix
 
 
+async def clean_qzone_post_text(text: str, cleaner) -> str:
+    """调用 daily_life 的公开说说标点清洗；不可用时保留原文。"""
+    content = str(text or "")
+    if not callable(cleaner):
+        return content
+    try:
+        result = await cleaner(content, scene="qzone_post")
+    except Exception:
+        return content
+    return result if isinstance(result, str) and result.strip() else content
+
+
 def normalized_qzone_publish_text(text: str) -> str:
     """核验发布结果时忽略 QQ 空间改写的昵称和 who 等字段，保留提及对象。"""
     content = _MENTION.sub(lambda match: f"@{{uin:{match.group(1)}}}", str(text or ""))

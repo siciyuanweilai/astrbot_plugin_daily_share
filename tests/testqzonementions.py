@@ -175,6 +175,26 @@ class MentionDashboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(plugin.qzone_service.calls, [])
         self.assertEqual(plugin.db.history, [])
 
+    async def test_panel_publish_cleans_qzone_post_before_adding_mentions(self):
+        plugin = testqzonedashboard.DashboardQzonePublishTests()._plugin(
+            {"text": "面板正文，带有标点。", "mentions": FRIENDS[:1]}
+        )
+        bridge = types.SimpleNamespace(
+            clean_expression_punctuation=AsyncMock(return_value="清洗后的面板正文")
+        )
+        plugin.plugin = types.SimpleNamespace(daily_life_bridge=bridge)
+
+        result = await plugin.qzone_publish.page_qzone_publish()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            plugin.qzone_service.calls[0]["text"],
+            "清洗后的面板正文\n@{uin:10001,nick:好友甲}",
+        )
+        bridge.clean_expression_punctuation.assert_awaited_once_with(
+            "面板正文，带有标点。", scene="qzone_post"
+        )
+
 
 class MentionHostTests(unittest.IsolatedAsyncioTestCase):
     async def test_login_retry_preserves_mentions_and_images_without_duplicates(self):
@@ -228,6 +248,35 @@ class MentionHostTests(unittest.IsolatedAsyncioTestCase):
             text=EXPECTED, images=[b"image"]
         )
 
+    async def test_public_plugin_api_cleans_qzone_post_before_publish(self):
+        module = _load_qzone_host()
+        post = types.SimpleNamespace(tid="", text="清洗后的正文")
+        bridge = types.SimpleNamespace(
+            clean_expression_punctuation=AsyncMock(return_value="清洗后的正文")
+        )
+        service = types.SimpleNamespace(
+            context=AsyncMock(
+                return_value=types.SimpleNamespace(nickname="测试账号", uin=100000001)
+            ),
+            publish_post=AsyncMock(return_value=post),
+        )
+        host = module.PluginQzoneService(
+            types.SimpleNamespace(
+                plugin=types.SimpleNamespace(daily_life_bridge=bridge),
+                qzone_service=service,
+            )
+        )
+
+        result = await host.publish_qzone(text="正文，带有标点。")
+
+        self.assertIs(result, post)
+        service.publish_post.assert_awaited_once_with(
+            text="清洗后的正文", images=[]
+        )
+        bridge.clean_expression_punctuation.assert_awaited_once_with(
+            "正文，带有标点。", scene="qzone_post"
+        )
+
 
 class MentionToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -251,6 +300,25 @@ class MentionToolTests(unittest.IsolatedAsyncioTestCase):
             text=EXPECTED, images=[]
         )
         self.assertEqual(self.host.db.add_sent_history.await_args.args[2], EXPECTED)
+
+    async def test_llm_publish_cleans_qzone_post_before_adding_mentions(self):
+        bridge = types.SimpleNamespace(
+            clean_expression_punctuation=AsyncMock(return_value="清洗后的正文")
+        )
+        self.host.runtime.plugin = types.SimpleNamespace(daily_life_bridge=bridge)
+        result = await self.host.run_qzone_tool(
+            testpermission._Event(role="admin"),
+            action="publish",
+            content="模型生成的正文，带有标点。",
+            mentions=FRIENDS[:1],
+        )
+        self.assertIn("已发布 QQ 空间说说", result)
+        self.host.qzone_service.publish_post.assert_awaited_once_with(
+            text="清洗后的正文\n@{uin:10001,nick:好友甲}", images=[]
+        )
+        bridge.clean_expression_punctuation.assert_awaited_once_with(
+            "模型生成的正文，带有标点。", scene="qzone_post"
+        )
 
     async def test_member_cannot_publish_with_mentions(self):
         result = await self.host.run_qzone_tool(

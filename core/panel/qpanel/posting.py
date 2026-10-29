@@ -6,7 +6,7 @@ from ...database.keys import (
     QZONE_TARGET_ID,
     SOURCE_MANUAL,
 )
-from ...space.mentions import qzone_publish_text
+from ...space.mentions import clean_qzone_post_text, qzone_publish_text
 from ..panelcomponent import PanelComponent, RuntimeField
 
 
@@ -21,10 +21,14 @@ class DashboardQzonePublishService(PanelComponent):
     async def page_qzone_publish(self):
         async def handler():
             body = await self.server._page_json_body()
-            text = qzone_publish_text(
-                str(body.get("text") or body.get("content") or "").strip(),
-                body.get("mentions"),
+            bridge = getattr(
+                getattr(self.runtime, "plugin", None), "daily_life_bridge", None
             )
+            text = await clean_qzone_post_text(
+                str(body.get("text") or body.get("content") or "").strip(),
+                getattr(bridge, "clean_expression_punctuation", None),
+            )
+            text = qzone_publish_text(text, body.get("mentions"))
             images = self.qzone_publish._page_qzone_publish_media(body)
 
             if not text and not images:

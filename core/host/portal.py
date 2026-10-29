@@ -4,7 +4,7 @@ from datetime import datetime
 from astrbot.api import logger
 
 from ..space.errors import QzoneImageUploadError, QzonePublishUnknownError
-from ..space.mentions import qzone_publish_text
+from ..space.mentions import clean_qzone_post_text, qzone_publish_text
 from .supportcomponent import RuntimeField, SupportComponent
 
 
@@ -22,6 +22,11 @@ class PluginQzoneService(SupportComponent):
         mentions: list[dict[str, str]] | None = None,
     ):
         """发布 QQ 空间说说，登录态失效时重新获取登录态再重试一次。"""
+        bridge = getattr(getattr(self, "plugin", None), "daily_life_bridge", None)
+        text = await clean_qzone_post_text(
+            text,
+            getattr(bridge, "clean_expression_punctuation", None),
+        )
         text = qzone_publish_text(text, mentions)
         service = self.qzone_service
         if service is None:

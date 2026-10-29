@@ -13,8 +13,7 @@ class TaskHelperMediaService(TaskServiceBase):
         if callable(media_result):
             status, reason = media_result(media_kind)
             if status in {"unavailable", "empty", "error"} and reason:
-                suffix = "继续发送文案" if media_kind == "image" else "继续发送其余内容"
-                return f"{reason}，{suffix}"
+                return reason
 
         media_available = getattr(bridge, "media_available", None)
         if (
@@ -25,8 +24,7 @@ class TaskHelperMediaService(TaskServiceBase):
             return default
         labels = {"image": "配图", "video": "视频", "audio": "语音"}
         label = labels.get(media_kind, "媒体")
-        suffix = "继续发送文案" if media_kind == "image" else "继续发送其余内容"
-        return f"生活插件未安装、未启用或正在重载，无法使用{label}能力，{suffix}"
+        return f"生活插件未安装、未启用或正在重载，无法使用{label}能力"
 
     async def generate_share_image_step(
         self,
@@ -39,7 +37,7 @@ class TaskHelperMediaService(TaskServiceBase):
         current_img_path: str | None = None,
         event: AstrMessageEvent | None = None,
         progress_message: str = "配图生成中",
-        fail_message: str = "配图生成失败，继续发送文案",
+        fail_message: str = "配图生成失败",
     ) -> tuple[str | None, str | None, str]:
         self.services.progress.update_share_progress(
             progress_id, "image", message=progress_message
@@ -108,7 +106,7 @@ class TaskHelperMediaService(TaskServiceBase):
             self.services.progress.fail_share_progress_step(
                 progress_id,
                 "video",
-                self._media_failure_message("video", "视频生成失败，继续发送"),
+                self._media_failure_message("video", "视频生成失败"),
             )
         return video_url
 
@@ -152,6 +150,6 @@ class TaskHelperMediaService(TaskServiceBase):
             self.services.progress.fail_share_progress_step(
                 progress_id,
                 "audio",
-                self._media_failure_message("audio", "语音生成失败，继续发送"),
+                self._media_failure_message("audio", "语音生成失败"),
             )
         return audio_path
