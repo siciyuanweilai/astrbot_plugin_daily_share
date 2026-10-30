@@ -252,7 +252,7 @@ class TaskExecutorService(TaskServiceBase):
         send_img_path = send_img_path or img_path
         continuations = getattr(self.plugin, "share_continuations", None)
         if continuations is not None:
-            await continuations.mark_submitting()
+            await continuations.mark_prepared()
         sent, media_result = await self.sender.send(
             uid=uid,
             content=content,

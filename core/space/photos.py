@@ -661,6 +661,7 @@ class QzonePhotoService:
                 headers=_photo_form_headers(
                     self.owner, ctx, owner=owner, referer=referer
                 ),
+                submission="interaction",
                 retry_parse_error=False,
             )
         except RuntimeError as error:
@@ -725,6 +726,7 @@ class QzonePhotoService:
                 headers=_photo_form_headers(
                     self.owner, ctx, owner=owner, referer=referer
                 ),
+                submission="interaction",
                 retry_parse_error=False,
             )
         except RuntimeError as error:
@@ -838,6 +840,7 @@ class QzonePhotoService:
                 params={"g_tk": ctx.gtk},
                 data=data,
                 headers=_photo_form_headers(self.owner, ctx, owner=owner),
+                submission="interaction",
                 retry_parse_error=False,
             )
         except RuntimeError as error:

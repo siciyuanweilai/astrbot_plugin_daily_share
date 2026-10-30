@@ -54,7 +54,10 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.sent = []
 
         async def send_chain(uid, chain, event=None):
+            submission = importlib.import_module(f"{root}.submission")
+            await submission.mark_submission()
             self.sent.append((uid, list(chain.items), event))
+            await submission.mark_submission("completed")
 
         async def image(*args, **kwargs):
             job = self.mediajob.current_share_job.get()

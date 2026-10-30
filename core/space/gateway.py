@@ -15,6 +15,8 @@ except Exception:  # pragma: no cover - 可选运行时依赖
 from astrbot.api import logger
 
 from .models import QzoneContext
+from ..readiness import PlatformNotReady
+from ..submission import mark_submission, mark_request_submission
 from .parse import parse_qzone_response
 
 if TYPE_CHECKING:
@@ -120,6 +122,7 @@ class QzoneClientGateway:
         ):
             return self.owner._ctx
 
+        await self.wait_until_ready()
         async with self.owner._ctx_fetch_lock:
             self.owner._ensure_bot_cache_scope()
             bot = self.owner._cache_bot
@@ -184,7 +187,7 @@ class QzoneClientGateway:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout_seconds
         bot = self._get_bot(silent=True)
-        while bot and not self._bot_connection_ready(bot):
+        while not self._bot_connection_ready(bot):
             remaining = deadline - loop.time()
             if remaining <= 0:
                 break
@@ -194,8 +197,8 @@ class QzoneClientGateway:
         if bot and self._bot_connection_ready(bot):
             return bot
         if bot:
-            raise RuntimeError("OneBot 适配器尚未连接，无法获取 QQ 空间登录态")
-        raise RuntimeError("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
+            raise PlatformNotReady("OneBot 适配器尚未连接，保留原任务等待恢复")
+        raise PlatformNotReady("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
 
     def _get_bot(self, *, silent=False):
         adapter_id = str(self.owner._qq_adapter_id() or "").strip()
@@ -225,7 +228,7 @@ class QzoneClientGateway:
     async def _fetch_bot_cookie(self, *, bot=None) -> str:
         bot = bot if bot is not None else self.owner._get_bot()
         if not bot:
-            raise RuntimeError("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
+            raise PlatformNotReady("没有可用的机器人客户端，无法自动获取 QQ 空间登录态")
         values: dict[str, str] = {}
         for domain in self.owner.QZONE_COOKIE_DOMAINS:
             try:
@@ -363,6 +366,7 @@ class QzoneClientGateway:
         headers=None,
         retry=True,
         retry_parse_error=True,
+        submission="",
     ) -> dict[str, Any]:
         ctx = await self.owner.context()
         request_bot = self.owner._cache_bot
@@ -372,6 +376,10 @@ class QzoneClientGateway:
         request_cookies = (
             None if self.owner._has_cookie_header(request_headers) else ctx.cookies
         )
+        if submission == "share":
+            await mark_submission()
+        elif submission == "interaction":
+            await mark_request_submission()
         try:
             async with session.request(
                 method,
@@ -429,6 +437,7 @@ class QzoneClientGateway:
                 headers=headers,
                 retry=False,
                 retry_parse_error=retry_parse_error,
+                submission=submission,
             )
         return payload
 

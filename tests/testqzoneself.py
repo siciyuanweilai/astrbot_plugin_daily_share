@@ -290,6 +290,8 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
 
         async def submit(*args):
+            boundary = importlib.import_module(self.self_module.__package__.rsplit(".", 1)[0] + ".submission")
+            await boundary.mark_request_submission()
             self.assertEqual(self.entry["comment"], "submitting")
             started.set()
             await asyncio.Event().wait()

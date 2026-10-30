@@ -11,7 +11,7 @@ from ..intent import (
     interaction_key,
     interaction_ready,
     living_interaction,
-    mark_interaction_submission,
+    interaction_submission,
     wants_interaction,
 )
 from ..receipt import record_qzone_interaction
@@ -359,13 +359,8 @@ async def _submit_qzone_auto_comment(
         if not await interaction_ready(owner):
             result["skipped"] += 1
             return False
-        await mark_interaction_submission(owner, "comment", post, key=intent_key)
-        if intent_key and intent_key != interaction_key("comment", post):
-            await mark_interaction_submission(owner, "comment", post)
-        await owner.plugin.qzone_service.comment(post_key, comment)
-        await mark_interaction_submission(
-            owner, "comment", post, key=intent_key, completed=True
-        )
+        async with interaction_submission(owner, "comment", post, key=intent_key):
+            await owner.plugin.qzone_service.comment(post_key, comment)
     except Exception as exc:
         if int(post.appid or 311) == 4 and getattr(exc, "submission_unknown", False):
             _mark_qzone_post_processed(

@@ -1446,8 +1446,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.call = {
                     "method": method,
                     "url": url,
@@ -1530,8 +1529,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls += 1
                 return {
                     "code": 0,
@@ -1577,8 +1575,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1641,8 +1638,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.call = {
                     "method": method,
                     "url": url,
@@ -1765,8 +1761,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.call = {"method": method, "url": url, "params": dict(params or {})}
                 return {
                     "code": 0,
@@ -1811,8 +1806,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1869,8 +1863,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1954,8 +1947,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -2554,6 +2546,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_context_retries_after_failure(self):
         service_module = _load_qzone_service()
         service = _new_qzone_service(service_module)
+        async def ready():
+            return object()
+        service.gateway.wait_until_ready = ready
         attempts = 0
 
         async def unavailable_cookie(**kwargs):
@@ -3009,8 +3004,8 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return "picbo", "richval"
 
             async def _request(
-                self, method, url, *, params=None, data=None, headers=None, retry=True
-            ):
+                self, method, url, *, params=None, data=None, headers=None, retry=True, submission=""):
+                await importlib.import_module(PACKAGE_NAME + ".core.submission").mark_submission()
                 if phases != ["submitting"]:
                     raise AssertionError("请求前没有保存提交防重状态")
                 self.submit_calls += 1
@@ -3061,6 +3056,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return service_module.QzoneContext(100000001, "skey", "p_skey")
 
             async def _submit_post(self, ctx, data):
+                await submission.mark_submission()
                 self.submit_calls += 1
                 raise RuntimeError("QQ 空间请求超时（60秒）")
 
@@ -3138,8 +3134,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 self.request_headers = headers
@@ -3195,8 +3190,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 return {"code": 0}
@@ -3253,8 +3247,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 return {"code": 0}
@@ -3323,8 +3316,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.request_data = dict(data or {})
                 return {"code": 0}
 
@@ -3369,8 +3361,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.request_data = dict(data or {})
                 return {"code": 0}
 
@@ -3416,8 +3407,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {}), dict(headers or {})))
                 return {"code": 0}
 
@@ -3500,8 +3490,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {}), dict(headers or {})))
                 return {"code": -10004, "message": "参数错误", "_http_status": 200}
 
@@ -3589,8 +3578,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 return {"code": -100, "message": "登录态失效", "_http_status": 401}
 
         service = Service(_qzone_plugin())
@@ -3656,8 +3644,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return (
                     {"code": -10000, "message": "使用人数过多，请稍后再试"}
@@ -3725,8 +3712,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3794,8 +3780,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3853,8 +3838,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3919,8 +3903,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4167,8 +4150,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return (
                     {"code": -10049, "message": "该条内容已被删除"}
@@ -4229,8 +4211,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4583,8 +4564,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4657,8 +4637,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 if len(self.calls) < 3:
                     return {"code": -10049, "message": "该条内容已被删除"}
@@ -4717,8 +4696,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -10049, "message": "该条内容已被删除"}
 
@@ -4803,8 +4781,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -1, "message": "该条内容已被删除"}
 
@@ -4861,8 +4838,7 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True,
-            ):
+                retry_parse_error=True, submission=""):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -10049, "message": "该条内容已被删除"}
 

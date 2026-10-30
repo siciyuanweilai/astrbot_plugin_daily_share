@@ -34,7 +34,7 @@ from .interact.formatting import (
 from .interact.intent import (
     interaction_ready,
     interaction_state,
-    mark_interaction_submission,
+    interaction_submission,
     wants_interaction,
 )
 from .interact.options import QzoneAutoInteractionConfig
@@ -216,18 +216,13 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             if not await interaction_ready(self):
                 result["skipped"] += 1
                 return _qzone_reply_skipped_payload(reply)
-            await mark_interaction_submission(
-                self, "reply", post, comment, parent_comment
-            )
-            submit_result = await self.plugin.qzone_service.reply_comment(
-                post.key,
-                comment,
-                reply,
-                parent_comment=parent_comment,
-            )
-            await mark_interaction_submission(
-                self, "reply", post, comment, parent_comment, completed=True
-            )
+            async with interaction_submission(self, "reply", post, comment, parent_comment):
+                submit_result = await self.plugin.qzone_service.reply_comment(
+                    post.key,
+                    comment,
+                    reply,
+                    parent_comment=parent_comment,
+                )
         except Exception as exc:
             exc_text = str(exc or "")
             fields = _qzone_reply_exception_fields(
@@ -404,10 +399,10 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
         if callable(wait_until_ready):
             try:
                 await wait_until_ready()
-            except Exception:
+            except Exception as exc:
                 result["failed"] = 1
                 logger.warning(
-                    "[日常分享] QQ 空间自动互动等待 OneBot 连接超时，本轮跳过"
+                    f"[日常分享] QQ 空间连接尚未就绪，本轮暂缓：{type(exc).__name__}"
                 )
                 _qzone_log_interaction_summary(result)
                 return result

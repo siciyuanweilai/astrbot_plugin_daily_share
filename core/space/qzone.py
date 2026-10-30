@@ -501,6 +501,7 @@ class QzoneService:
         payload = await self._request(
             "POST",
             self.PUBLISH_URL,
+            submission="share",
             params={"g_tk": ctx.gtk2, "uin": ctx.uin},
             data=data,
         )
@@ -571,7 +572,6 @@ class QzoneService:
         )
         from ..submission import mark_submission
 
-        await mark_submission()
         submit_started_at = int(time.time())
         try:
             payload = await self._submit_post(ctx, data)
@@ -654,6 +654,7 @@ class QzoneService:
                 Accept="*/*",
                 **{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
             ),
+            submission="interaction",
             retry_parse_error=False,
         )
         try:
@@ -928,6 +929,7 @@ class QzoneService:
         headers=None,
         retry=True,
         retry_parse_error=True,
+        submission="",
     ):
         return await self.gateway._request(
             method,
@@ -937,6 +939,7 @@ class QzoneService:
             headers=headers,
             retry=retry,
             retry_parse_error=retry_parse_error,
+            submission=submission,
         )
 
     async def _request_text(

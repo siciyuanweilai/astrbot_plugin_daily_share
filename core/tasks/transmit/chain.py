@@ -11,6 +11,7 @@ from ...platformsession import create_message_session
 from ...qqofficial import ensure_qq_official_background_send
 from ...toolkit import format_exception
 from ...submission import mark_submission
+from ...readiness import wait_target_ready
 from ..taskbase import TaskServiceBase
 from .stage import TaskDeliveryStatusService
 
@@ -36,7 +37,9 @@ class TaskDeliveryChainService(TaskServiceBase):
     async def send_message_chain(
         self, uid, chain: MessageChain, event: AstrMessageEvent | None = None
     ):
-        binding = self.services.targets.ensure_target_platform_routable(str(uid or ""))
+        binding = await wait_target_ready(
+            self.services.targets, str(uid or "")
+        )
         is_weixin = self.ctx_service.is_weixin_platform(uid)
         timeout = (
             self.services.weixin_delivery.get_send_timeout_seconds()

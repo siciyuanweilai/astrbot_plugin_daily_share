@@ -74,6 +74,7 @@ class QzoneCommentPostService:
             params={"g_tk": ctx.gtk},
             data=data,
             headers=self.owner._pc_form_headers(ctx, referer=referer),
+            submission="interaction",
             retry_parse_error=False,
         )
         if self.owner._comment_submit_ok(payload):

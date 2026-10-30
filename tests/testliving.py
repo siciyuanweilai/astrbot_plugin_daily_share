@@ -294,7 +294,7 @@ class LivingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 self.manager.targets,
                 "ensure_target_platform_routable",
-                return_value=types.SimpleNamespace(shared_id=False),
+                return_value=types.SimpleNamespace(shared_id=False, platform_type="test"),
             ),
             patch.object(chain_module, "ensure_qq_official_background_send"),
         ):

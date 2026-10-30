@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.6-ef6f8f" alt="版本 1.2.6"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.7-ef6f8f" alt="版本 1.2.7"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.2.6 版本更新**：修复生活分享机会过早消耗，让真实材料、历史与公开互动反馈贯穿表达；新增兴趣相关新闻入口，优化并发读取和热点缓存，修复面板图片预览与放大。详见 [更新日志](./CHANGELOG.md)。
+> **v1.2.7 版本更新**：修复启动恢复早于平台就绪、发送前取消被误记为提交不明的问题；自动互动和自评按真实写请求防重，未提交失败保留重新判断机会，结合当前生活与交流自然接续。详见 [更新日志](./CHANGELOG.md)。
 
 ---
 

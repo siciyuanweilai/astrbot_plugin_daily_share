@@ -4,6 +4,7 @@ import copy
 import gc
 import importlib.util
 import inspect
+import os
 import re
 import tempfile
 import unittest
@@ -1298,6 +1299,7 @@ class RuntimeLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(plugin.news_service.close_calls, 1)
             self.assertEqual(plugin.qzone_service.close_calls, 1)
 
+    @unittest.skipIf(os.name == "nt", "Windows chmod 不实现 POSIX 0600 权限位")
     async def test_initialize_secures_framework_config_file(self):
         mod = _load_main_module()
         with tempfile.TemporaryDirectory() as temp_dir:

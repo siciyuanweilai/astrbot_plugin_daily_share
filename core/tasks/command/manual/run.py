@@ -137,7 +137,7 @@ class TaskCommandLocalRunService:
 
         continuations = getattr(self.owner.plugin, "share_continuations", None)
         if continuations is not None:
-            await continuations.mark_submitting()
+            await continuations.mark_prepared()
         sent, media_result = await self.owner._send_command_generated_share(
             target_umo=target_umo,
             content=content,

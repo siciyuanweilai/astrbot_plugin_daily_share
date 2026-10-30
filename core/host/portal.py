@@ -4,6 +4,7 @@ from datetime import datetime
 from astrbot.api import logger
 
 from ..space.errors import QzoneImageUploadError, QzonePublishUnknownError
+from ..readiness import PlatformNotReady
 from ..space.mentions import clean_qzone_post_text, qzone_publish_text
 from .supportcomponent import RuntimeField, SupportComponent
 
@@ -72,7 +73,7 @@ class PluginQzoneService(SupportComponent):
 
         try:
             return await publish_once()
-        except QzonePublishUnknownError:
+        except (QzonePublishUnknownError, PlatformNotReady):
             raise
         except Exception as exc:
             message = error_message(exc)
@@ -84,7 +85,7 @@ class PluginQzoneService(SupportComponent):
                 service.invalidate()
                 try:
                     return await publish_once(action="重新登录")
-                except QzonePublishUnknownError:
+                except (QzonePublishUnknownError, PlatformNotReady):
                     raise
                 except Exception as retry_exc:
                     retry_message = error_message(retry_exc)

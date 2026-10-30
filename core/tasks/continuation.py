@@ -23,6 +23,7 @@ from ..integrations.mediajob import (
 )
 from ..schedule import normalize_schedule_mode
 from ..submission import mark_submission
+from ..readiness import PlatformNotReady
 from ..integrations.contact import (
     ShareContactChanged,
     ShareContactPending,
@@ -114,6 +115,13 @@ def preserve_share(kind: str):
             except ShareContactChanged as exc:
                 await service.finish(job, status="cancelled", reason=str(exc))
                 return False
+            except PlatformNotReady as exc:
+                if job["status"] != "submitting":
+                    await mark_submission("deferred")
+                    job.update(status="waiting_platform", reason=str(exc))
+                await service.save(job)
+                service.update_waiting_progress(job)
+                return False
             except ShareContactPending as exc:
                 await mark_submission("deferred")
                 job.update(status="waiting_contact", reason=str(exc))
@@ -133,19 +141,23 @@ def preserve_share(kind: str):
                 if job["status"] != "submitting":
                     await mark_submission("deferred")
                     job["status"] = (
-                        "waiting_contact"
-                        if "prepared_media" in job or job["status"] == "waiting_contact"
+                        "ready" if job.get("delivery_prepared") else
+                        "waiting_contact" if "prepared_media" in job or job["status"] == "waiting_contact"
                         else "pending"
                     )
                 await service.save(job)
                 raise
-            except Exception:
+            except Exception as exc:
                 if job["status"] != "submitting":
                     job["status"] = "failed"
+                job["reason"] = media_error_message(str(exc), type(exc).__name__)
                 await service.save(job)
                 raise
             else:
-                job["status"] = "completed" if result else "failed"
+                if result:
+                    job["status"] = "completed"
+                elif job["status"] != "submitting":
+                    job["status"] = "failed"
                 await service.save(job)
                 return result
             finally:
@@ -180,7 +192,7 @@ class ShareContinuationService:
             await self.plugin.db.update_share_state(_STATE_KEY, {job["id"]: payload})
 
     def update_waiting_progress(self, job: dict) -> None:
-        if job.get("status") == "waiting_contact":
+        if job.get("status") in {"waiting_contact", "waiting_platform", "ready"}:
             self.plugin.task_manager.progress.update_share_progress(
                 str((job.get("params") or {}).get("progress_id") or ""),
                 "send",
@@ -252,9 +264,17 @@ class ShareContinuationService:
             except Exception as exc:
                 logger.warning(f"[日常分享] 记录分享失败历史失败：{type(exc).__name__}")
 
+    async def mark_prepared(self) -> None:
+        job = current_share_job.get()
+        if job is not None and job["status"] != "submitting":
+            job.update(status="ready", delivery_prepared=True)
+            await self.save(job)
+
     async def mark_submitting(self) -> None:
         job = current_share_job.get()
         if job is not None:
+            if job["status"] == "submitting":
+                return
             params = job.get("params") or {}
             if params.get("history_source") in AUTONOMOUS_SOURCES:
                 target = (
@@ -287,6 +307,8 @@ class ShareContinuationService:
                 "pending",
                 "generating",
                 "waiting_contact",
+                "waiting_platform",
+                "ready",
                 "submitting",
             }:
                 continue
@@ -388,7 +410,7 @@ class ShareContinuationService:
                     key in self.active
                     or not isinstance(payload, dict)
                     or payload.get("status")
-                    not in {"pending", "generating", "waiting_contact"}
+                    not in {"pending", "generating", "waiting_contact", "waiting_platform", "ready"}
                 ):
                     continue
                 params = payload.get("params") or {}
@@ -407,7 +429,8 @@ class ShareContinuationService:
                 if self.plugin.runtime_service.is_share_busy(target):
                     continue
                 if (
-                    payload["status"] == "waiting_contact"
+                    payload["status"] in {"waiting_contact", "waiting_platform", "ready"}
+                    or payload.get("delivery_prepared")
                     or "prepared_media" in payload
                 ):
                     paths = payload.get("prepared_media", [])[:4]
@@ -536,7 +559,14 @@ class ShareContinuationService:
                         )
                     return
                 result = await handler(**params, event=None)
-                job["status"] = "completed" if result else "failed"
+                if result:
+                    job["status"] = "completed"
+                elif job["status"] != "submitting":
+                    job["status"] = "failed"
+        except PlatformNotReady as exc:
+            if job["status"] != "submitting":
+                job.update(status="waiting_platform", reason=str(exc))
+                self.update_waiting_progress(job)
         except ShareContactChanged as exc:
             job["status"] = "cancelled"
             job["reason"] = str(exc)
@@ -554,7 +584,8 @@ class ShareContinuationService:
                 record_failure = True
             job["reason"] = media_error_message(str(exc), type(exc).__name__)
             logger.warning(
-                f"[日常分享] 原分享任务续接失败，未自动重发：{type(exc).__name__}"
+                f"[日常分享] 原分享任务续接失败（任务 {job['id']}，阶段 {job['status']}），"
+                f"未自动重发：{type(exc).__name__}: {job['reason']}"
             )
         finally:
             try:

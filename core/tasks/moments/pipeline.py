@@ -197,7 +197,7 @@ class TaskQzoneFlowService:
         )
         continuations = getattr(self.owner.plugin, "share_continuations", None)
         if continuations is not None:
-            await continuations.mark_submitting()
+            await continuations.mark_prepared()
         await self.owner._publish_and_record_qzone_share(
             progress_id=progress_id,
             stype=stype,

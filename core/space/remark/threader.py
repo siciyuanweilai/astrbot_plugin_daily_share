@@ -100,6 +100,7 @@ class QzoneCommentReplyService:
                 params={"g_tk": ctx.gtk},
                 data=request_data,
                 headers=plan.get("headers"),
+                submission="interaction",
                 retry_parse_error=False,
             )
             attempt = self.owner._reply_attempt_debug(plan, request_data, payload)

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from astrbot.api import logger
 
 from ..schedule import QZONE_SCHEDULE, normalize_schedule_mode
+from ..submission import request_submission
 from .models import QzonePost
 
 if TYPE_CHECKING:
@@ -241,17 +242,21 @@ class QzoneSelfPostService:
                     await self._wait(post, entry, action, interaction)
                     continue
                 else:
-                    # 只有到这里才可能调用平台；取消和超时保留此标记，不再次提交。
-                    entry[action] = "submitting"
                     if content:
                         entry["content"] = content
-                    await self._save(post.key, entry)
-                    if action == "like":
-                        await self.owner.like(post.key)
-                        entry[action] = "liked"
-                    else:
-                        await self.owner.comment(post.key, content)
-                        entry[action] = "commented"
+                        await self._save(post.key, entry)
+
+                    async def submitted():
+                        entry[action] = "submitting"
+                        await self._save(post.key, entry)
+
+                    async with request_submission(submitted):
+                        if action == "like":
+                            await self.owner.like(post.key)
+                            entry[action] = "liked"
+                        else:
+                            await self.owner.comment(post.key, content)
+                            entry[action] = "commented"
                     actions.append("已点赞" if action == "like" else "已自评")
             except Exception as exc:
                 submitted = entry[action] == "submitting"

@@ -2708,6 +2708,9 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, platform_type):
                 self.platform_type = platform_type
 
+            def get_client(self):
+                return object()
+
             def meta(self):
                 return types.SimpleNamespace(
                     id=PLATFORM_MAIN,
@@ -2981,6 +2984,9 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             return False
 
         class Platform:
+            def get_client(self):
+                return object()
+
             def meta(self):
                 return types.SimpleNamespace(
                     id=PLATFORM_MAIN,
