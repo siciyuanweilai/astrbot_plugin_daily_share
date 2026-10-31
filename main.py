@@ -15,6 +15,7 @@ from .core.host.lifecycle import RuntimeService
 from .core.host.model import LlmService
 from .core.image import ImageService
 from .core.integrations import DailyLifeBridge
+from .core.integrations.bilibili import BiliDynamicShare
 from .core.news import NewsService
 from .core.panel import PAGE_PREFERENCES_FILE, DashboardService
 from .core.panel.common import (
@@ -78,6 +79,7 @@ class DailySharePlugin(Star):
 
         # 初始化服务层
         self.daily_life_bridge = DailyLifeBridge(context, db=self.db)
+        self.bili_dynamics = BiliDynamicShare(self)
         self.ctx_service = ContextService(context, config, self.daily_life_bridge)
         self.qzone_service = QzoneService(self)
         self.news_service = NewsService(config)
@@ -127,6 +129,21 @@ class DailySharePlugin(Star):
         self.support_service = SupportService(self)
         self.command_handler = CommandHandler(self.support_service)
         self.dashboard_service = DashboardService(self)
+
+    def bili_dynamic_enabled(self) -> bool:
+        return self.bili_dynamics.owns_channel()
+
+    def bili_interaction_enabled(self) -> bool:
+        return self.bili_dynamics.owns_interactions()
+
+    async def decide_bili_interaction(self, context: dict, *, expression: bool = False) -> dict:
+        return await self.bili_dynamics.interact(context, expression=expression)
+
+    async def prepare_bili_dynamic(self, opportunity: dict) -> dict:
+        return await self.bili_dynamics.prepare(opportunity)
+
+    async def record_bili_dynamic_receipt(self, account: str, intent: str, receipt: dict) -> None:
+        await self.bili_dynamics.receipt(account, intent, receipt)
 
     async def initialize(self) -> None:
         try:

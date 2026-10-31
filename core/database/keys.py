@@ -5,6 +5,7 @@ TARGET_STATE_PREFIX = "target_"
 
 GLOBAL_TARGET_ID = "global"
 QZONE_TARGET_ID = "qzone_broadcast"
+BILIBILI_TARGET_ID = "bilibili_broadcast"
 BRIEFING_TARGET_ID = "briefing_broadcast"
 BRIEFING_TARGET_ALIASES = ("briefing", BRIEFING_TARGET_ID)
 
@@ -28,8 +29,8 @@ def target_state_key(target_id) -> str:
 
 
 def is_public_share_target(target_id: str) -> bool:
-    return str(target_id or "") == QZONE_TARGET_ID
+    return str(target_id or "") in {QZONE_TARGET_ID, BILIBILI_TARGET_ID}
 
 
 def public_share_target_label(target_id: str) -> str:
-    return "QQ 空间"
+    return "B站" if str(target_id or "") == BILIBILI_TARGET_ID else "QQ 空间"

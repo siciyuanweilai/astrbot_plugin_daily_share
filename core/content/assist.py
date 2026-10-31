@@ -4,7 +4,7 @@ from typing import Any
 from astrbot.api import logger
 
 from ..config import TimePeriod
-from ..database.keys import QZONE_TARGET_ID
+from ..database.keys import is_public_share_target
 from ..persona import selected_share_persona
 from ..prompt import build_private_target_prompt, build_qzone_post_prompt
 from .contentbase import ContentComponent
@@ -21,6 +21,7 @@ class ContentSupportService(ContentComponent):
     async def _generate_qzone_post(
         self, ctx: dict, task: str, material: str = ""
     ) -> str | None:
+        label = ctx.get("public_target_label") or "QQ 空间"
         result = await self._call_llm(
             prompt=build_qzone_post_prompt(ctx, task, material),
             system_prompt=ctx["system_prompt"],
@@ -34,14 +35,14 @@ class ContentSupportService(ContentComponent):
             expression = await prepare(result, scene="qzone_post")
             result = str(expression.get("text") or result).strip()
         if len(result) > 80:
-            logger.info("[内容服务] QQ 空间正文仍过长，跳过本次发布，不机械截断")
+            logger.info(f"[内容服务] {label}正文仍过长，跳过本次发布，不机械截断")
             return None
         normalized = "".join(result.split())
         if any(
             normalized == "".join(text.split())
             for text in ctx.get("recent_post_contents", [])
         ):
-            logger.info("[内容服务] QQ 空间正文与近期已发布内容重复，跳过本次发布")
+            logger.info(f"[内容服务] {label}正文与近期已发布内容重复，跳过本次发布")
             return None
         return result
 
@@ -167,7 +168,7 @@ class ContentSupportService(ContentComponent):
 
     def _build_output_format_prompt(self, target_id: str = "") -> str:
         target = str(target_id or "").strip()
-        if target == QZONE_TARGET_ID:
+        if is_public_share_target(target):
             return ""
         general_format = str(
             self.basic_conf.get("share_output_format", "") or ""

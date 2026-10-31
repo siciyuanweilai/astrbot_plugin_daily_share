@@ -27,9 +27,11 @@ from ..readiness import PlatformNotReady
 from ..integrations.contact import (
     ShareContactChanged,
     ShareContactPending,
+    ShareContactReview,
     contact,
     current_contact,
 )
+from .reconsider import ShareReconsiderationService
 
 _STATE_KEY = "share_media_continuations"
 
@@ -112,6 +114,10 @@ def preserve_share(kind: str):
             token = current_share_job.set(job)
             try:
                 result = await method(self, *args, **kwargs)
+            except ShareContactReview:
+                await mark_submission("deferred")
+                await service.reconsider.defer(job, "上下文已变化，保留成品等待重新判断表达")
+                return False
             except ShareContactChanged as exc:
                 await service.finish(job, status="cancelled", reason=str(exc))
                 return False
@@ -138,7 +144,7 @@ def preserve_share(kind: str):
                 )
                 return False
             except asyncio.CancelledError:
-                if job["status"] != "submitting":
+                if job["status"] not in {"submitting", "waiting_review"}:
                     await mark_submission("deferred")
                     job["status"] = (
                         "ready" if job.get("delivery_prepared") else
@@ -185,6 +191,7 @@ class ShareContinuationService:
         self._write_lock = asyncio.Lock()
         self._recovery_lock = asyncio.Lock()
         self._ambiguous_warned: set[str] = set()
+        self.reconsider = ShareReconsiderationService(self)
 
     async def save(self, job: dict) -> None:
         payload = {key: value for key, value in job.items() if key != "service"}
@@ -192,6 +199,13 @@ class ShareContinuationService:
             await self.plugin.db.update_share_state(_STATE_KEY, {job["id"]: payload})
 
     def update_waiting_progress(self, job: dict) -> None:
+        if job.get("status") == "waiting_review":
+            self.plugin.task_manager.progress.update_share_progress(
+                str((job.get("params") or {}).get("progress_id") or ""),
+                "send", message=f"{job.get('reason') or '上下文已变化'}；成品已保留，稍后重新判断表达与发送时机",
+                mark_previous_done=False,
+            )
+            return
         if job.get("status") in {"waiting_contact", "waiting_platform", "ready"}:
             self.plugin.task_manager.progress.update_share_progress(
                 str((job.get("params") or {}).get("progress_id") or ""),
@@ -289,6 +303,8 @@ class ShareContinuationService:
                     expected=job.get("contact_snapshot", ""),
                 )
                 if not result.get("allowed"):
+                    if result.get("stale"):
+                        raise ShareContactReview("上下文已变化，成品需要重新判断")
                     if result.get("retryable") and not result.get("stale"):
                         raise ShareContactPending(
                             result.get("reason") or "等待其他主动联系任务完成"
@@ -297,6 +313,7 @@ class ShareContinuationService:
                         result.get("reason") or "主动联系状态已变化，停止自动发送"
                     )
             job["status"] = "submitting"
+            job["submitted_at"] = datetime.now().timestamp()
             job.pop("reason", None)
             await self.save(job)
 
@@ -307,6 +324,7 @@ class ShareContinuationService:
                 "pending",
                 "generating",
                 "waiting_contact",
+                "waiting_review",
                 "waiting_platform",
                 "ready",
                 "submitting",
@@ -389,6 +407,7 @@ class ShareContinuationService:
             return
         async with self._recovery_lock:
             jobs = await self.plugin.db.get_share_state(_STATE_KEY, {})
+            await self.reconsider.migrate(jobs)
             for key, payload in jobs.items():
                 if (
                     isinstance(payload, dict)
@@ -410,7 +429,7 @@ class ShareContinuationService:
                     key in self.active
                     or not isinstance(payload, dict)
                     or payload.get("status")
-                    not in {"pending", "generating", "waiting_contact", "waiting_platform", "ready"}
+                    not in {"pending", "generating", "waiting_contact", "waiting_review", "waiting_platform", "ready"}
                 ):
                     continue
                 params = payload.get("params") or {}
@@ -423,13 +442,15 @@ class ShareContinuationService:
                             reason="原分享任务已过时或自动发布已关闭，保留媒体成品，不补发",
                         )
                     continue
+                if payload.get("needs_review") and datetime.now().timestamp() < payload.get("review_after", 0):
+                    continue
                 target = (
                     params.get("uid") or params.get("target_umo") or "qzone_broadcast"
                 )
                 if self.plugin.runtime_service.is_share_busy(target):
                     continue
                 if (
-                    payload["status"] in {"waiting_contact", "waiting_platform", "ready"}
+                    payload["status"] in {"waiting_contact", "waiting_review", "waiting_platform", "ready"}
                     or payload.get("delivery_prepared")
                     or "prepared_media" in payload
                 ):
@@ -524,6 +545,8 @@ class ShareContinuationService:
                     await self.plugin.db.set_share_state(_STATE_KEY, latest)
 
     async def resume(self, job: dict) -> None:
+        if job.get("status") in {"submitting", "completed", "cancelled", "failed"} or job.get("submitted_at"):
+            return
         params = json.loads(json.dumps(job["params"]), object_hook=_decode)
         target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
         manager = self.plugin.task_manager
@@ -558,6 +581,9 @@ class ShareContinuationService:
                             "原分享任务已过时或自动发布已关闭，保留媒体成品，不补发"
                         )
                     return
+                if not await self.reconsider.review(job):
+                    return
+                params = json.loads(json.dumps(job["params"]), object_hook=_decode)
                 result = await handler(**params, event=None)
                 if result:
                     job["status"] = "completed"
@@ -567,6 +593,9 @@ class ShareContinuationService:
             if job["status"] != "submitting":
                 job.update(status="waiting_platform", reason=str(exc))
                 self.update_waiting_progress(job)
+        except ShareContactReview:
+            await mark_submission("deferred")
+            await self.reconsider.defer(job, "上下文已变化，保留成品等待重新判断表达")
         except ShareContactChanged as exc:
             job["status"] = "cancelled"
             job["reason"] = str(exc)

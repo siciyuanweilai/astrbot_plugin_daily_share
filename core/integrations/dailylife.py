@@ -367,6 +367,7 @@ class DailyLifeBridge:
                     task_key=f"{job['id']}:image",
                     contains_character=contains_character,
                     target_umo=self.share_target(job),
+                    **({"public_only": True} if job.get("public_only") is True else {}),
                 )
             except Exception as exc:
                 result = self._unconfirmed_media_result("图片", exc)

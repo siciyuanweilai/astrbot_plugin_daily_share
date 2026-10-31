@@ -19,6 +19,10 @@ class ShareContactPending(RuntimeError):
     """已准备的内容仍然有效，但暂时无法向该目标发送消息。"""
 
 
+class ShareContactReview(RuntimeError):
+    """上下文已变化，保留成品并在续接时重新判断表达。"""
+
+
 async def contact(plugin, target, owner, *, action="reserve", expected=None):
     method = getattr(
         getattr(plugin, "daily_life_bridge", None), "coordinate_contact", None

@@ -173,7 +173,7 @@ class LifeRepairTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_media_is_not_submitted_and_keeps_existing_asset(self):
         from astrbot_plugin_daily_share.core.integrations.contact import (
-            ShareContactChanged,
+            ShareContactReview,
         )
 
         plugin = types.SimpleNamespace(
@@ -194,7 +194,7 @@ class LifeRepairTests(unittest.IsolatedAsyncioTestCase):
         }
         token = current_share_job.set(job)
         try:
-            with self.assertRaises(ShareContactChanged):
+            with self.assertRaises(ShareContactReview):
                 await service.mark_submitting()
         finally:
             current_share_job.reset(token)

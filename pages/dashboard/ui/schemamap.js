@@ -20,6 +20,10 @@ export const settingsSectionSchema = {
     hint: "这些选项只影响个人微信图片发送前的压缩、超时和临时文件清理。",
   },
   qzone: { section: "qzone_conf" },
+  bilibili: {
+    section: "bilibili_conf",
+    hint: "在这里管理动态分享、配图与主动及公开互动。账号登录、身份绑定和观看设置仍在日常生活插件中管理。",
+  },
   qzoneSequence: {
     section: "qzone_conf",
     title: "QQ空间时段序列",

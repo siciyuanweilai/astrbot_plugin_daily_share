@@ -14,6 +14,7 @@ from ...database.keys import (
     SOURCE_SCHEDULED,
 )
 from ...toolkit import format_exception, log_exception
+from ...integrations.mediajob import current_share_job
 
 if TYPE_CHECKING:
     from . import TaskQzoneService
@@ -184,14 +185,21 @@ class TaskQzoneFlowService:
         history_source: str,
         event: AstrMessageEvent | None = None,
     ) -> bool:
-        target_local_img = await self.owner._generate_qzone_image(
-            stype=stype,
-            content=content,
-            life_ctx=life_ctx,
-            news_data=news_data,
-            progress_id=progress_id,
-            event=event,
-        )
+        job = current_share_job.get()
+        if job is not None and "prepared_media" in job:
+            target_local_img = job["prepared_media"][0]
+        else:
+            target_local_img = await self.owner._generate_qzone_image(
+                stype=stype,
+                content=content,
+                life_ctx=life_ctx,
+                news_data=news_data,
+                progress_id=progress_id,
+                event=event,
+            )
+            if job is not None:
+                job["prepared_media"] = [target_local_img, target_local_img, None, None, ""]
+                await job["service"].save(job)
         qzone_images = await self.owner._prepare_qzone_publish_media(
             target_local_img=target_local_img,
         )

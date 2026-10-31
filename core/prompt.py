@@ -158,9 +158,10 @@ def build_topic_category_boundary(category_type: str) -> tuple[str, str]:
 
 
 def build_qzone_post_prompt(ctx: dict, task: str, material: str = "") -> str:
-    """联动说说共用同一任务框架，资料是事实来源而不是文风示范。"""
+    """公开动态共用短表达方法，资料是事实来源而不是文风示范。"""
+    label = ctx.get("public_target_label") or "QQ 空间"
     rules = compact_prompt(
-        "【本次 QQ 空间状态】",
+        f"【本次 {label}状态】",
         "你是人设中的本人，现在想随手发一条让朋友看见的状态，用平时说话的口吻。",
         build_common_content_rules(
             is_group=False,
@@ -170,10 +171,12 @@ def build_qzone_post_prompt(ctx: dict, task: str, material: str = "") -> str:
             period_label=ctx["period_label"],
             action="分享",
             include_time=False,
+            public_label=label,
         ),
         "材料中的修辞、情绪标签和日程描述不是你的发帖原话；只取与这次主题有关的事实。"
         "计划、进行中与已完成须区分，未确认发生的事不能写成经历。",
         ctx.get("qzone_chat_style_hint", ""),
+        "只围绕此刻在意的一点，通常一两句，正文不超过80字；不铺陈整段画面、不写长篇观后感，也不补总结。",
     )
     return build_task_prompt(
         rules,

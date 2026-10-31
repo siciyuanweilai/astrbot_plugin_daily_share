@@ -1,4 +1,13 @@
 {
+  "bilibili_conf": {
+    "description": "B站分享与公开互动",
+    "type": "object",
+    "items": {
+      "enabled": {"description": "接管B站对外分享", "type": "bool", "default": false, "hint": "需开启自动分享并在 daily_life 登录B站、开启相应能力。B站独立选题和发布，复用QQ空间的短文案与配图方法，不转发空间帖子。"},
+      "manage_interactions": {"description": "统一管理主动分享与公开互动", "type": "bool", "default": true, "hint": "接管主动@、主动私信推荐、公开评论回复和弹幕的选择与表达。观看、收藏和被动私信仍由生活插件负责。"},
+      "enable_image": {"description": "动态配图", "type": "bool", "default": true, "hint": "开启后优先选用本次素材的公开图片，没有现成图片时复用分享配图流程生成一张；新生图同时需要开启AI配图。关闭可生成纯文字动态；待发图文不会因开关变化或失败自动降为纯文字。"}
+    }
+  },
   "enable_auto_share": {
     "description": "启用自动分享",
     "type": "bool",

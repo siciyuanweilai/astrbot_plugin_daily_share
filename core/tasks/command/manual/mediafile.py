@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from astrbot.api.event import AstrMessageEvent
 
 from ....config import ShareType, TimePeriod
+from ....integrations.mediajob import current_share_job
 
 if TYPE_CHECKING:
     from .. import TaskCommandShareService
@@ -29,6 +30,9 @@ class TaskCommandLocalMediaService:
         need_video: bool,
         need_voice: bool,
     ) -> tuple[str | None, str | None, str | None, str | None, str]:
+        job = current_share_job.get()
+        if job is not None and "prepared_media" in job:
+            return tuple(job["prepared_media"])
         video_url = None
         send_img_path = img_path
         image_description = ""
@@ -77,7 +81,11 @@ class TaskCommandLocalMediaService:
             event=event,
             need_voice=need_voice,
         )
-        return img_path, send_img_path, video_url, audio_path, image_description
+        media = img_path, send_img_path, video_url, audio_path, image_description
+        if job is not None:
+            job["prepared_media"] = list(media)
+            await job["service"].save(job)
+        return media
 
     async def _generate_command_video(
         self,

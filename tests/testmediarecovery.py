@@ -256,7 +256,7 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
             all(call.kwargs["expected"] == "original-facts" for call in check)
         )
 
-    async def test_waiting_contact_still_cancels_on_new_chat_without_resubmitting(self):
+    async def test_waiting_contact_defers_for_review_on_new_chat_without_resubmitting(self):
         self.enable_scheduled()
         job = await self.job()
         job.update(
@@ -276,8 +276,9 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.service.recover_once()
         await self.service.recover_once()
-        self.assertEqual(self.journal()["status"], "cancelled")
-        self.assertEqual(self.journal()["reason"], "新消息")
+        self.assertEqual(self.journal()["status"], "waiting_review")
+        self.assertTrue(self.journal()["needs_review"])
+        self.assertEqual(self.journal()["prepared_media"], [None, None, None, None, ""])
         self.assertEqual(self.sent, [])
         self.life.get_share_image_task.assert_not_called()
         self.life.generate_share_image_task.assert_not_called()

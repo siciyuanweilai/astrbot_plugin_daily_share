@@ -118,7 +118,8 @@ class ContentService:
 
         life_hint = life_ctx or ""
         chat_style = ""
-        is_qzone_post = target_id == QZONE_TARGET_ID
+        # 公开动态共用短文案生成方法；素材和发布任务仍按各平台隔离。
+        is_qzone_post = is_public_share_target(target_id)
         expression_scene = (
             "qzone_post"
             if is_qzone_post
@@ -129,8 +130,12 @@ class ContentService:
         )
         if is_qzone_post:
             if not chat_style:
+                label = (
+                    "QQ 空间说说" if target_id == QZONE_TARGET_ID
+                    else f"{public_share_target_label(target_id)}动态"
+                )
                 chat_style = (
-                    "【QQ 空间说说表达】\n"
+                    f"【{label}表达】\n"
                     "像平时说话一样随手发一条状态，意思说完就自然停住，"
                     "按语意自然换行，不固定字数、行数或标题模板。"
                 )
