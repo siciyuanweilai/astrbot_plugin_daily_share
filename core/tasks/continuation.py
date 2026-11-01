@@ -32,6 +32,8 @@ from ..integrations.contact import (
     current_contact,
 )
 from .reconsider import ShareReconsiderationService
+from .opportunity import opportunity_materials
+from .pacing import SharePacingService, episodes
 
 _STATE_KEY = "share_media_continuations"
 
@@ -80,6 +82,8 @@ def preserve_share(kind: str):
                 "created_at": datetime.now().timestamp(),
                 "service": service,
             }
+            target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+            job["pacing_episodes"] = episodes(opportunity_materials(target))
             ticket = current_contact.get()
             if ticket:
                 job["contact_snapshot"] = ticket.get("snapshot")
@@ -192,6 +196,7 @@ class ShareContinuationService:
         self._recovery_lock = asyncio.Lock()
         self._ambiguous_warned: set[str] = set()
         self.reconsider = ShareReconsiderationService(self)
+        self.pacing = SharePacingService(plugin)
 
     async def save(self, job: dict) -> None:
         payload = {key: value for key, value in job.items() if key != "service"}
@@ -312,10 +317,17 @@ class ShareContinuationService:
                     raise ShareContactChanged(
                         result.get("reason") or "主动联系状态已变化，停止自动发送"
                     )
-            job["status"] = "submitting"
-            job["submitted_at"] = datetime.now().timestamp()
-            job.pop("reason", None)
-            await self.save(job)
+            async with self.pacing.lock:
+                gate = await self.pacing.check_job(job)
+                if not gate["ready"]:
+                    job.update(needs_review=True, review_after=datetime.now().timestamp() + 120)
+                    raise ShareContactPending(gate["reason"])
+                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                await self.pacing.record(target, job)
+                job["status"] = "submitting"
+                job["submitted_at"] = datetime.now().timestamp()
+                job.pop("reason", None)
+                await self.save(job)
 
     async def has_pending_share(self, target: str) -> bool:
         jobs = await self.plugin.db.get_share_state(_STATE_KEY, {})
@@ -580,6 +592,10 @@ class ShareContinuationService:
                         job["reason"] = (
                             "原分享任务已过时或自动发布已关闭，保留媒体成品，不补发"
                         )
+                    return
+                gate = await self.pacing.check_job(job)
+                if not gate["ready"]:
+                    await self.reconsider.defer(job, gate["reason"])
                     return
                 if not await self.reconsider.review(job):
                     return

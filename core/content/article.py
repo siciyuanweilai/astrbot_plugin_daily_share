@@ -14,6 +14,7 @@ from ..prompt import (
 )
 from .contentbase import ContentComponent
 from .evidence import strip_news_reference_links
+from .evidencepayload import search_reference
 
 
 class ContentNewsService(ContentComponent):
@@ -63,7 +64,7 @@ class ContentNewsService(ContentComponent):
             for idx, payload in zip(pending_indexes, fetched_results):
                 title = selected_items[idx].get("title", "")
                 content = (
-                    strip_news_reference_links(payload.get("content"))[:2000]
+                    search_reference(payload, content=strip_news_reference_links(payload.get("content")))
                     if payload.get("status") == "ok"
                     else ""
                 )

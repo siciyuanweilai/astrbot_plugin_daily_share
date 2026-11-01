@@ -3,8 +3,9 @@
     "description": "B站分享与公开互动",
     "type": "object",
     "items": {
-      "enabled": {"description": "接管B站对外分享", "type": "bool", "default": false, "hint": "需开启自动分享并在 daily_life 登录B站、开启相应能力。B站独立选题和发布，复用QQ空间的短文案与配图方法，不转发空间帖子。"},
-      "manage_interactions": {"description": "统一管理主动分享与公开互动", "type": "bool", "default": true, "hint": "接管主动@、主动私信推荐、公开评论回复和弹幕的选择与表达。观看、收藏和被动私信仍由生活插件负责。"},
+      "enabled": {"description": "启用B站对外分享", "type": "bool", "default": false, "hint": "需开启自动分享并在 daily_life 登录B站、开启相应能力。B站独立选题和发布，复用QQ空间的短文案与配图方法，不转发空间帖子。"},
+      "manage_interactions": {"description": "统一管理主动分享与公开互动", "type": "bool", "default": true, "hint": "统一安排主动@、主动私信推荐、公开评论回复和弹幕的选择与表达。观看、收藏和被动私信仍由生活插件负责。"},
+      "autonomous_share_interval_minutes": {"description": "动态自主分享最短间隔（分钟）", "type": "int", "default": 90, "slider": {"min": 15, "max": 360, "step": 5}, "hint": "配套生活插件在最终提交前与私聊、空间共用主动联系记录；同一B站渠道两条自主动态至少间隔此时长。到期只重新考虑，普通评论回复和被动私信不受影响。"},
       "enable_image": {"description": "动态配图", "type": "bool", "default": true, "hint": "开启后优先选用本次素材的公开图片，没有现成图片时复用分享配图流程生成一张；新生图同时需要开启AI配图。关闭可生成纯文字动态；待发图文不会因开关变化或失败自动降为纯文字。"}
     }
   },
@@ -303,6 +304,13 @@
         "default": "0 8,20 * * *",
         "hint": "仅在高级 cron 模式下生效。cron 表达式使用标准 5 位格式，也可用 morning/noon/evening/twice/three_times 等预设。",
         "obvious_hint": false
+      },
+      "autonomous_share_interval_minutes": {
+        "description": "自主分享最短间隔（分钟）",
+        "type": "int",
+        "default": 45,
+        "slider": {"min": 15, "max": 360, "step": 5},
+        "hint": "生活驱动和智能定时中，同一会话独立分享的最短间隔。私聊一条未回应至少等 2 小时，连续两条未回应至少等 6 小时；真实回复后恢复基础间隔。到时只重新考虑，不保证发布；手动、明确的固定/随机/cron 定时及早报不受影响。"
       },
       "smart_schedule_max_count": {
         "description": "每日分享上限",
@@ -956,6 +964,13 @@
         },
         "hint": "仅在固定时间或高级 cron 触发后生效，随机等待 0 到 60 分钟再发送；随机时段和智能定时不会再叠加延迟。设为 0 表示准点发送。"
       },
+      "autonomous_share_interval_minutes": {
+        "description": "空间自主分享最短间隔（分钟）",
+        "type": "int",
+        "default": 90,
+        "slider": {"min": 15, "max": 360, "step": 5},
+        "hint": "生活驱动和智能定时生效。按实际提交与成功历史控制间隔，新素材、媒体续接和重启不能绕过；同一经历的小进展积累后再分享。到时只重新考虑，不保证发布；手动和明确的固定/随机/cron 定时及早报不受影响。"
+      },
       "qzone_smart_schedule_max_count": {
         "description": "说说每日分享上限",
         "type": "int",
@@ -1055,6 +1070,17 @@
         "type": "bool",
         "default": false,
         "hint": "允许点赞好友动态。生活驱动下由角色决定是否认可和参与，不因动态可点赞就执行；跳过自己的、已点赞和已处理动态。"
+      },
+      "qzone_auto_like_willingness": {
+        "description": "好友动态主动点赞意愿",
+        "type": "int",
+        "default": -1,
+        "slider": {
+          "min": -1,
+          "max": 100,
+          "step": 1
+        },
+        "hint": "仅生活驱动模式生效。-1 跟随生活插件意愿；0–100 单独调节好友动态点赞倾向，越高越主动，但不是概率或必达次数。仍结合内容、关系和生活状态判断，不影响其他互动。关闭点赞请使用自动点赞开关。"
       },
       "qzone_auto_like_limit": {
         "description": "单次最多点赞数量",

@@ -130,7 +130,12 @@ class TaskSchedulerLivingService(SchedulerComponent):
         subject = data.get("subject") or {}
         if not self.available(data, now, conf, definition):
             return
+        pacing = getattr(continuations, "pacing", None)
+        if pacing and not (await pacing.check(target, data=data))["ready"]:
+            return
         materials = share_material(data, now) + await news_materials(self, data, now)
+        if pacing:
+            materials = await pacing.filter_materials(target, materials)
         if not materials:
             return
         states = await self.db.get_share_state(_STATE, {})
@@ -180,9 +185,7 @@ class TaskSchedulerLivingService(SchedulerComponent):
         # 失败退避独立于材料变化，防止供应商故障时被新状态反复唤醒。
         if now.timestamp() < state.get("error_until", 0):
             return
-        if signature == state.get("signature") and now.timestamp() < state.get(
-            "review_at", 0
-        ):
+        if now.timestamp() < state.get("review_at", 0):
             return
         history, persona = await gather_readonly(
             self.db.get_recent_history_by_target(target, limit=4),

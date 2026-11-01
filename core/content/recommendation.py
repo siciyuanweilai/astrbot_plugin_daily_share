@@ -12,6 +12,7 @@ from ..prompt import (
     build_task_prompt,
 )
 from .contentbase import ContentComponent
+from .evidencepayload import search_reference
 
 
 class ContentRecommendationService(ContentComponent):
@@ -33,11 +34,7 @@ class ContentRecommendationService(ContentComponent):
                 target_umo=target_umo,
             ),
         )
-        web_info = (
-            str(search_payload.get("content") or "").strip()[:2000]
-            if search_payload.get("status") == "ok"
-            else ""
-        )
+        web_info = search_reference(search_payload)
         if not info and not web_info:
             return ""
         lines = [f"\n\n【{heading}】"]

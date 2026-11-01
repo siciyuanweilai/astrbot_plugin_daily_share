@@ -156,6 +156,15 @@ class DailySharePlugin(Star):
                 await self.runtime_service.terminate()
             raise
 
+    async def coordinate_autonomous_contact(self, target: str, *, owner: str = "",
+                                           action: str = "check", rhythm: dict | None = None,
+                                           selected: list | None = None) -> dict:
+        """统一独立主动联系的节奏，不接收正文或私人关系资料。"""
+        if not self._is_initialized or self._is_terminated:
+            return {"ready": False, "retry_after": 60, "reason": "分享协调服务正在重载"}
+        return await self.share_continuations.pacing.coordinate(
+            target, owner=owner, action=action, rhythm=rhythm, selected=selected or [])
+
     async def terminate(self) -> None:
         try:
             await self.runtime_service.terminate()

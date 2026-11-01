@@ -55,6 +55,7 @@ class DashboardApplyBasicService(PanelComponent):
             basic_body,
             (
                 ("llm_timeout", 120, 1, 180),
+                ("autonomous_share_interval_minutes", 45, 15, 360),
                 ("data_retention_days", 60, 7, 365),
                 ("dashboard_dynamic_days", 60, 0, 365),
             ),

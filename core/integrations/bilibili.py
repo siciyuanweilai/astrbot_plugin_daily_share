@@ -5,6 +5,8 @@ import asyncio
 import hashlib
 import json
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .mediajob import ShareMediaPending, current_share_job
 from .bilipost import BiliPostComposer
@@ -96,10 +98,33 @@ class BiliDynamicShare:
         if job and job.get("source_id") not in sources:
             # 旧素材失效后不补发；有未决投递的任务由 receipt/check 路径处理。
             return {"status": "check", "intent": job["id"], "source_id": job["source_id"], "source_expired": True}
+        pacing = getattr(getattr(self.plugin, "share_continuations", None), "pacing", None)
+        if pacing:
+            gate = await pacing.check("bilibili_broadcast", selected=(job or {}).get("pacing_episodes") or [])
+            if not gate["ready"]:
+                return {"status": "wait"}
+            # 旧版本的动态回执也参与升级后的间隔，避免空账本立即再发。
+            for row in opportunity.get("recent_public_actions") or []:
+                if row.get("kind") != "dynamic" or row.get("status") not in {"accepted", "confirmed"}:
+                    continue
+                try:
+                    sent = datetime.fromisoformat(row["at"])
+                    if sent.tzinfo is None:
+                        sent = sent.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+                    age = time.time() - sent.timestamp()
+                except (KeyError, TypeError, ValueError, OverflowError, OSError):
+                    continue
+                if -60 <= age < pacing.interval("bilibili_broadcast"):
+                    return {"status": "wait"}
         if not job:
             if time.time() < float(state.get("review_after") or 0):
                 return {"status": "wait"}
             available = [row for identity, row in sources.items() if identity not in state.get("seen", [])]
+            if pacing:
+                allowed = await pacing.filter_materials("bilibili_broadcast", [
+                    {"id": row["id"], "episode_id": row.get("pacing_episode") or row["id"]} for row in available])
+                allowed_ids = {row["id"] for row in allowed}
+                available = [row for row in available if row["id"] in allowed_ids]
             if not available:
                 return {"status": "wait"}
             # 文件路径属于执行层，不能交给模型选择或生成。
@@ -151,6 +176,7 @@ class BiliDynamicShare:
             job = {"id": "bili:" + identity, "account": str(opportunity["account"]),
                    "kind": "bilibili", "params": {"target_umo": "bilibili_broadcast"},
                    "source_id": source["id"], "text": text.strip(),
+                   "pacing_episodes": [source.get("pacing_episode") or source["id"]],
                    "images": [assets[i] for i in dict.fromkeys(image_ids)],
                    "source_material": self.posts.material(source), "generate_image": generate_image,
                    "composition_version": 2, "public_only": True, "status": "preparing"}
@@ -177,6 +203,7 @@ class BiliDynamicShare:
         job["status"] = "ready"
         await self.save(job)
         return {"status": "ready", "intent": job["id"], "source_id": job["source_id"],
+                "pacing_episodes": job.get("pacing_episodes") or [],
                 "text": job["text"], "images": job["images"]}
 
     async def receipt(self, account, intent, receipt):

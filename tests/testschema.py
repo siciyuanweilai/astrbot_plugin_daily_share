@@ -197,6 +197,7 @@ def _load_dashboard_config_modules(config_module):
         (f"{dashboard_package_name}.meta", ROOT / "core" / "panel" / "meta.py"),
         (f"{dashboard_package_name}.payload", ROOT / "core" / "panel" / "payload.py"),
         (f"{apply_package_name}.field", ROOT / "core" / "panel" / "apply" / "field.py"),
+        (f"{apply_package_name}.general", ROOT / "core" / "panel" / "apply" / "general.py"),
         (
             f"{apply_package_name}.scheduleapply",
             ROOT / "core" / "panel" / "apply" / "scheduleapply.py",
@@ -225,6 +226,56 @@ def _load_dashboard_config_modules(config_module):
 
 
 class ConfigSchemaTests(unittest.TestCase):
+    def test_autonomous_interval_controls_save_independently_and_clamp(self):
+        modules = _load_dashboard_config_modules(_load_config_module())
+
+        class Plugin(
+            modules["general"].DashboardApplyBasicService,
+            modules["zonectl"].DashboardApplyQzoneService,
+            modules["field"].DashboardApplyFieldService,
+            modules["validation"].DashboardConfigValidationService,
+        ):
+            pass
+
+        runtime = SimpleNamespace(config={})
+        plugin = Plugin(runtime)
+        runtime.fields = runtime.qzone_apply = runtime.validation = plugin
+        runtime.schedule_apply = SimpleNamespace(_page_apply_schedule_fields=lambda *a: None)
+        for basic, public, expected in ((60, 120, (60, 120)), (-1, 999, (15, 360))):
+            sections = {"basic": {"autonomous_share_interval_minutes": basic},
+                        "qzone": {"autonomous_share_interval_minutes": public}}
+            plugin._page_apply_basic_section(sections)
+            plugin._page_apply_qzone_section(sections)
+            self.assertEqual(tuple(runtime.config[section]["autonomous_share_interval_minutes"]
+                                   for section in ("basic_conf", "qzone_conf")), expected)
+
+    def test_autonomous_interval_ui_submits_each_schema_bound_control(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("未安装 Node.js，跳过设置页交互验证")
+        script = textwrap.dedent("""
+            import assert from 'node:assert/strict';
+            import { settingsPayloadGroups, writeBoundSchemaFields } from './pages/dashboard/ui/schema.js';
+            globalThis.document = { getElementById: () => null };
+            for (const [group, section, id, value] of [
+                ['basic', 'basic_conf', 'cfgBasicShareInterval', 60],
+                ['qzone', 'qzone_conf', 'cfgQzoneShareInterval', 120],
+            ]) {
+                const field = 'autonomous_share_interval_minutes';
+                const configData = { schema_meta: { sections: { [section]: { fields: {
+                    [field]: { type: 'int', default: 45, slider: { min: 15, max: 360 } },
+                } } } } };
+                const elements = { [id]: { type: 'number', value: String(value) } };
+                const payload = { sections: {}, schema_extra: { root: {}, sections: {} } };
+                assert.ok(settingsPayloadGroups[group].includes(id));
+                writeBoundSchemaFields(payload, group, [id], { configData, elements });
+                assert.equal(payload.sections[group][field], value);
+            }
+        """)
+        result = subprocess.run([node, "--input-type=module", "-e", script], cwd=ROOT,
+                                capture_output=True, text=True, timeout=10, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_model_config_is_in_basic_group_without_persona_overrides(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         basic_items = schema["basic_conf"]["items"]

@@ -125,6 +125,7 @@ export function createSettingsConfig({
         delay: el.cfgBasicCronDelay,
         smart: [
           el.cfgBasicSmartMaxCount,
+          el.cfgBasicShareInterval,
           el.cfgBasicSmartQuietHours,
           el.cfgBasicSmartPrompt,
         ],
@@ -151,6 +152,7 @@ export function createSettingsConfig({
         delay: el.cfgQzoneDelay,
         smart: [
           el.cfgQzoneSmartMaxCount,
+          el.cfgQzoneShareInterval,
           el.cfgQzoneSmartQuietHours,
           el.cfgQzoneSmartPrompt,
         ],

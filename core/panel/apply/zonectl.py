@@ -95,6 +95,7 @@ class DashboardApplyQzoneService(PanelComponent):
             qzone_body,
             (
                 ("qzone_auto_interaction_active_hours", 24, 0, 168),
+                ("autonomous_share_interval_minutes", 90, 15, 360),
                 ("qzone_self_comment_probability", 30, 0, 100),
                 ("qzone_auto_comment_reply_probability", 0, 0, 100),
                 ("qzone_auto_comment_reply_user_limit", 1, 1, 10),

@@ -66,7 +66,7 @@ def share_material(data: dict, now: datetime) -> list[dict]:
         return []
     result = {}
 
-    def add(kind, identity, row, *, legacy_identity=None):
+    def add(kind, identity, row, *, legacy_identity=None, episode=None):
         fields = {
             key: compact(value, 400 if key == "evidence" else 240)
             for key, value in row.items()
@@ -87,6 +87,7 @@ def share_material(data: dict, now: datetime) -> list[dict]:
             return
         key = digest([kind, identity])
         result[key] = {"id": key, "kind": kind, **fields}
+        result[key]["episode_id"] = digest(episode) if episode else key
         if legacy_identity is not None:
             result[key]["legacy_id"] = digest([kind, legacy_identity])
 
@@ -104,23 +105,28 @@ def share_material(data: dict, now: datetime) -> list[dict]:
                 "activity": action.get("activity"),
                 "state": "running",
             },
+            episode=(["life_episode", action["episode_id"]] if action.get("episode_id") else
+                     ["experience", facts.get("date"), compact(action.get("activity"))]),
         )
     for row in data.get("timeline") or []:
         if not isinstance(row, dict):
             continue
         if (
             row.get("execution_state") == "completed"
+            and (not row.get("episode_id") or row.get("episode_state") == "completed")
             and row.get("execution_evidence")
             and recent(row.get("execution_updated_at"), now)
         ):
             add(
                 "completed_activity",
-                [facts.get("date"), row.get("time"), row.get("activity")],
+                row.get("episode_id") or [facts.get("date"), row.get("time"), row.get("activity")],
                 {
                     "activity": row.get("activity"),
                     "state": "completed",
                     "evidence": row.get("execution_evidence"),
                 },
+                episode=(["life_episode", row["episode_id"]] if row.get("episode_id") else
+                         ["experience", facts.get("date"), compact(row.get("activity"))]),
             )
     continuity = data.get("continuity") or {}
     for kind in ("activities", "objects"):
@@ -158,6 +164,7 @@ def share_material(data: dict, now: datetime) -> list[dict]:
                 kind,
                 [row.get("event_id") or row.get("title"), progress_version(row)],
                 selected,
+                episode=[kind, row.get("event_id") or [facts.get("date"), row.get("title")]],
                 legacy_identity=[
                     row.get("title"),
                     row.get("state"),
