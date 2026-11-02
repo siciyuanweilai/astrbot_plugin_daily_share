@@ -394,8 +394,3 @@ python -m ruff format --check .
 <div align="center">
   <sub>Made with ❤️ by 四次元未来 | 愿此见闻温柔你的日常</sub>
 </div>
-
-
-### 长期关系协同
-
-与 daily_life 本地 v1.5.8 关系更新配合时，私聊分享会参考已量化的熟悉、信任与好感，同时遵守当下生活和跨渠道联系节奏。没有证据的维度保持未知；公开内容不携带私聊关系分数或证据。关系学习由 daily_life 统一处理，daily_share 负责分享和对外表达，不重复结算好感。
