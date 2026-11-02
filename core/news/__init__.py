@@ -1,10 +1,11 @@
+import hashlib
 import random
 
 import aiohttp
-
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
+from .cache import NewsReadCache
 from .client import NewsApiService
 from .decode import NewsParserService
 from .sources import NewsSourceService
@@ -18,13 +19,19 @@ class NewsService:
         self.sources = NewsSourceService(self)
         self.parser = NewsParserService(self)
         self.api = NewsApiService(self)
+        self._read_cache = NewsReadCache()
+        self._closed = False
 
     async def http(self) -> aiohttp.ClientSession:
+        if self._closed:
+            raise RuntimeError("新闻服务已关闭")
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         return self._session
 
     async def close(self) -> None:
+        self._closed = True
+        await self._read_cache.close()
         if self._session is not None and not self._session.closed:
             await self._session.close()
         self._session = None
@@ -176,11 +183,37 @@ class NewsService:
 
     async def _fetch_news(self, source, key, limit=None):
         """发送新闻接口请求。"""
-        return await self.api._fetch_news(source, key, limit)
+        if not self.conf.get("enable_news_api", True):
+            return None
+        effective_limit = self._news_item_limit(limit)
+        cache_key = (
+            "news",
+            source,
+            hashlib.sha256(key.encode()).digest(),
+            effective_limit,
+        )
+        return await self._read_cache.get(
+            cache_key,
+            lambda: self.api._fetch_news(source, key, effective_limit),
+            scope=self._read_scope,
+            ttl=30.0,
+            timeout=self._read_timeout(),
+        )
 
     async def get_baike_info(self, keyword):
         """通过柠柚接口获取百科词条简介。"""
-        return await self.api.get_baike_info(keyword)
+        if not self.conf.get("enable_news_api", True):
+            return None
+        keyword = str(keyword or "").strip()
+        if not keyword:
+            return None
+        return await self._read_cache.get(
+            ("baike", keyword),
+            lambda: self.api.get_baike_info(keyword),
+            scope=self._read_scope,
+            ttl=300.0,
+            timeout=10.0,
+        )
 
     @staticmethod
     def _baike_response_text(data, keyword):
@@ -188,4 +221,28 @@ class NewsService:
 
     async def get_ai_news_json(self):
         """获取每日 AI 资讯结构化数据。"""
-        return await self.api.get_ai_news_json()
+        if not self.conf.get("enable_news_api", True):
+            return None
+        return await self._read_cache.get(
+            ("ai",),
+            self.api.get_ai_news_json,
+            scope=self._read_scope,
+            ttl=30.0,
+            timeout=10.0,
+        )
+
+    def _read_timeout(self) -> float:
+        try:
+            return max(1.0, min(120.0, float(self.conf.get("news_api_timeout", 30))))
+        except (TypeError, ValueError):
+            return 30.0
+
+    def _read_scope(self) -> tuple:
+        """配置变化丢弃旧缓存和旧在途结果，密钥只保留指纹。"""
+        key = str(self.conf.get("nycnm_api_key", "") or "").strip()
+        return (
+            bool(self.conf.get("enable_news_api", True)),
+            hashlib.sha256(key.encode()).digest(),
+            self._read_timeout(),
+            self._news_item_limit(None),
+        )

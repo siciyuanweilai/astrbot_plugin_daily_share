@@ -239,21 +239,3 @@ class ContextService:
 
         except Exception as e:
             logger.error(f"[日常分享] 机器人初始化失败: {e}")
-
-    def get_bot_instance(self, adapter_id: str):
-        """
-        兼容旧调用：从缓存中获取实例；平台路由应使用 get_onebot_bot 等专用入口。
-        """
-        if adapter_id:
-            return self.bot_map.get(adapter_id)
-
-        if len(self.bot_map) == 1:
-            return next(iter(self.bot_map.values()))
-        if self.bot_map:
-            logger.warning(
-                f"[日常分享] 存在多个机器人实例 {list(self.bot_map.keys())}，必须明确指定实例 ID"
-            )
-            return None
-
-        logger.debug("[日常分享] 当前机器人缓存为空，可能仍在等待适配器初始化。")
-        return None

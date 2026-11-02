@@ -68,28 +68,6 @@ export function formatDate(value) {
   });
 }
 
-export function formatTime(value) {
-  if (!value) return "--";
-  const raw = text(value);
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    const matched = raw.match(/\d{1,2}:\d{2}/);
-    return matched?.[0] || raw || "--";
-  }
-  return clockText(date);
-}
-
-export function formatFullDateTime(value) {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return text(value);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const weekday = weekdayLabels[date.getDay()];
-  return `${year}年${month}月${day}日 ${weekday} ${clockText(date)}`;
-}
-
 export function formatMediaTime(value) {
   if (!value) return "--";
   const date = new Date(value);

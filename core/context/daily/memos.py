@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from ..contextbase import ContextComponent
 
 
@@ -17,13 +18,19 @@ class ContextLifeMemoryService(ContextComponent):
         fields = (
             ("name", "档案姓名", 40),
             ("alias", "别名", 40),
-            ("subjective_name", "熟悉称呼", 40),
+            ("subjective_name", "习惯称呼", 40),
             ("persona_hint", "身份关系线索", 180),
             ("relationship_story", "关系描述", 220),
         )
         lines = []
         for key, label, limit in fields:
             value = self._compact_life_text(item.get(key), limit)
+            if key in {"alias", "subjective_name"} and value in {
+                self._compact_life_text(item.get("name"), limit),
+                self._compact_life_text(item.get("id"), limit),
+                self._compact_life_text(item.get("user_id"), limit),
+            }:
+                continue
             if value:
                 lines.append(f"{label}：{value}")
         tags = item.get("subjective_tags", [])
@@ -76,6 +83,16 @@ class ContextLifeMemoryService(ContextComponent):
                 details.append(f"记忆点：{point}")
             if note:
                 details.append(f"最近：{note}")
+            state = item.get("relationship_state")
+            if isinstance(state, dict):
+                known = state.get("observed_dimensions", [])
+                dimensions = []
+                for key, label in (("familiarity", "熟悉"), ("trust", "信任"), ("affinity", "好感")):
+                    value = state.get(key)
+                    if key in known and isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                        dimensions.append(f"{label} {max(0, min(1, value)):.2f}")
+                if dimensions:
+                    details.append("长期关系：" + "、".join(dimensions) + "（独立维度，非当前心情或行为许可）")
             count = item.get("interactions", 0)
             suffix = f"；{'；'.join(details)}" if details else ""
             lines.append(f"- {name}：互动 {count} 次{suffix}")

@@ -28,16 +28,6 @@ class TaskTargetPlatformService:
         except Exception:
             return []
 
-    def get_target_platform_candidates(self, *, expected_group: bool) -> list[str]:
-        """返回当前支持主动发送的目标平台实例标识。"""
-        return [
-            binding.route_id
-            for binding in self.owner.get_target_platform_bindings()
-            if binding.supports_proactive
-            and not binding.conflicted
-            and (not expected_group or binding.supports_group)
-        ]
-
     @staticmethod
     def _narrow_target_platform_bindings(
         bindings: list[PlatformBinding],
@@ -145,18 +135,6 @@ class TaskTargetPlatformService:
             expected_group=session.is_group,
             route_id=session.platform_id,
         )
-
-    def _select_platform_instance_for_target(self, target_umo: str):
-        """只按统一消息来源标识中的平台实例标识精确选择平台。"""
-        session = parse_platform_session(target_umo)
-        if not session:
-            return None
-        try:
-            return self.owner.ensure_target_platform_routable(target_umo).instance
-        except ValueError as exc:
-            if "当前不可用" in str(exc):
-                return None
-            raise
 
     def event_matches_target(self, event: AstrMessageEvent, target_umo: str) -> bool:
         """仅在事件与发送目标是同一个完整统一消息来源标识时复用事件发送。"""

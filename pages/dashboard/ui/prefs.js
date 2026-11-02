@@ -190,7 +190,7 @@ export function createSettingsConfig({
       const clock = el.cfgQzoneAutoInteractionCron?.closest?.("label");
       if (clock) clock.hidden = living;
       for (const [input, automatic, probability] of [
-        [el.cfgQzoneSelfCommentProbability, "自评（0 关闭，大于 0 自主决定）", "自己的说说自动评论概率（%）"],
+        [el.cfgQzoneSelfCommentProbability, "自评意愿（0 关闭，1–100 越高越主动）", "自己的说说自动评论概率（%）"],
         [el.cfgQzoneAutoCommentReplyProbability, "主动回评（0 关闭，大于 0 自主决定）", "回复其他用户评论概率（%）"],
       ]) {
         const label = input?.closest?.("label")?.querySelector("span");

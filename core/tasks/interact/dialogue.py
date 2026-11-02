@@ -9,6 +9,7 @@ from astrbot.api import logger
 from ...concurrency import gather_readonly
 from ...database.keys import QZONE_TARGET_ID
 from ...prompt import build_qzone_interaction_rules
+from ...space.selfpost import SELF_POST_STATE_KEY
 from .formatting import (
     _clean_auto_comment_text,
     _compact_qzone_auto_life_context,
@@ -88,12 +89,14 @@ class QzoneAutoPromptService:
     def __init__(self, owner: TaskQzoneAutoCommentService) -> None:
         self.owner = owner
 
-    async def generate_qzone_self_comment(self, post, *, image_count: int = 0) -> str:
+    async def generate_qzone_self_comment(
+        self, post, *, image_count: int = 0
+    ) -> str | None:
         system_prompt = await self._qzone_auto_interaction_system_prompt(
-            "这条说说是你本人刚发布的。请继续以作者本人身份，在自己的说说下自评一句。"
-            "根据原文自然补充一个小想法，或者轻轻自嘲、吐槽自己；两种表达任选其一。"
-            "不以旁观好友身份夸赞作者，不重复正文，不编造新的经历或配图细节。"
+            "这条说说是你本人刚发布的，公开表达已经完成。判断是否仍有值得补充的新内容，有才写一条作者自评，没有就选择 skip。"
+            "改述正文、重复近期自评或为了活跃而附加感叹不构成新增表达；不编造经历或配图细节。"
             "生活状态、连续性和记忆只作相关背景，不逐项复述；不把私密细节或未确认的计划写进公开评论。",
+            output_rule="只输出 JSON，字段为 decision（comment 或 skip）、adds_new_meaning（是否有新增表达，布尔值）、content（自评正文；skip 时为空）。",
             scene="qzone_comment",
         )
         prompt_parts = [
@@ -107,13 +110,44 @@ class QzoneAutoPromptService:
         memory = await self._related_memory_prompt(str(getattr(post, "text", "") or ""))
         if memory:
             prompt_parts.append(memory)
-        prompt_parts.append("请写一条可直接发到自己评论区的补充或自我吐槽。")
+        states = await self.owner.db.get_qzone_state(SELF_POST_STATE_KEY, {})
+        recent = [
+            str(row["content"])[:160]
+            for key, row in reversed(states.items())
+            if key != post.key
+            and isinstance(row, dict)
+            and row.get("comment") == "commented"
+            and row.get("content")
+            and str((row.get("post") or {}).get("uin")) == str(post.uin)
+        ][:3]
+        if recent:
+            prompt_parts.append(
+                "【近期已确认的自评，仅用于避免重复表达】\n"
+                + json.dumps(recent, ensure_ascii=False)
+            )
         prompt = "\n\n".join(part for part in prompt_parts if part)
-        content = await self._qzone_auto_interaction_llm(
-            prompt, system_prompt=system_prompt, max_bytes=240
+        raw = await self.owner.plugin.call_llm(
+            prompt=prompt, system_prompt=system_prompt, umo=QZONE_TARGET_ID
         )
+        try:
+            result = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("自评判断未返回有效内容") from exc
+        if not isinstance(result, dict) or result.get("decision") not in {"comment", "skip"}:
+            raise RuntimeError("自评判断格式无效")
+        if result["decision"] == "skip":
+            return None
+        if type(result.get("adds_new_meaning")) is not bool:
+            raise RuntimeError("自评未确认新增表达")
+        if not result["adds_new_meaning"]:
+            return None
+        if not isinstance(result.get("content"), str):
+            raise RuntimeError("自评正文格式无效")
+        content = _clean_auto_comment_text(result["content"], max_bytes=240)
+        if not content:
+            raise RuntimeError("自评未返回有效内容")
         if "".join(content.split()) == "".join(str(post.text or "").split()):
-            raise RuntimeError("自评与说说正文重复，已跳过")
+            return None
         return content
 
     @staticmethod

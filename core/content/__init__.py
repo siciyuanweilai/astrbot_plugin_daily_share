@@ -79,6 +79,55 @@ class ContentService:
     async def get_qzone_chat_style_prompt(self, *, scene: str = "") -> str:
         return await self.daily_life_bridge.get_share_chat_style_prompt(scene=scene)
 
+    async def get_expression_context(
+        self, target_id: str, *, is_group: bool, share_type: str
+    ) -> dict:
+        """首次生成与成品改写共用当前场景的表达设置。"""
+        public = is_public_share_target(target_id)
+        scene = "qzone_post" if public else ("share_group" if is_group else "share_private")
+        style = await self.daily_life_bridge.get_share_chat_style_prompt(scene=scene)
+        if not style:
+            if public:
+                label = (
+                    "QQ 空间说说" if target_id == QZONE_TARGET_ID
+                    else f"{public_share_target_label(target_id)}动态"
+                )
+                style = (
+                    f"【{label}表达】\n"
+                    "像平时说话一样随手发一条状态，意思说完就自然停住，"
+                    "按语意自然换行，不固定字数、行数或标题模板。"
+                )
+            else:
+                style = (
+                    "【日常分享表达】\n"
+                    "像平时说话一样自然分享，意思说清楚就停，不凑字数、不补抒情或总结。"
+                    "问候心情围绕当下一点；新闻知识推荐保留必要事实和主体，不硬压成一句。"
+                )
+        return {
+            "qzone_chat_style_hint": style if public else "",
+            "share_chat_style_hint": style if not public else "",
+            "expression_scene": scene,
+            "share_type": share_type,
+            "target_id": target_id,
+            "is_group": is_group,
+            "is_qzone_post": public,
+            "public_target": public,
+            "public_target_label": public_share_target_label(target_id),
+            "output_format_hint": self.support._build_output_format_prompt(target_id),
+        }
+
+    async def review_expression(
+        self, text: str, ctx: dict, *, reflow: bool = False
+    ) -> str | None:
+        """复核改写成品；检查不可用时让续接保留成品、有限退避。"""
+        if ctx.get("public_target"):
+            return await self.support._review_public_expression(
+                text, ctx, require_review=True
+            )
+        return await self.support._review_share_expression(
+            text, ctx, reflow=reflow, require_review=True
+        )
+
     async def generate(
         self,
         stype: ShareType,
@@ -117,43 +166,14 @@ class ContentService:
         time_str = now.strftime("%H:%M")
 
         life_hint = life_ctx or ""
-        chat_style = ""
         # 公开动态共用短文案生成方法；素材和发布任务仍按各平台隔离。
         is_qzone_post = is_public_share_target(target_id)
-        expression_scene = (
-            "qzone_post"
-            if is_qzone_post
-            else ("share_group" if is_group else "share_private")
+        expression = await self.get_expression_context(
+            target_id, is_group=is_group, share_type=stype.value
         )
-        chat_style = await self.daily_life_bridge.get_share_chat_style_prompt(
-            scene=expression_scene
-        )
-        if is_qzone_post:
-            if not chat_style:
-                label = (
-                    "QQ 空间说说" if target_id == QZONE_TARGET_ID
-                    else f"{public_share_target_label(target_id)}动态"
-                )
-                chat_style = (
-                    f"【{label}表达】\n"
-                    "像平时说话一样随手发一条状态，意思说完就自然停住，"
-                    "按语意自然换行，不固定字数、行数或标题模板。"
-                )
-        elif not chat_style:
-            chat_style = (
-                "【日常分享表达】\n"
-                "像平时说话一样自然分享，意思说清楚就停，不凑字数、不补抒情或总结。"
-                "问候心情围绕当下一点；新闻知识推荐保留必要事实和主体，不硬压成一句。"
-            )
 
         ctx_data = {
-            "qzone_chat_style_hint": chat_style if is_qzone_post else "",
-            "share_chat_style_hint": chat_style if not is_qzone_post else "",
-            "expression_scene": expression_scene,
-            "share_type": stype.value,
-            "target_id": target_id,
-            "is_group": is_group,
-            "is_qzone_post": is_qzone_post,
+            **expression,
             "life_hint": life_hint,
             "structured_history_hint": self.support._build_structured_history_prompt(
                 structured_history
@@ -161,9 +181,6 @@ class ContentService:
             "system_prompt": build_content_system_prompt(
                 persona_info.get("prompt", "")
             ),
-            "output_format_hint": self.support._build_output_format_prompt(target_id),
-            "public_target": is_public_share_target(target_id),
-            "public_target_label": public_share_target_label(target_id),
             "period_label": self.support._get_period_label(period),
             "date_str": date_str,
             "time_str": time_str,

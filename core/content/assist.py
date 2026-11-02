@@ -21,7 +21,6 @@ class ContentSupportService(ContentComponent):
     async def _generate_qzone_post(
         self, ctx: dict, task: str, material: str = ""
     ) -> str | None:
-        label = ctx.get("public_target_label") or "QQ 空间"
         result = await self._call_llm(
             prompt=build_qzone_post_prompt(ctx, task, material),
             system_prompt=ctx["system_prompt"],
@@ -29,12 +28,30 @@ class ContentSupportService(ContentComponent):
         )
         if not result:
             return None
+        return await self._review_public_expression(result, ctx)
+
+    async def _review_public_expression(
+        self, text: str, ctx: dict, *, require_review: bool = False
+    ) -> str | None:
+        label = ctx.get("public_target_label") or "QQ 空间"
+        result = text
         bridge = getattr(self.service, "daily_life_bridge", None)
         prepare = getattr(bridge, "prepare_expression", None)
         if callable(prepare):
             expression = await prepare(result, scene="qzone_post")
+            if require_review and (
+                not isinstance(expression, dict)
+                or expression.get("review_status") not in {"accepted", "disabled"}
+                or not isinstance(expression.get("text"), str)
+                or not expression["text"].strip()
+            ):
+                raise ValueError("public expression review unavailable")
             result = str(expression.get("text") or result).strip()
+        elif require_review:
+            raise ValueError("public expression review unavailable")
         if len(result) > 80:
+            if require_review:
+                raise ValueError("public expression still too long")
             logger.info(f"[内容服务] {label}正文仍过长，跳过本次发布，不机械截断")
             return None
         normalized = "".join(result.split())
@@ -47,7 +64,8 @@ class ContentSupportService(ContentComponent):
         return result
 
     async def _review_share_expression(
-        self, text: str | None, ctx: dict, *, required_terms=()
+        self, text: str | None, ctx: dict, *, required_terms=(), reflow: bool = False,
+        require_review: bool = False,
     ) -> str | None:
         """只检查当前分享正文；题目、受众及独立格式不能被二次润色覆盖。"""
         if not text:
@@ -55,6 +73,8 @@ class ContentSupportService(ContentComponent):
         bridge = getattr(self.service, "daily_life_bridge", None)
         prepare = getattr(bridge, "prepare_expression", None)
         if not callable(prepare):
+            if require_review:
+                raise ValueError("share expression review unavailable")
             return text
         scene = "share_group" if ctx.get("is_group") else "share_private"
         protected = list(
@@ -79,18 +99,32 @@ class ContentSupportService(ContentComponent):
                     "target_umo": ctx.get("target_id", ""),
                     "output_format": output_format,
                     "required_terms": protected,
+                    **({"layout": "reflow"} if reflow else {}),
                 },
             )
+            if require_review and (
+                not isinstance(expression, dict)
+                or expression.get("review_status") not in {"accepted", "disabled"}
+            ):
+                raise ValueError("share expression review unavailable")
             rewritten = expression.get("text") if isinstance(expression, dict) else None
             if not isinstance(rewritten, str) or not rewritten.strip():
+                if require_review:
+                    raise ValueError("invalid reviewed expression")
                 return text
             rewritten = rewritten.strip()
             if any(term not in rewritten for term in protected):
+                if require_review:
+                    raise ValueError("review lost protected terms")
                 return text
-            if output_format and len(rewritten.splitlines()) != len(text.splitlines()):
+            if output_format and not reflow and len(rewritten.splitlines()) != len(text.splitlines()):
+                if require_review:
+                    raise ValueError("review changed preserved layout")
                 return text
             return rewritten
         except Exception as exc:
+            if require_review:
+                raise
             logger.debug(
                 f"[内容服务] 分享表达检查不可用，保留原文：{type(exc).__name__}"
             )

@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import time
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
-
-try:
-    import httpx
-except Exception:  # pragma: no cover - 可选运行时依赖
-    httpx = None
 
 from astrbot.api import logger
 
@@ -80,13 +74,6 @@ class QzoneClientGateway:
                 await self.owner._session.close()
             self.owner._session = None
             self.owner._session_timeout_seconds = None
-        async with self.owner._h2_session_lock:
-            if self.owner._h2_session is not None:
-                await self.owner._h2_session.aclose()
-            self.owner._h2_session = None
-            self.owner._h2_timeout_seconds = None
-        self.owner._h5_transport = ""
-        self.owner._h5_transport_logged = False
 
     def invalidate(self) -> None:
         self.owner._ctx = None
@@ -308,41 +295,6 @@ class QzoneClientGateway:
                 self.owner._session_timeout_seconds = timeout_seconds
             return self.owner._session
 
-    async def _h2_http(self):
-        if httpx is None or importlib.util.find_spec("h2") is None:
-            if not self.owner._h5_transport_logged:
-                logger.warning(
-                    "[日常分享] QQ 空间 H5 请求未启用 HTTP/2，已退回 HTTP/1.1。"
-                )
-                self.owner._h5_transport_logged = True
-            self.owner._h5_transport = "HTTP/1.1"
-            return None
-        timeout_seconds = self.owner._api_timeout_seconds()
-        async with self.owner._h2_session_lock:
-            if (
-                self.owner._h2_session is not None
-                and self.owner._h2_timeout_seconds != timeout_seconds
-            ):
-                await self.owner._h2_session.aclose()
-                self.owner._h2_session = None
-                self.owner._h2_timeout_seconds = None
-            if self.owner._h2_session is None:
-                try:
-                    self.owner._h2_session = httpx.AsyncClient(
-                        http2=True,
-                        timeout=timeout_seconds,
-                        headers={"accept-encoding": "gzip"},
-                    )
-                    self.owner._h2_timeout_seconds = timeout_seconds
-                except ImportError:
-                    self.owner._h5_transport = "HTTP/1.1"
-                    return None
-        if not self.owner._h5_transport_logged:
-            logger.info("[日常分享] QQ 空间 H5 上传已启用 HTTP/2。")
-            self.owner._h5_transport_logged = True
-        self.owner._h5_transport = "HTTP/2"
-        return self.owner._h2_session
-
     def _api_timeout_seconds(self) -> int:
         conf = self.owner.qzone_conf
         try:
@@ -440,66 +392,6 @@ class QzoneClientGateway:
                 submission=submission,
             )
         return payload
-
-    async def _request_text(
-        self,
-        method: str,
-        url: str,
-        *,
-        params=None,
-        data=None,
-        headers=None,
-        retry=True,
-    ) -> str:
-        ctx = await self.owner.context()
-        request_bot = self.owner._cache_bot
-        session = await self.owner._http()
-        self.owner._ensure_request_bot(request_bot, method)
-        request_headers = headers or self.owner._headers(ctx)
-        request_cookies = (
-            None if self.owner._has_cookie_header(request_headers) else ctx.cookies
-        )
-        try:
-            async with session.request(
-                method,
-                url,
-                params=params,
-                data=data,
-                headers=request_headers,
-                cookies=request_cookies,
-            ) as resp:
-                text = await resp.text()
-                status = resp.status
-        except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"QQ 空间请求超时（{self.owner._api_timeout_seconds()}秒）"
-            ) from exc
-        except aiohttp.ClientError as exc:
-            raise RuntimeError(f"QQ 空间网络请求失败: {exc}") from exc
-        self.owner._ensure_request_bot(request_bot, method)
-        if retry and status in {401, 403}:
-            old_ctx = ctx
-            self.owner.invalidate()
-            new_ctx = await self.owner.context()
-            self.owner._ensure_request_bot(request_bot, method)
-            params, data, headers = self.owner._refresh_request_credentials(
-                old_ctx,
-                new_ctx,
-                params=params,
-                data=data,
-                headers=headers,
-            )
-            return await self.owner._request_text(
-                method,
-                url,
-                params=params,
-                data=data,
-                headers=headers,
-                retry=False,
-            )
-        if status >= 400:
-            raise RuntimeError(f"QQ 空间请求失败，接口状态码: {status}")
-        return text
 
     @staticmethod
     def _ok(payload: dict[str, Any], *, code_key: str = "code") -> bool:

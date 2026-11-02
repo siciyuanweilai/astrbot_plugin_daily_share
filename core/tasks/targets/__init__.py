@@ -27,12 +27,6 @@ class TaskTargetService(TaskServiceBase):
         """返回主动发送平台的完整能力记录，包含重复标识诊断。"""
         return self.platform.get_target_platform_bindings()
 
-    def get_target_platform_candidates(self, *, expected_group):
-        """返回当前支持主动发送的目标平台实例标识。"""
-        return self.platform.get_target_platform_candidates(
-            expected_group=expected_group
-        )
-
     @staticmethod
     def _narrow_target_platform_bindings(bindings, *, session_id, expected_group):
         return TaskTargetPlatformService._narrow_target_platform_bindings(
@@ -52,10 +46,6 @@ class TaskTargetService(TaskServiceBase):
         return self.platform.ensure_target_platform_routable(
             target_umo, expected_group=expected_group
         )
-
-    def _select_platform_instance_for_target(self, target_umo):
-        """只按统一消息来源标识中的平台实例标识精确选择平台。"""
-        return self.platform._select_platform_instance_for_target(target_umo)
 
     def event_matches_target(self, event, target_umo):
         """仅在事件与发送目标是同一个完整统一消息来源标识时复用事件发送。"""

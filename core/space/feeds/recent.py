@@ -48,36 +48,16 @@ class QzoneFeedRecentService:
             headers=self.owner._feeds3_headers(ctx),
         )
         if not self.owner._ok(payload):
-            self.owner._last_friend_feeds_meta = {
-                "source": "recent_posts",
-                "count": 0,
-                "http_status": payload.get("_http_status"),
-                "raw_length": payload.get("_raw_length"),
-                "message": str(payload.get("message") or payload.get("msg") or ""),
-            }
             raise RuntimeError(
                 str(payload.get("message") or "获取 QQ 空间好友动态失败")
             )
 
-        payload_meta = self.owner._friend_feeds_payload_meta(payload)
         all_posts = parse_recent_feed_list(payload)
         posts = all_posts[offset : offset + limit]
         if with_detail:
             posts = await self.owner._query_recent_post_details(posts)
-        self.owner._last_friend_feeds_meta = {
-            "source": "recent_posts",
-            "count": len(posts),
-            "parsed_count": len(all_posts),
-            "http_status": payload.get("_http_status"),
-            "raw_length": payload.get("_raw_length"),
-            "has_more": self.owner._friend_feeds_has_more(payload, all_posts),
-            "next_cursor": self.owner._friend_feeds_next_cursor(payload),
-            **payload_meta,
-        }
         self.owner._remember_posts(posts)
-        self.owner._store_query_posts(
-            cache_key, posts, meta=self.owner._last_friend_feeds_meta
-        )
+        self.owner._store_query_posts(cache_key, posts)
         return posts
 
     async def _query_recent_post_details(

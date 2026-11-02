@@ -304,28 +304,6 @@ def _json_mapping(value: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _object_literal_mapping(value: str) -> dict[str, Any]:
-    text = html.unescape(str(value or "")).strip()
-    if not text:
-        return {}
-    try:
-        parsed = json.loads(text)
-    except (TypeError, ValueError):
-        if json5 is None:
-            parsed = None
-        else:
-            try:
-                parsed = json5.loads(text)
-            except Exception:
-                parsed = None
-    if parsed is None:
-        try:
-            parsed = _parse_js_object_literal(text)
-        except (TypeError, ValueError):
-            return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _dig(value: Any, *keys: str) -> Any:
     current = value
     for key in keys:

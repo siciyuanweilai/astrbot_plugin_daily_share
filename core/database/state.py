@@ -176,6 +176,3 @@ class DatabaseStateService(DatabaseRepository):
 
     async def set_cache_state(self, key: str, value: Any) -> None:
         await self._set_domain_state("cache", key, value)
-
-    async def update_cache_state(self, key: str, updates: dict) -> dict:
-        return await self._update_domain_state("cache", key, updates)

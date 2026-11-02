@@ -222,6 +222,13 @@ class QzoneSelfPostService:
                     content = await interaction.generate_qzone_self_comment(
                         post, image_count=image_count
                     )
+                    if content is None:
+                        # 明确没有新增表达属于完成判断，不能当生成故障反复补发。
+                        entry[action] = "skipped"
+                        entry.pop("content", None)
+                        entry["review"].pop(action, None)
+                        await self._save(post.key, entry)
+                        continue
                     bridge = getattr(self.plugin, "daily_life_bridge", None)
                     clean = getattr(bridge, "clean_expression_punctuation", None)
                     if callable(clean):

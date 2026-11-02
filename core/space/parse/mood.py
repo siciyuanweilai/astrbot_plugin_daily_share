@@ -21,7 +21,6 @@ from .decoder import (
     clean_qzone_text,
     has_qzone_expand_marker,
 )
-from .homeparse import parse_home_feed_list
 from .latest import (
     FEED_COMMON_KEYS,
     FEED_LIKE_KEYS,
@@ -380,6 +379,5 @@ __all__ = [
     "parse_feed_item",
     "parse_feed_list",
     "parse_feedinfo_html",
-    "parse_home_feed_list",
     "parse_recent_feed_list",
 ]

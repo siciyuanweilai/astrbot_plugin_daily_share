@@ -2,12 +2,21 @@ import asyncio
 import re
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
 
 from astrbot.api import logger
 
 from ..config import NEWS_SOURCE_MAP
 from ..constants import SOURCE_CN_MAP
 from .supportcomponent import RuntimeField, SupportComponent
+
+
+@dataclass
+class _ContextBuild:
+    task: asyncio.Task
+    valid: bool = True
+    waiters: int = 0
+    stored: bool = False
 
 
 class PluginToolContextService(SupportComponent):
@@ -21,16 +30,26 @@ class PluginToolContextService(SupportComponent):
     _PROMPT_CACHE_MAX_ITEMS = 512
     _PROMPT_CACHE_TTL_SECONDS = 5.0
     _EMPTY_PROMPT_CACHE_TTL_SECONDS = 1.0
+    _PROMPT_BUILD_MAX_TASKS = 16
+    _PROMPT_BUILD_TIMEOUT_SECONDS = 0.4
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime)
         self._prompt_cache = OrderedDict()
         self._prompt_inflight = {}
+        self._prompt_tasks = set()
+        self._prompt_slots = asyncio.Semaphore(2)
 
     async def _run_context_builder(self, builder, target: str) -> str:
         """只运行一个构建任务，让并发调用方安全复用其结果。"""
+
+        async def build():
+            async with self._prompt_slots:
+                return str(await builder(target) or "")
+
         try:
-            return str(await builder(target) or "")
+            # 调用方的 150ms 预算之外，预热任务自身也必须有总时限。
+            return await asyncio.wait_for(build(), self._PROMPT_BUILD_TIMEOUT_SECONDS)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -48,15 +67,18 @@ class PluginToolContextService(SupportComponent):
         while len(self._prompt_cache) > self._PROMPT_CACHE_MAX_ITEMS:
             self._prompt_cache.popitem(last=False)
 
-    def _finish_context_prompt(self, key, task) -> None:
-        if self._prompt_inflight.get(key) is not task:
+    def _finish_context_prompt(self, key, flight) -> None:
+        task = flight.task
+        self._prompt_tasks.discard(task)
+        if self._prompt_inflight.get(key) is not flight:
             if not task.cancelled():
                 try:
                     task.result()
                 except Exception:
                     pass
             return
-        self._prompt_inflight.pop(key, None)
+        if not flight.waiters:
+            self._prompt_inflight.pop(key, None)
         if task.cancelled():
             return
         try:
@@ -64,7 +86,9 @@ class PluginToolContextService(SupportComponent):
         except Exception as exc:
             logger.debug(f"[日常分享] 工具上下文任务结束异常: {type(exc).__name__}")
             return
-        self._store_context_prompt(key, prompt)
+        if not flight.stored:
+            self._store_context_prompt(key, prompt)
+            flight.stored = True
 
     async def cached_context_prompt(
         self, kind: str, target_uid: str, builder, *, timeout: float
@@ -81,30 +105,41 @@ class PluginToolContextService(SupportComponent):
         self._prompt_cache.pop(key, None)
         if timeout <= 0:
             return ""
-        task = self._prompt_inflight.get(key)
-        if task is None:
+        flight = self._prompt_inflight.get(key)
+        if flight is None:
+            # 已失效但尚未退出的构建仍计入容量，防止频繁写入绕过上限。
+            if len(self._prompt_tasks) >= self._PROMPT_BUILD_MAX_TASKS:
+                return ""
             track = getattr(self.runtime, "track_task", None)
             work = self._run_context_builder(builder, target)
             task = track(work) if callable(track) else asyncio.create_task(work)
             if task is None:
                 return ""
-            self._prompt_inflight[key] = task
+            flight = _ContextBuild(task)
+            self._prompt_inflight[key] = flight
+            self._prompt_tasks.add(task)
             task.add_done_callback(
-                lambda completed: self._finish_context_prompt(key, completed)
+                lambda completed: self._finish_context_prompt(key, flight)
             )
+        task = flight.task
+        flight.waiters += 1
         try:
             prompt = str(await asyncio.wait_for(asyncio.shield(task), timeout) or "")
         except asyncio.TimeoutError:
             logger.debug("[日常分享] 工具上下文读取超时，跳过本次注入")
             return ""
-        if task.done():
-            self._finish_context_prompt(key, task)
-        return prompt
+        finally:
+            flight.waiters -= 1
+            if task.done():
+                self._finish_context_prompt(key, flight)
+        return prompt if flight.valid else ""
 
     def _invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
         key = (kind, str(target_uid or "").strip())
         self._prompt_cache.pop(key, None)
-        self._prompt_inflight.pop(key, None)
+        flight = self._prompt_inflight.pop(key, None)
+        if flight is not None:
+            flight.valid = False
 
     def invalidate_context_prompt(self, kind: str, target_uid: str) -> None:
         """使指定动态提示词失效，并丢弃此前尚未完成的构建结果。"""

@@ -254,23 +254,6 @@ class QzoneAutoPolicyService:
         content = str(getattr(comment, "content", "") or "").strip()
         return "" if content else "empty_comment"
 
-    def _qzone_auto_reply_candidate(
-        self,
-        post,
-        comment,
-        *,
-        self_uin: int,
-        processed: dict,
-        index: QzoneCommentIndex | None = None,
-    ) -> bool:
-        return not self.owner._qzone_auto_reply_skip_reason(
-            post,
-            comment,
-            self_uin=self_uin,
-            processed=processed,
-            index=index,
-        )
-
     def _qzone_auto_reply_thread_skip_reason(
         self,
         post,
@@ -355,25 +338,6 @@ class QzoneAutoPolicyService:
         if int(getattr(comment, "uin", 0) or 0) == int(self_uin or 0):
             return "self_comment"
         return "" if parent_comment is not None else "missing_parent"
-
-    def _qzone_auto_reply_thread_candidate(
-        self,
-        post,
-        parent_comment,
-        comment,
-        *,
-        self_uin: int,
-        processed: dict,
-        index: QzoneCommentIndex | None = None,
-    ) -> bool:
-        return not self.owner._qzone_auto_reply_thread_skip_reason(
-            post,
-            parent_comment,
-            comment,
-            self_uin=self_uin,
-            processed=processed,
-            index=index,
-        )
 
     def _qzone_friend_comment_thread_skip_reason(
         self,

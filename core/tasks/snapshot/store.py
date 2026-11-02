@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
 from ...config import NEWS_SOURCE_MAP
 
 if TYPE_CHECKING:
@@ -41,37 +39,3 @@ class TaskNewsCacheStoreService:
             "image_url": str(image_url or ""),
             "items": items,
         }
-
-    async def commit_sent_news_snapshot(
-        self,
-        target_uid: str,
-        snapshot_data=None,
-        image_url: str | None = None,
-    ) -> bool:
-        """兼容旧快照 API；正式发送由 ledger 的历史/快照事务统一提交。"""
-        try:
-            target = str(target_uid or "").strip()
-            if not target or not isinstance(snapshot_data, dict):
-                return False
-
-            record = self.owner.prepare_news_snapshot_record(snapshot_data, image_url)
-            if not record:
-                return False
-
-            snapshot = await self.owner.db.add_news_snapshot(
-                target,
-                record["source_key"],
-                record["source_name"],
-                record["image_url"],
-                record["items"],
-            )
-            logger.info(
-                f"[日常分享] 已提交 {target} 的已发送新闻快照: "
-                f"{record['source_name']} {len(record['items'])} 条 "
-                f"(#{snapshot.get('snapshot_id')})"
-            )
-            self.owner.invalidate_news_context_prompt(target)
-            return True
-        except Exception as e:
-            logger.warning(f"[日常分享] 提交已发送新闻快照失败: {e}")
-            return False

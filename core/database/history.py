@@ -168,20 +168,6 @@ class DatabaseHistoryService(DatabaseRepository):
     async def get_history_by_ids(self, history_ids: list[int]):
         return await self._execute(self._sync_get_history_by_ids, history_ids)
 
-    def _sync_count_history_media_path_refs(self, media_path: str) -> int:
-        media_path = str(media_path or "").strip()
-        if not media_path:
-            return 0
-
-        row = self._fetch_one(
-            "SELECT COUNT(*) FROM sent_history WHERE media_path = ?",
-            (media_path,),
-        )
-        return int(row[0] or 0)
-
-    async def count_history_media_path_refs(self, media_path: str) -> int:
-        return await self._execute(self._sync_count_history_media_path_refs, media_path)
-
     def _sync_count_history_media_refs(self, media_refs: list[str]) -> int:
         refs = sorted(
             {str(item or "").strip() for item in media_refs if str(item or "").strip()}

@@ -86,30 +86,6 @@ class DatabaseDashboardService(DatabaseRepository):
         clause = "".join(f"\n              AND {item}" for item in clauses)
         return clause, params
 
-    def _sync_get_recent_media(self, limit: int, days: int = 0) -> list[dict]:
-        params: list[Any] = []
-        days_clause = ""
-        cutoff = self._days_cutoff(days)
-        if cutoff:
-            days_clause = " AND created_at >= ?"
-            params.append(cutoff)
-        params.append(limit)
-        rows = self._fetch_all(
-            f"""
-            SELECT {_HISTORY_SELECT_COLUMNS}
-            FROM sent_history
-            WHERE success = 1
-              AND {_HAS_MEDIA_SQL}
-              {days_clause}
-            ORDER BY id DESC LIMIT ?
-        """,
-            tuple(params),
-        )
-        return [self._history_item_from_row(r) for r in rows]
-
-    async def get_recent_media(self, limit: int = 12, days: int = 0):
-        return await self._execute(self._sync_get_recent_media, limit, days)
-
     def _sync_get_recent_dynamics(
         self,
         limit: int,

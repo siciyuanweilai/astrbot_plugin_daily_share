@@ -105,9 +105,6 @@ class DatabaseManager:
     ):
         return await self.topics.get_used_topics(target_id, category, days_limit)
 
-    async def get_recent_media(self, limit: int = 12, days: int = 0):
-        return await self.metrics.get_recent_media(limit, days)
-
     async def get_recent_dynamics(
         self,
         limit: int = 12,
@@ -128,18 +125,6 @@ class DatabaseManager:
 
     async def get_target_stats(self, days: int = 30, briefing=None):
         return await self.metrics.get_target_stats(days, briefing)
-
-    async def add_news_snapshot(
-        self,
-        target_id: str,
-        source_key: str,
-        source_name: str,
-        image_url: str,
-        items: list,
-    ):
-        return await self.snapshots.add_news_snapshot(
-            target_id, source_key, source_name, image_url, items
-        )
 
     async def get_latest_news_snapshot(
         self, target_id: str, source_key: str | None = None
@@ -196,9 +181,6 @@ class DatabaseManager:
     async def get_history_by_ids(self, history_ids: list[int]):
         return await self.history.get_history_by_ids(history_ids)
 
-    async def count_history_media_path_refs(self, media_path: str):
-        return await self.history.count_history_media_path_refs(media_path)
-
     async def count_history_media_refs(self, media_refs: list[str]):
         return await self.history.count_history_media_refs(media_refs)
 
@@ -243,9 +225,6 @@ class DatabaseManager:
 
     async def set_cache_state(self, key: str, value):
         return await self.state.set_cache_state(key, value)
-
-    async def update_cache_state(self, key: str, updates: dict):
-        return await self.state.update_cache_state(key, updates)
 
     async def merge_cache_entries(
         self,

@@ -19,10 +19,6 @@ class TaskHelperContextService(TaskServiceBase):
             target_id, limit=min(12, ref_count)
         )
 
-    async def get_recent_post_contents(self, target_id: str) -> list[str]:
-        history = await self._recent_share_history(target_id)
-        return [str(item.get("content") or "").strip() for item in history]
-
     async def recent_share_context(self, target_id: str) -> tuple[list[str], str]:
         history = await self._recent_share_history(target_id)
         return [

@@ -470,13 +470,6 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             post, comment, self_uin=self_uin, processed=processed, index=index
         )
 
-    def _qzone_auto_reply_candidate(
-        self, post, comment, *, self_uin, processed, index=None
-    ):
-        return self.policy._qzone_auto_reply_candidate(
-            post, comment, self_uin=self_uin, processed=processed, index=index
-        )
-
     def _qzone_auto_reply_thread_skip_reason(
         self, post, parent_comment, comment, *, self_uin, processed, index=None
     ):
@@ -494,18 +487,6 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
     ):
         return self.policy._qzone_reply_thread_base_skip_reason(
             post, parent_comment, comment, self_uin=self_uin, processed=processed
-        )
-
-    def _qzone_auto_reply_thread_candidate(
-        self, post, parent_comment, comment, *, self_uin, processed, index=None
-    ):
-        return self.policy._qzone_auto_reply_thread_candidate(
-            post,
-            parent_comment,
-            comment,
-            self_uin=self_uin,
-            processed=processed,
-            index=index,
         )
 
     def _qzone_friend_comment_thread_skip_reason(

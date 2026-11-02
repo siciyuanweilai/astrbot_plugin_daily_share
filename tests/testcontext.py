@@ -253,6 +253,34 @@ def _service(history=None, context_conf=None, platform_records=None, stars=None)
 
 
 class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
+    def test_address_only_adds_information_beyond_the_normal_nickname(self):
+        _, service = _service()
+        person={"id":"42","name":"Sylus","alias":"Sylus","subjective_name":"Sylus"}
+        text=service.life_memory.format_qzone_relationship([person])
+        self.assertEqual(text,"档案姓名：Sylus")
+        person["subjective_name"]="阿夜"
+        self.assertIn("习惯称呼：阿夜",service.life_memory.format_qzone_relationship([person]))
+
+    def test_relationship_dimensions_reach_private_expression_only(self):
+        _, service = _service()
+        profiles = [{"name": "朋友", "relationship_state": {
+            "observed_dimensions": ["trust", "affinity"], "familiarity": 0,
+            "trust": .61, "affinity": .47, "last_reason": "PRIVATE_RELATION_EVIDENCE",
+        }}]
+        private = service.life_memory._format_relationships(profiles)
+        self.assertIn("信任 0.61", private)
+        self.assertIn("好感 0.47", private)
+        self.assertNotIn("熟悉 0.00", private)
+        public = service.life_memory.format_qzone_relationship(profiles)
+        self.assertNotIn("0.61", public)
+        self.assertNotIn("PRIVATE_RELATION_EVIDENCE", private + public)
+
+    def test_unknown_relationship_dimensions_do_not_become_zero_affinity(self):
+        _, service = _service()
+        self.assertNotIn("好感", service.life_memory._format_relationships([
+            {"name": "朋友", "relationship_state": {"observed_dimensions": [], "affinity": .5}}
+        ]))
+
     def test_invalid_life_snapshot_never_falls_back_to_raw_private_fields(self):
         _, service = _service()
         snapshot = {

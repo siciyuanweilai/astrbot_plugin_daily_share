@@ -55,14 +55,6 @@ class TaskNewsCacheService(TaskServiceBase):
         if callable(invalidate):
             invalidate("news", target_uid)
 
-    async def commit_sent_news_snapshot(
-        self, target_uid, snapshot_data=None, image_url=None
-    ):
-        """兼容旧快照 API；正式发送由 ledger 的历史/快照事务统一提交。"""
-        return await self.store.commit_sent_news_snapshot(
-            target_uid, snapshot_data, image_url
-        )
-
     def _news_snapshot_focus_key(self, target_uid):
         return self.focus._news_snapshot_focus_key(target_uid)
 

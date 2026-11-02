@@ -8,7 +8,6 @@ from .mood import (
     parse_feed_item,
     parse_feed_list,
     parse_feedinfo_html,
-    parse_home_feed_list,
     parse_recent_feed_list,
 )
 from .photo import parse_qzone_photo, parse_qzone_photo_comment
@@ -21,7 +20,6 @@ __all__ = [
     "parse_feed_item",
     "parse_feed_list",
     "parse_feedinfo_html",
-    "parse_home_feed_list",
     "parse_qzone_response",
     "parse_recent_feed_list",
     "parse_upload_result",

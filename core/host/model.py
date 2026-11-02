@@ -12,6 +12,9 @@ from .providers import chat_model_defaults
 class LlmService:
     """负责模型选择、调用、超时和重试。"""
 
+    MAX_CONCURRENT_CALLS = 3
+    MAX_PENDING_CALLS = 16
+
     def __init__(
         self,
         context,
@@ -21,6 +24,8 @@ class LlmService:
         self.context = context
         self.basic_conf = basic_conf
         self._is_terminated = is_terminated
+        self._slots = asyncio.Semaphore(self.MAX_CONCURRENT_CALLS)
+        self._pending = 0
 
     async def _llm_session_provider(self, umo: str | None) -> str:
         if not umo:
@@ -54,6 +59,46 @@ class LlmService:
         umo: str | None = None,
     ) -> str | None:
         """调用模型，并对超时和可恢复错误进行有限重试。"""
+        if self._is_terminated() or self._pending >= self.MAX_PENDING_CALLS:
+            return None
+        actual_timeout = self._llm_config_timeout(timeout)
+        deadline = monotonic() + actual_timeout
+
+        async def generate():
+            async with self._slots:
+                return await self._call_ready(
+                    prompt,
+                    system_prompt,
+                    max_retries,
+                    tools,
+                    umo,
+                    actual_timeout=actual_timeout,
+                    deadline=deadline,
+                )
+
+        self._pending += 1
+        try:
+            # 排队、会话模型解析、降级与重试共用预算；不占用框架聊天通道的锁。
+            return await asyncio.wait_for(generate(), actual_timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[日常分享] 模型准备或调用超过总时限（{actual_timeout} 秒）"
+            )
+            return None
+        finally:
+            self._pending -= 1
+
+    async def _call_ready(
+        self,
+        prompt,
+        system_prompt,
+        max_retries,
+        tools,
+        umo,
+        *,
+        actual_timeout: int,
+        deadline: float,
+    ) -> str | None:
         if self._is_terminated():
             return None
 
@@ -73,8 +118,6 @@ class LlmService:
         provider_ids = list(providers)
         current_index = 0
         max_retries = max(0, int(max_retries))
-        actual_timeout = self._llm_config_timeout(timeout)
-        deadline = monotonic() + actual_timeout
         for attempt in range(max_retries + 1):
             if self._is_terminated():
                 return None

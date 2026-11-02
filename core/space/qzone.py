@@ -14,13 +14,9 @@ from .endpoints import QzoneServiceConstants
 from .errors import QzoneImageUploadError, QzonePublishUnknownError
 from .feeds.detail import QzoneFeedDetailService
 from .feeds.extra import QzoneFeedExtraService
-from .feeds.homefeed import QzoneFeedHomeService
 from .feeds.posts import QzoneFeedPostsService
 from .feeds.recent import QzoneFeedRecentService
 from .gateway import QzoneClientGateway
-from .hfive.error import QzoneH5ErrorService
-from .hfive.packets import QzoneH5BaseService
-from .hfive.poster import QzoneH5RequestService
 from .mentions import normalized_qzone_publish_text, qzone_publish_text
 from .merge import QzoneFeedMergeService
 from .models import QzoneComment as QzoneComment
@@ -38,9 +34,7 @@ from .reply.recipients import QzoneReplyTargetService
 from .reply.replypayload import QzoneReplyPayloadService
 from .reply.verify import QzoneReplyVerifyService
 from .selfpost import QzoneSelfPostService
-from .transport.cookie import QzoneH5CookieService
 from .transport.header import QzoneHeaderService
-from .transport.native import QzoneH5NativeService
 
 
 class QzoneService:
@@ -69,7 +63,6 @@ class QzoneService:
 
     _REMOTE_IMAGE_CHUNK_SIZE = 64 * 1024
     _REMOTE_IMAGE_MAX_BYTES = 24 * 1024 * 1024
-    _H5_MAX_RESPONSE_BYTES = QzoneH5BaseService._H5_MAX_RESPONSE_BYTES
 
     def _ensure_qzone_image_size(self, image_data: bytes) -> bytes:
         if len(image_data) > self._REMOTE_IMAGE_MAX_BYTES:
@@ -136,10 +129,8 @@ class QzoneService:
     DETAIL_URL: Any = QzoneServiceConstants.DETAIL_URL
     DETAIL_H5_URL: Any = QzoneServiceConstants.DETAIL_H5_URL
     RECENT_URL: Any = QzoneServiceConstants.RECENT_URL
-    HOME_FEED_URL: Any = QzoneServiceConstants.HOME_FEED_URL
     ABOUT_ME_URL: Any = QzoneServiceConstants.ABOUT_ME_URL
     LAST_YEAR_URL: Any = QzoneServiceConstants.LAST_YEAR_URL
-    FAVORITE_URL: Any = QzoneServiceConstants.FAVORITE_URL
     MESSAGE_BOARD_URL: Any = QzoneServiceConstants.MESSAGE_BOARD_URL
     RELATION_URL: Any = QzoneServiceConstants.RELATION_URL
     VISITOR_URL: Any = QzoneServiceConstants.VISITOR_URL
@@ -211,13 +202,6 @@ class QzoneService:
             submitted_at=submitted_at,
         )
 
-    def has_thread_reply_submit_plan(
-        self, post, comment, *, parent_comment, self_uin: int = 0
-    ):
-        return self.reply_targets.has_thread_reply_submit_plan(
-            post, comment, parent_comment=parent_comment, self_uin=self_uin
-        )
-
     def __init__(self, plugin):
         self._qzone_config = lambda: plugin.qzone_conf
         self.self_post = QzoneSelfPostService(self, plugin)
@@ -229,27 +213,17 @@ class QzoneService:
         self._cache_bot = None
         self._ctx_fetch_lock = asyncio.Lock()
         self._session = None
-        self._h2_session = None
         self._session_lock = asyncio.Lock()
-        self._h2_session_lock = asyncio.Lock()
         self._session_timeout_seconds: int | None = None
-        self._h2_timeout_seconds: int | None = None
-        self._h5_transport = ""
-        self._h5_transport_logged = False
         self._post_cache: dict[str, QzonePost] = {}
         self._cache_revision = 0
         self._post_detail_cache_at: dict[str, float] = {}
         self._query_cache: dict[
-            tuple, tuple[float, list[QzonePost], dict[str, Any]]
+            tuple, tuple[float, list[QzonePost]]
         ] = {}
-        self._last_friend_feeds_meta: dict[str, Any] = {}
         self.gateway = QzoneClientGateway(self)
-        self.native = QzoneH5NativeService(self)
         self.headers = QzoneHeaderService(self)
-        self.cookies = QzoneH5CookieService(self)
         self.timeline = QzoneFeedQueryService(self)
-        self.errors = QzoneH5ErrorService(self)
-        self.requests = QzoneH5RequestService(self)
         self.replies = QzoneCommentReplyService(self)
         self.comment_tools = QzoneCommentUtilService(self)
         self.comments = QzoneCommentPostService(self)
@@ -257,7 +231,6 @@ class QzoneService:
         self.details = QzoneFeedDetailService(self)
         self.extra = QzoneFeedExtraService(self)
         self.posts = QzoneFeedPostsService(self)
-        self.home = QzoneFeedHomeService(self)
         self.recent = QzoneFeedRecentService(self)
         self.reply_targets = QzoneReplyTargetService(self)
         self.reply_payloads = QzoneReplyPayloadService(self)
@@ -367,17 +340,10 @@ class QzoneService:
     async def detail(self, post_id):
         return await self.details.detail(post_id)
 
-    @property
-    def last_friend_feeds_meta(self):
-        return self.timeline.last_friend_feeds_meta
-
     async def query_posts(self, *, target_id="", pos=0, num=5, with_detail=False):
         return await self.posts.query_posts(
             target_id=target_id, pos=pos, num=num, with_detail=with_detail
         )
-
-    async def query_home_posts(self, *, pos=0, num=5):
-        return await self.home.query_home_posts(pos=pos, num=num)
 
     async def query_recent_posts(self, *, pos=0, num=5, with_detail=False, cursor=""):
         return await self.recent.query_recent_posts(
@@ -394,11 +360,6 @@ class QzoneService:
 
     async def query_last_year(self, *, year=None, count=10):
         return await self.extra.query_last_year(year=year, count=count)
-
-    async def query_favorites(self, *, start=0, num=10, favorite_type=0):
-        return await self.extra.query_favorites(
-            start=start, num=num, favorite_type=favorite_type
-        )
 
     async def query_message_board(self, *, target_id="", start=0, num=10):
         return await self.extra.query_message_board(
@@ -677,7 +638,7 @@ class QzoneService:
         for cached in self._post_cache.values():
             if cached.key == post.key:
                 cached.liked = True
-        for _at, posts, _meta in self._query_cache.values():
+        for _at, posts in self._query_cache.values():
             for cached in posts:
                 if cached.key == post.key:
                     cached.liked = True
@@ -774,14 +735,12 @@ class QzoneService:
         entry = self._query_cache.get(cache_key)
         if not entry:
             return None
-        cached_at, posts, meta = entry
+        cached_at, posts = entry
         if time.monotonic() - cached_at > self.QUERY_CACHE_TTL_SECONDS:
             self._query_cache.pop(cache_key, None)
             return None
         self._query_cache.pop(cache_key)
         self._query_cache[cache_key] = entry
-        if meta:
-            self._last_friend_feeds_meta = dict(meta)
         logger.debug("[日常分享] QQ 空间说说列表命中缓存")
         return list(posts)
 
@@ -789,14 +748,11 @@ class QzoneService:
         self,
         cache_key: tuple,
         posts: list[QzonePost],
-        *,
-        meta: dict[str, Any] | None = None,
     ) -> None:
         self._query_cache.pop(cache_key, None)
         self._query_cache[cache_key] = (
             time.monotonic(),
             list(posts or []),
-            dict(meta or {}),
         )
         overflow = len(self._query_cache) - self.QUERY_CACHE_MAX_ITEMS
         if overflow > 0:
@@ -816,7 +772,6 @@ class QzoneService:
         self._post_cache.clear()
         self._post_detail_cache_at.clear()
         self._query_cache.clear()
-        self._last_friend_feeds_meta = {}
 
     def _cached_detail_post(self, post_id: str) -> QzonePost | None:
         self._ensure_bot_cache_scope()
@@ -913,9 +868,6 @@ class QzoneService:
     async def _http(self):
         return await self.gateway._http()
 
-    async def _h2_http(self):
-        return await self.gateway._h2_http()
-
     def _api_timeout_seconds(self):
         return self.gateway._api_timeout_seconds()
 
@@ -942,53 +894,9 @@ class QzoneService:
             submission=submission,
         )
 
-    async def _request_text(
-        self, method, url, *, params=None, data=None, headers=None, retry=True
-    ):
-        return await self.gateway._request_text(
-            method, url, params=params, data=data, headers=headers, retry=retry
-        )
-
     @staticmethod
     def _ok(payload, *, code_key="code"):
         return QzoneClientGateway._ok(payload, code_key=code_key)
-
-    @staticmethod
-    def _h5_native_request_path(url, params=None):
-        return QzoneH5NativeService._h5_native_request_path(url, params)
-
-    async def _open_h5_native_h2_connection(self, parsed_url):
-        return await self.native._open_h5_native_h2_connection(parsed_url)
-
-    @staticmethod
-    def _ensure_h5_native_h2_alpn(writer):
-        return QzoneH5NativeService._ensure_h5_native_h2_alpn(writer)
-
-    def _h5_native_h2_header_items(self, ctx, parsed_url, path, headers=None):
-        return self.native._h5_native_h2_header_items(ctx, parsed_url, path, headers)
-
-    @staticmethod
-    def _send_h5_native_h2_request(writer, conn, header_items, body):
-        return QzoneH5NativeService._send_h5_native_h2_request(
-            writer, conn, header_items, body
-        )
-
-    def _handle_h5_native_h2_event(self, conn, event, response):
-        return self.native._handle_h5_native_h2_event(conn, event, response)
-
-    async def _read_h5_native_h2_response(self, reader, writer, conn):
-        return await self.native._read_h5_native_h2_response(reader, writer, conn)
-
-    @staticmethod
-    def _close_h5_native_h2_writer(writer):
-        return QzoneH5NativeService._close_h5_native_h2_writer(writer)
-
-    async def _h5_post_json_native_h2(
-        self, ctx, url, payload, *, params=None, headers=None
-    ):
-        return await self.native._h5_post_json_native_h2(
-            ctx, url, payload, params=params, headers=headers
-        )
 
     @staticmethod
     def _cookie_values_from_header(cookie):
@@ -1017,136 +925,8 @@ class QzoneService:
     def _has_cookie_header(headers):
         return QzoneHeaderService._has_cookie_header(headers)
 
-    @staticmethod
-    def _h5_cookie_uin(ctx):
-        return QzoneH5CookieService._h5_cookie_uin(ctx)
-
-    def _h5_minimal_cookie_header(self, ctx, *, o_prefix=False):
-        return self.cookies._h5_minimal_cookie_header(ctx, o_prefix=o_prefix)
-
-    def _h5_cookie_header(self, ctx, *, o_prefix=False):
-        return self.cookies._h5_cookie_header(ctx, o_prefix=o_prefix)
-
-    def _h5_headers(self, ctx):
-        return self.cookies._h5_headers(ctx)
-
-    def _h5_minimal_headers(self, ctx, *, o_prefix=False):
-        return self.cookies._h5_minimal_headers(ctx, o_prefix=o_prefix)
-
-    def _h5_cookie_variants(self, ctx):
-        return self.cookies._h5_cookie_variants(ctx)
-
-    def _h5_aiohttp_headers(self, ctx):
-        return self.cookies._h5_aiohttp_headers(ctx)
-
     def _recent_posts_params(self, ctx, *, count, cursor=""):
         return self.timeline._recent_posts_params(ctx, count=count, cursor=cursor)
-
-    def _friend_feeds_params(self, ctx, *, count, cursor=""):
-        return self.timeline._friend_feeds_params(ctx, count=count, cursor=cursor)
-
-    @staticmethod
-    def _friend_feeds_next_cursor(payload):
-        return QzoneFeedQueryService._friend_feeds_next_cursor(payload)
-
-    @staticmethod
-    def _friend_feeds_has_more(payload, posts):
-        return QzoneFeedQueryService._friend_feeds_has_more(payload, posts)
-
-    @staticmethod
-    def _friend_feeds_payload_meta(payload):
-        return QzoneFeedQueryService._friend_feeds_payload_meta(payload)
-
-    def _h5_error_message(self, payload, fallback):
-        return self.errors._h5_error_message(payload, fallback)
-
-    @classmethod
-    def _h5_transient_or_unstructured_failure(cls, payload):
-        return QzoneH5ErrorService._h5_transient_or_unstructured_failure(payload)
-
-    @staticmethod
-    def _h5_transient_or_unstructured_message(message):
-        return QzoneH5ErrorService._h5_transient_or_unstructured_message(message)
-
-    @staticmethod
-    def _h5_login_expired_message(message):
-        return QzoneH5ErrorService._h5_login_expired_message(message)
-
-    @classmethod
-    def _h5_login_expired(cls, payload):
-        return QzoneH5ErrorService._h5_login_expired(payload)
-
-    def _with_h5_phase(self, message, phase):
-        return self.errors._with_h5_phase(message, phase)
-
-    @staticmethod
-    def _h5_should_retry_http11(status, transport):
-        return QzoneH5ErrorService._h5_should_retry_http11(status, transport)
-
-    @staticmethod
-    def _h5_should_retry_same_transport(status):
-        return QzoneH5ErrorService._h5_should_retry_same_transport(status)
-
-    def _h5_transport_error(self, exc, *, phase):
-        return self.errors._h5_transport_error(exc, phase=phase)
-
-    @staticmethod
-    def _h5_json_body(payload):
-        return QzoneH5BaseService._h5_json_body(payload)
-
-    @staticmethod
-    def _decode_h5_body(raw, encoding=""):
-        return QzoneH5BaseService._decode_h5_body(raw, encoding)
-
-    @staticmethod
-    def _annotate_h5_response(payload, *, status, text, label, transport):
-        return QzoneH5BaseService._annotate_h5_response(
-            payload, status=status, text=text, label=label, transport=transport
-        )
-
-    @staticmethod
-    def _h5_ok(payload):
-        return QzoneH5BaseService._h5_ok(payload)
-
-    async def _h5_post_json(
-        self,
-        ctx,
-        url,
-        payload,
-        *,
-        params=None,
-        label="",
-        prefer_native_h2=False,
-        headers=None,
-    ):
-        return await self.requests._h5_post_json(
-            ctx,
-            url,
-            payload,
-            params=params,
-            label=label,
-            prefer_native_h2=prefer_native_h2,
-            headers=headers,
-        )
-
-    async def _h5_post_bytes(
-        self, ctx, url, body, content_type, *, params=None, label="", headers=None
-    ):
-        return await self.requests._h5_post_bytes(
-            ctx, url, body, content_type, params=params, label=label, headers=headers
-        )
-
-    async def _h5_post_body_once(self, ctx, url, body, *, params, headers, use_h2):
-        return await self.requests._h5_post_body_once(
-            ctx, url, body, params=params, headers=headers, use_h2=use_h2
-        )
-
-    async def _h5_post_body(
-        self, ctx, url, body, *, params=None, label="", headers, use_h2=True
-    ):
-        return await self.requests._h5_post_body(
-            ctx, url, body, params=params, label=label, headers=headers, use_h2=use_h2
-        )
 
     def _ensure_reply_plans(
         self, plans, *, thread_reply, post, comment, parent_comment, reply_targets

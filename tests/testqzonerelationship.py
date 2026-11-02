@@ -213,7 +213,7 @@ class QzoneRelationshipPromptTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(unexpected, prompt)
             self.assertIn("【本次互动对象】", prompt)
             self.assertIn("【当前互动对象关系】", prompt)
-            self.assertIn("熟悉称呼", prompt)
+            self.assertIn("习惯称呼", prompt)
             self.assertNotIn("PRIVATE_", prompt)
             self.assertLess(
                 prompt.index(expected), prompt.index("【当前生活状态参考】")

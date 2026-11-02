@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import uuid
 import time
+import uuid
 from collections import OrderedDict
-from datetime import datetime
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any
 
 from astrbot.api import logger
@@ -32,6 +32,10 @@ _MEDIA_METHODS = {
 class DailyLifeBridge:
     """每日分享与生活插件之间唯一的公开调用边界。"""
 
+    _MEMORY_TIMEOUT_SECONDS = 1.0
+    _MEMORY_FAILURE_TTL_SECONDS = 1.0
+    _MEMORY_MAX_PENDING_READS = 32
+
     def __init__(self, context: Any, db: Any = None):
         self.context = context
         self.db = db
@@ -39,6 +43,8 @@ class DailyLifeBridge:
         self._search_notices: set[str] = set()
         self._memory_cache = OrderedDict()
         self._memory_locks = KeyedLocks()
+        self._memory_slots = asyncio.Semaphore(3)
+        self._memory_pending = 0
         self._memory_plugin = None
         self._memory_revision = 0
         self._media_results: ContextVar[dict[str, tuple[str, str]]] = ContextVar(
@@ -107,8 +113,29 @@ class DailyLifeBridge:
         target_umo = str(target_umo or "").strip()
         key = (target_umo, query)
         revision = self._memory_revision
-        async with self._memory_locks.hold((revision, key)):
-            return await self._related_memory_prompt(method, key, revision)
+        entry = self._memory_cache.get(key)
+        if entry and time.monotonic() < entry[0]:
+            self._memory_cache.move_to_end(key)
+            return entry[1]
+        lock_key = (revision, key)
+        if self._memory_pending >= self._MEMORY_MAX_PENDING_READS:
+            return ""
+
+        async def lookup():
+            async with self._memory_locks.hold(lock_key):
+                if revision != self._memory_revision or self._plugin() is not plugin:
+                    return ""
+                prompt = await self._related_memory_prompt(method, key, revision)
+                return prompt if self._plugin() is plugin else ""
+
+        self._memory_pending += 1
+        try:
+            # 等同键请求和全局读取名额也计入预算，不累加成串行多次超时。
+            return await asyncio.wait_for(lookup(), self._MEMORY_TIMEOUT_SECONDS + 0.1)
+        except asyncio.TimeoutError:
+            return ""
+        finally:
+            self._memory_pending -= 1
 
     def _invalidate_memory_cache(self) -> None:
         self._memory_revision += 1
@@ -119,27 +146,41 @@ class DailyLifeBridge:
         if revision == self._memory_revision and entry and time.monotonic() < entry[0]:
             self._memory_cache.move_to_end(key)
             return entry[1]
+        self._memory_cache.pop(key, None)
+        ttl = 15.0
+
+        async def search():
+            async with self._memory_slots:
+                if revision != self._memory_revision:
+                    return []
+                return await method(key[1], key[0], limit=3)
+
         try:
-            rows = await asyncio.wait_for(method(key[1], key[0], limit=3), timeout=1.0)
+            rows = await asyncio.wait_for(
+                search(), timeout=self._MEMORY_TIMEOUT_SECONDS
+            )
             lines = [
                 f"- {str(row.get('occurred_at') or '')[:40]} {str(row.get('text') or '')[:400]}"
                 for row in rows[:3]
                 if isinstance(row, dict)
             ]
         except Exception:
-            return ""
+            # 故障短暂退避，合并同一批失败；取消不缓存为失败。
+            lines = []
+            ttl = self._MEMORY_FAILURE_TTL_SECONDS
         prompt = (
             "【本地相关记忆，仅作背景；纠正信息优先】\n" + "\n".join(lines)
             if lines
             else ""
         )
         # 新活动或插件重载后，旧检索不得重新填回已失效的记忆缓存。
-        if revision == self._memory_revision:
-            self._memory_cache[key] = (time.monotonic() + 15, prompt)
+        if revision == self._memory_revision and self._plugin() is self._memory_plugin:
+            self._memory_cache[key] = (time.monotonic() + ttl, prompt)
             self._memory_cache.move_to_end(key)
             while len(self._memory_cache) > 64:
                 self._memory_cache.popitem(last=False)
-        return prompt
+            return prompt
+        return ""
 
     async def coordinate_contact(self, target_umo: str, **kwargs) -> dict:
         method = getattr(self._plugin(), "coordinate_share_contact", None)

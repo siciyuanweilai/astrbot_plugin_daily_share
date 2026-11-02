@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from ..entry import (
     parse_about_me,
-    parse_favorites,
     parse_last_year,
     parse_message_board,
 )
@@ -181,42 +180,6 @@ class QzoneFeedExtraService:
             )
         result = parse_last_year(payload)
         self.owner._remember_posts(result.get("items") or [])
-        return result
-
-    async def query_favorites(
-        self, *, start: int = 0, num: int = 10, favorite_type: int = 0
-    ) -> dict[str, Any]:
-        ctx = await self.owner.context()
-        offset = max(0, int(start or 0))
-        limit = max(1, min(int(num or 10), 20))
-        payload = await self.owner._request(
-            "GET",
-            self.owner.FAVORITE_URL,
-            params={
-                "uin": ctx.uin,
-                "type": max(0, int(favorite_type or 0)),
-                "start": offset,
-                "num": limit,
-                "inCharset": "utf-8",
-                "outCharset": "utf-8",
-                "need_nick": 1,
-                "need_cnt": 1 if offset <= 0 else 0,
-                "need_new_user": 1 if offset <= 0 else 0,
-                "fupdate": 1,
-                "callback": "_Callback",
-                "random": time.time(),
-                "g_tk": ctx.gtk,
-            },
-            headers=self.owner._headers(
-                ctx, Referer=f"{self.owner.BASE_URL}/{ctx.uin}/myhome/favorite"
-            ),
-        )
-        if not self.owner._ok(payload):
-            raise RuntimeError(str(payload.get("message") or "获取 QQ 空间收藏失败"))
-        result = parse_favorites(payload)
-        result["has_more"] = offset + len(result.get("items") or []) < int(
-            result.get("total") or 0
-        )
         return result
 
     async def query_message_board(

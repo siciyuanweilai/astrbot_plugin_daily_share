@@ -201,43 +201,6 @@ class QzoneReplyTargetService:
             comment, parent_comment=parent_comment
         )
 
-    def has_thread_reply_submit_plan(
-        self,
-        post: QzonePost,
-        comment: QzoneComment,
-        *,
-        parent_comment: QzoneComment | None,
-        self_uin: int = 0,
-    ) -> bool:
-        from .plans import QzoneReplyPlanService
-
-        if parent_comment is None:
-            return False
-        try:
-            targets = self.owner._reply_submit_targets(
-                post, comment, parent_comment=parent_comment
-            )
-            targets = self.owner._filter_thread_reply_targets(
-                post,
-                comment,
-                parent_comment=parent_comment,
-                targets=targets,
-            )
-            _, variants = QzoneReplyPlanService._thread_reply_submit_variants(
-                post,
-                comment,
-                parent_comment,
-                targets,
-                self_uin=int(
-                    self_uin
-                    or getattr(getattr(self.owner, "_ctx", None), "uin", 0)
-                    or 0
-                ),
-            )
-            return bool(variants)
-        except Exception:
-            return False
-
     @classmethod
     def _unsafe_thread_reply_target_reason(
         cls,

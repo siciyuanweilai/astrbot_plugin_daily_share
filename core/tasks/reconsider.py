@@ -11,6 +11,7 @@ from astrbot.api import logger
 
 from ..database.keys import AUTONOMOUS_SOURCES, QZONE_TARGET_ID
 from ..integrations.contact import ShareContactChanged, contact
+from ..identity import build_content_system_prompt
 from .opportunity import SHANGHAI
 
 MAX_REVIEWS = 6
@@ -126,13 +127,27 @@ class ShareReconsiderationService:
                 return False
             payload, life_context = await self._context(job, target)
             persona = await self.plugin.content_service.get_persona_info(target)
+            params = job["params"]
+            share_type = params.get("stype", params.get("target_type_enum", ""))
+            share_type = (
+                share_type.get("value", "") if isinstance(share_type, dict)
+                else getattr(share_type, "value", share_type)
+            )
+            expression = await self.plugin.content_service.get_expression_context(
+                target, is_group=":GroupMessage:" in target, share_type=str(share_type)
+            )
+            payload["share_type"] = expression["share_type"]
             job["review_attempts"] = job.get("review_attempts", 0) + 1
             # 先落盘，取消/重启也不能绕过退避和调用上限。
             job["review_after"] = datetime.now().timestamp() + 180
             await self.continuations.save(job)
             raw = await self.plugin.call_llm(
                 prompt=json.dumps(payload, ensure_ascii=False, default=str),
-                system_prompt=str(persona.get("prompt") or "") + "\n" + _RULES,
+                system_prompt="\n".join((
+                    build_content_system_prompt(persona.get("prompt", "")),
+                    expression["share_chat_style_hint"], expression["qzone_chat_style_hint"],
+                    expression["output_format_hint"], _RULES,
+                )),
                 umo=target, timeout=30, max_retries=0,
             )
             raw = raw.strip()
@@ -142,7 +157,26 @@ class ShareReconsiderationService:
             choice = decision.get("decision")
             if choice not in {"keep", "reframe", "wait", "archive"}:
                 raise ValueError("invalid review decision")
-            # 模型思考时的新消息同样不能被覆盖为“已复核”。
+            if choice in {"keep", "reframe"}:
+                # 先验证媒体与正文，但检查全部结束前不改动原任务。
+                draft = dict(job)
+                self._apply(draft, decision, life_context)
+                if choice == "reframe":
+                    content = await self.plugin.content_service.review_expression(
+                        draft["params"]["content"], expression, reflow=True
+                    )
+                    if not isinstance(content, str) or not content.strip() or len(content) > 2000:
+                        raise ValueError("invalid final expression")
+                    decision = dict(decision, content=content)
+                else:
+                    content = draft["params"]["content"]
+                if any(
+                    row.get("success")
+                    and "".join(content.split()) == "".join(str(row.get("content") or "").split())
+                    for row in payload["recent_shares"]
+                ):
+                    choice = "archive"
+            # 包括表达检查耗时在内的新消息，不能被覆盖为“已复核”。
             checked = await contact(
                 self.plugin, target, owner, action="check", expected=gate["snapshot"]
             )

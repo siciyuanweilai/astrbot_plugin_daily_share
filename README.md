@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.9-ef6f8f" alt="版本 1.2.9"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-ef6f8f" alt="版本 1.3.0"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.2.9 版本更新**：修复私聊、QQ 空间连续自主分享过于频繁的问题，统一与生活侧回访、主动通话和 B站主动联系的节奏；新增好友动态独立点赞意愿，让轻量关注与文字交流分别判断。同一经历按真实行动进度归并，待发成品跟随实际外观与最新交流重评。保留原图恢复、提交未知防重及搜索来源依据；完整协作需要 daily_life 1.5.9 配套修复。详见 [更新日志](./CHANGELOG.md) 与 [B站升级要求](#bilibili)。
+> **v1.3.0 版本更新**：自评按独立意愿和新增表达价值判断，续接分享承接最新对话并沿用自然语气与分段；优化新闻、记忆和上下文缓存，限制后台并发与等待，清理废弃发布链和重复代码。完整续接表达检查需同步应用 daily_life 配套更新。详见 [更新日志](./CHANGELOG.md) 与 [生活联动](#daily-life)。
 
 ---
 
@@ -220,7 +220,8 @@ QQ 官方机器人建议使用更新后的 AstrBot 官方适配器。在目标�
 ```text
 今天和 @{uin:123456789,nick:好友甲} 一起出游，感谢 @{uin:987654321,nick:好友乙} 推荐的路线！
 ```
-发布自己的说说后，生活驱动模式结合角色的状态和表达意愿决定是否点赞、是否还有想补充的自评，不要求每条都互动。自赞可关闭，自评数值设为 0 关闭、大于 0 允许自主决定；其他调度模式按配置百分比抽签一次，默认 **30%**。自评使用现有人设和文本模型，不额外识图；适用于自动、手动、面板发布及简报同步，独立于好友自动互动总开关和数量上限。后台执行，失败不会影响说说发布；提交结果不明时不自动重发评论。
+
+发布自己的说说后，角色结合状态决定是否自赞、是否仍有值得补充的新内容。自评数值设为 **0** 关闭；生活驱动下 **1–100** 是独立自评意愿，默认 **30**，越高越愿意补充；其他模式按百分比选择一次机会。生成时结合原文和近期已发表自评判断新增表达价值，没有合适补充就结束本次判断，不重复尝试凑一句。自评沿用现有人设与表达习惯，不额外识图；适用于自动、手动、面板发布及简报同步，独立于好友自动互动开关和数量上限。后台失败不影响说说发布，提交结果不明时不自动重发。
 
 ### 💬 自动互动
 
@@ -325,7 +326,7 @@ daily_life 可提供公开场景的表达习惯与对象称呼，不导入私聊
 
 ## 🔗 与 daily_life 联动
 
-daily_share 可独立完成文字分享、新闻和定时发送。安装 [daily_life](https://github.com/siciyuanweilai/astrbot_plugin_daily_life) 后，可让分享承接角色的生活与交流；完整协作需同时更新 **daily_life 1.5.8 配套修复**并重载两端插件。
+daily_share 可独立完成文字分享、新闻和定时发送。安装 [daily_life](https://github.com/siciyuanweilai/astrbot_plugin_daily_life) 后，可让分享承接角色的生活与交流；完整协作需同步更新 daily_life 配套实现并重载两端插件；本次续接改写需要生活侧支持表达检查状态回执与语义重排。
 
 | 能力 | 使用说明 |
 | :--- | :--- |
@@ -334,11 +335,11 @@ daily_share 可独立完成文字分享、新闻和定时发送。安装 [daily_
 | 配图、视频、语音 | 在 daily_share 开启所需能力，模型和通道统一在 daily_life 配置 |
 | 联网资料 | 复用生活侧检索能力，保留来源依据；新闻资料不写成亲身经历 |
 | 主动互动 | 协调分享与生活侧主动联系；好友动态点赞意愿可在 QQ 空间设置中单独调整 |
-| 成品续接 | 暂缓时保留可用文案与媒体，结合最新对话和生活变化重新判断，确认送达后回传记录 |
+| 成品续接 | 保留可用媒体，结合最新对话和生活变化重评；改写沿用当前语气与排版，确认送达后回传记录 |
 
 生活驱动和智能定时默认私聊/群聊至少间隔 **45 分钟**、QQ 空间至少 **90 分钟**，可在设置中调整；连续联系未获回应时进一步放缓。睡眠、忙碌或免打扰时暂缓，时间到达只重新考虑是否互动。
 
-私聊资料按目标隔离，公开渠道只使用允许公开的信息；已经提交但结果不明的任务不自动重发。生活插件不可用时跳过对应增强，基础分享继续运行。
+私聊资料按目标隔离，公开渠道只使用允许公开的信息；已经提交但结果不明的任务不自动重发。生活插件不可用时，基础分享继续运行，需要重新检查表达的续接成品保留等待。
 
 B站分享的版本要求和配置见[下方说明](#bilibili)，具体变化见[更新日志](./CHANGELOG.md)。
 
@@ -382,6 +383,8 @@ python -m ruff format --check .
 
 测试覆盖配置、指令、新闻、调度、多平台路由、权限、媒体、QQ 空间、仪表盘和生命周期。测试模块隔离运行，`python -m tests` 汇总实际用例数，`pytest` 每个模块显示一个测试项。
 
+`python -m tests tests.testcachehealth tests.testperformance tests.testhealth` 验证缓存、并发与聊天响应边界。新闻和百科资料使用有界短缓存；最新生活状态、主动联系判断与生成文案每次重新核对，保持自然互动的连续性。
+
 可用 `python -m tests tests.testauditfixes` 单独运行缺陷回归，或用 `python -m tests tests.testqzonecommentjoin` 验证概率回评、执行顺序与独立防重。测试中的模型请求和最终消息传输使用替身，不产生实际调用或消息。
 
 ## 📜 许可证
@@ -391,3 +394,8 @@ python -m ruff format --check .
 <div align="center">
   <sub>Made with ❤️ by 四次元未来 | 愿此见闻温柔你的日常</sub>
 </div>
+
+
+### 长期关系协同
+
+与 daily_life 本地 v1.5.8 关系更新配合时，私聊分享会参考已量化的熟悉、信任与好感，同时遵守当下生活和跨渠道联系节奏。没有证据的维度保持未知；公开内容不携带私聊关系分数或证据。关系学习由 daily_life 统一处理，daily_share 负责分享和对外表达，不重复结算好感。
