@@ -214,7 +214,9 @@ class QQOfficialContextTests(unittest.IsolatedAsyncioTestCase):
             ],
             cached="official-main",
         )
-        self.assertIs(service.ctx_service.get_bot_instance("official-main"), official)
+        self.assertIsNone(
+            service.ctx_service.get_onebot_bot("0", adapter_id="official-main")
+        )
         self.assertIsNone(service._get_bot())
 
     async def test_qzone_auto_detection_uses_onebot_only(self):

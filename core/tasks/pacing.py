@@ -7,7 +7,12 @@ import math
 import time
 from datetime import datetime
 
-from ..database.keys import BILIBILI_TARGET_ID, SOURCE_LIFE, SOURCE_SMART, is_public_share_target
+from ..database.keys import (
+    BILIBILI_TARGET_ID,
+    SOURCE_LIFE,
+    SOURCE_SMART,
+    is_public_share_target,
+)
 from .opportunity import digest
 
 PACED_SOURCES = frozenset({SOURCE_LIFE, SOURCE_SMART})
@@ -26,10 +31,13 @@ def timestamp(value):
 
 
 def episodes(materials):
-    return list(dict.fromkeys(
-        row.get("episode_id") or row.get("id")
-        for row in materials if row.get("episode_id") or row.get("id")
-    ))[:16]
+    return list(
+        dict.fromkeys(
+            row.get("episode_id") or row.get("id")
+            for row in materials
+            if row.get("episode_id") or row.get("id")
+        )
+    )[:16]
 
 
 class SharePacingService:
@@ -40,8 +48,13 @@ class SharePacingService:
 
     def interval(self, target):
         public = is_public_share_target(target)
-        conf = (self.plugin.config.get("bilibili_conf", {}) if target == BILIBILI_TARGET_ID
-                else self.plugin.qzone_conf if public else self.plugin.basic_conf)
+        conf = (
+            self.plugin.config.get("bilibili_conf", {})
+            if target == BILIBILI_TARGET_ID
+            else self.plugin.qzone_conf
+            if public
+            else self.plugin.basic_conf
+        )
         default = 90 if public else 45
         try:
             value = conf.get("autonomous_share_interval_minutes", default)
@@ -67,8 +80,12 @@ class SharePacingService:
             if source in PACED_SOURCES and at >= first - 1:
                 source = None
             rows.append({"at": at, "source": source, "episodes": []})
-        rows = [row for row in rows if 0 < timestamp(row.get("at")) <= now + 60
-                and now - timestamp(row.get("at")) < 86400]
+        rows = [
+            row
+            for row in rows
+            if 0 < timestamp(row.get("at")) <= now + 60
+            and now - timestamp(row.get("at")) < 86400
+        ]
         return states, sorted(rows, key=lambda row: timestamp(row.get("at")))
 
     def episode_wait(self, target, selected, states, now):
@@ -88,7 +105,9 @@ class SharePacingService:
                     remaining = max(remaining, timestamp(row.get("at")) + window - now)
         return max(0, remaining)
 
-    async def check(self, target, *, data=None, selected=(), source=SOURCE_LIFE, now=None):
+    async def check(
+        self, target, *, data=None, selected=(), source=SOURCE_LIFE, now=None
+    ):
         if source not in PACED_SOURCES:
             return {"ready": True, "retry_after": 0, "reason": ""}
         now = time.time() if now is None else now
@@ -101,10 +120,13 @@ class SharePacingService:
                     data = await self.plugin.daily_life_bridge.get_share_context(target)
                 rhythm = (data or {}).get("contact_rhythm") or {}
                 received = timestamp(rhythm.get("last_received_at"))
-                unanswered = [timestamp(row["at"]) for row in rows
-                              if row.get("source") in PACED_SOURCES
-                              and timestamp(row["at"]) > received
-                              and now - timestamp(row["at"]) < 12 * 3600]
+                unanswered = [
+                    timestamp(row["at"])
+                    for row in rows
+                    if row.get("source") in PACED_SOURCES
+                    and timestamp(row["at"]) > received
+                    and now - timestamp(row["at"]) < 12 * 3600
+                ]
                 rounds, previous = 0, 0
                 for at in unanswered:
                     if not previous or at - previous > 120:
@@ -120,8 +142,11 @@ class SharePacingService:
         if episode_remaining > remaining:
             remaining = episode_remaining
             reason = "同一经历刚分享过，积累有意义的进展后再说"
-        return {"ready": remaining <= 0, "retry_after": math.ceil(remaining),
-                "reason": reason if remaining > 0 else ""}
+        return {
+            "ready": remaining <= 0,
+            "retry_after": math.ceil(remaining),
+            "reason": reason if remaining > 0 else "",
+        }
 
     async def filter_materials(self, target, materials, *, now=None):
         now = time.time() if now is None else now
@@ -141,12 +166,22 @@ class SharePacingService:
         now = time.time() if now is None else now
         key = digest(target)
         states = await self.plugin.db.get_share_state(STATE_KEY, {})
-        rows = [row for row in (states.get(key) or {}).get("records", [])
-                if now - timestamp(row.get("at")) < 86400 and row.get("job") != job["id"]]
-        rows.append({"job": job["id"], "at": now, "source": source,
-                     "episodes": list(job.get("pacing_episodes") or [])})
+        rows = [
+            row
+            for row in (states.get(key) or {}).get("records", [])
+            if now - timestamp(row.get("at")) < 86400 and row.get("job") != job["id"]
+        ]
+        rows.append(
+            {
+                "job": job["id"],
+                "at": now,
+                "source": source,
+                "episodes": list(job.get("pacing_episodes") or []),
+            }
+        )
         await self.plugin.db.merge_cache_entries(
-            "share", STATE_KEY,
+            "share",
+            STATE_KEY,
             {key: {"public": is_public_share_target(target), "records": rows[-48:]}},
             max_items=256,
         )
@@ -154,27 +189,50 @@ class SharePacingService:
     async def check_job(self, job):
         params = job.get("params") or {}
         target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
-        return await self.check(target, selected=job.get("pacing_episodes") or [],
-                                source=params.get("history_source"))
+        return await self.check(
+            target,
+            selected=job.get("pacing_episodes") or [],
+            source=params.get("history_source"),
+        )
 
-    async def coordinate(self, target, *, owner="", action="check", rhythm=None, selected=()):
+    async def coordinate(
+        self, target, *, owner="", action="check", rhythm=None, selected=()
+    ):
         """生活插件的公开协调入口；只接收会话、时间和不透明事实编号。"""
-        if action not in {"check", "submit"} or not isinstance(target, str) or not target:
+        if (
+            action not in {"check", "submit"}
+            or not isinstance(target, str)
+            or not target
+        ):
             raise ValueError("无效的主动联系协调请求")
-        if action == "submit" and (not isinstance(owner, str) or not owner or len(owner) > 200):
+        if action == "submit" and (
+            not isinstance(owner, str) or not owner or len(owner) > 200
+        ):
             raise ValueError("主动提交需要稳定任务编号")
         if not isinstance(selected, (list, tuple)) or any(
-                not isinstance(identity, str) or not identity or len(identity) > 200 for identity in selected):
+            not isinstance(identity, str) or not identity or len(identity) > 200
+            for identity in selected
+        ):
             raise ValueError("分享事实编号格式无效")
         selected = list(dict.fromkeys(selected))[:16]
         if rhythm is not None and not isinstance(rhythm, dict):
             raise ValueError("联系节奏格式无效")
-        data = {"contact_rhythm": {"last_received_at": timestamp((rhythm or {}).get("last_received_at"))}}
+        data = {
+            "contact_rhythm": {
+                "last_received_at": timestamp((rhythm or {}).get("last_received_at"))
+            }
+        }
         if action == "check":
             return await self.check(target, data=data, selected=selected)
         async with self.lock:
             gate = await self.check(target, data=data, selected=selected)
             if gate["ready"] and action == "submit":
-                await self.record(target, {"id": owner, "params": {"history_source": SOURCE_LIFE},
-                                           "pacing_episodes": list(selected)[:16]})
+                await self.record(
+                    target,
+                    {
+                        "id": owner,
+                        "params": {"history_source": SOURCE_LIFE},
+                        "pacing_episodes": list(selected)[:16],
+                    },
+                )
             return gate

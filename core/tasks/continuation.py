@@ -120,7 +120,9 @@ def preserve_share(kind: str):
                 result = await method(self, *args, **kwargs)
             except ShareContactReview:
                 await mark_submission("deferred")
-                await service.reconsider.defer(job, "上下文已变化，保留成品等待重新判断表达")
+                await service.reconsider.defer(
+                    job, "上下文已变化，保留成品等待重新判断表达"
+                )
                 return False
             except ShareContactChanged as exc:
                 await service.finish(job, status="cancelled", reason=str(exc))
@@ -151,8 +153,10 @@ def preserve_share(kind: str):
                 if job["status"] not in {"submitting", "waiting_review"}:
                     await mark_submission("deferred")
                     job["status"] = (
-                        "ready" if job.get("delivery_prepared") else
-                        "waiting_contact" if "prepared_media" in job or job["status"] == "waiting_contact"
+                        "ready"
+                        if job.get("delivery_prepared")
+                        else "waiting_contact"
+                        if "prepared_media" in job or job["status"] == "waiting_contact"
                         else "pending"
                     )
                 await service.save(job)
@@ -207,7 +211,8 @@ class ShareContinuationService:
         if job.get("status") == "waiting_review":
             self.plugin.task_manager.progress.update_share_progress(
                 str((job.get("params") or {}).get("progress_id") or ""),
-                "send", message=f"{job.get('reason') or '上下文已变化'}；成品已保留，稍后重新判断表达与发送时机",
+                "send",
+                message=f"{job.get('reason') or '上下文已变化'}；成品已保留，稍后重新判断表达与发送时机",
                 mark_previous_done=False,
             )
             return
@@ -320,9 +325,13 @@ class ShareContinuationService:
             async with self.pacing.lock:
                 gate = await self.pacing.check_job(job)
                 if not gate["ready"]:
-                    job.update(needs_review=True, review_after=datetime.now().timestamp() + 120)
+                    job.update(
+                        needs_review=True, review_after=datetime.now().timestamp() + 120
+                    )
                     raise ShareContactPending(gate["reason"])
-                target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                target = (
+                    params.get("uid") or params.get("target_umo") or "qzone_broadcast"
+                )
                 await self.pacing.record(target, job)
                 job["status"] = "submitting"
                 job["submitted_at"] = datetime.now().timestamp()
@@ -441,7 +450,14 @@ class ShareContinuationService:
                     key in self.active
                     or not isinstance(payload, dict)
                     or payload.get("status")
-                    not in {"pending", "generating", "waiting_contact", "waiting_review", "waiting_platform", "ready"}
+                    not in {
+                        "pending",
+                        "generating",
+                        "waiting_contact",
+                        "waiting_review",
+                        "waiting_platform",
+                        "ready",
+                    }
                 ):
                     continue
                 params = payload.get("params") or {}
@@ -454,7 +470,9 @@ class ShareContinuationService:
                             reason="原分享任务已过时或自动发布已关闭，保留媒体成品，不补发",
                         )
                     continue
-                if payload.get("needs_review") and datetime.now().timestamp() < payload.get("review_after", 0):
+                if payload.get(
+                    "needs_review"
+                ) and datetime.now().timestamp() < payload.get("review_after", 0):
                     continue
                 target = (
                     params.get("uid") or params.get("target_umo") or "qzone_broadcast"
@@ -462,7 +480,13 @@ class ShareContinuationService:
                 if self.plugin.runtime_service.is_share_busy(target):
                     continue
                 if (
-                    payload["status"] in {"waiting_contact", "waiting_review", "waiting_platform", "ready"}
+                    payload["status"]
+                    in {
+                        "waiting_contact",
+                        "waiting_review",
+                        "waiting_platform",
+                        "ready",
+                    }
                     or payload.get("delivery_prepared")
                     or "prepared_media" in payload
                 ):
@@ -557,7 +581,12 @@ class ShareContinuationService:
                     await self.plugin.db.set_share_state(_STATE_KEY, latest)
 
     async def resume(self, job: dict) -> None:
-        if job.get("status") in {"submitting", "completed", "cancelled", "failed"} or job.get("submitted_at"):
+        if job.get("status") in {
+            "submitting",
+            "completed",
+            "cancelled",
+            "failed",
+        } or job.get("submitted_at"):
             return
         params = json.loads(json.dumps(job["params"]), object_hook=_decode)
         target = params.get("uid") or params.get("target_umo") or "qzone_broadcast"

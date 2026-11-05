@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import types
+import json
 import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, Mock, patch
@@ -290,7 +291,9 @@ class SelfPostTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
 
         async def submit(*args):
-            boundary = importlib.import_module(self.self_module.__package__.rsplit(".", 1)[0] + ".submission")
+            boundary = importlib.import_module(
+                self.self_module.__package__.rsplit(".", 1)[0] + ".submission"
+            )
             await boundary.mark_request_submission()
             self.assertEqual(self.entry["comment"], "submitting")
             started.set()
@@ -423,7 +426,16 @@ class SelfCommentPromptTests(unittest.IsolatedAsyncioTestCase):
         self.module, self.models = _load_auto_comment_module()
         runtime, config, state = _interaction_args(self.module)
         self.plugin = runtime.plugin
-        self.plugin.call_llm = AsyncMock(return_value="维持整洁就看明天的我了")
+        self.plugin.call_llm = AsyncMock(
+            return_value=json.dumps(
+                {
+                    "decision": "comment",
+                    "adds_new_meaning": True,
+                    "content": "维持整洁就看明天的我了",
+                },
+                ensure_ascii=False,
+            )
+        )
         self.plugin.content_service = types.SimpleNamespace(
             get_persona_info=AsyncMock(return_value={"prompt": "你是测试人设"}),
             get_qzone_chat_style_prompt=AsyncMock(return_value="自然口语，简短接话"),
@@ -440,7 +452,8 @@ class SelfCommentPromptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(self.post.text, args["prompt"])
         self.assertIn("配图数量：2", args["prompt"])
         self.assertIn("你本人刚发布", args["system_prompt"])
-        self.assertIn("自嘲", args["system_prompt"])
+        self.assertIn("新增表达", args["system_prompt"])
+        self.assertIn("skip", args["system_prompt"])
         self.assertIn("你是测试人设", args["system_prompt"])
         self.assertIn("自然口语", args["system_prompt"])
         self.plugin.call_llm.assert_awaited_once()
@@ -508,9 +521,15 @@ class SelfCommentPromptTests(unittest.IsolatedAsyncioTestCase):
             await self.owner.generate_qzone_self_comment(self.post)
 
     async def test_repeated_post_text_is_rejected_without_second_model_call(self):
-        self.plugin.call_llm.return_value = self.post.text
-        with self.assertRaisesRegex(RuntimeError, "重复"):
-            await self.owner.generate_qzone_self_comment(self.post)
+        self.plugin.call_llm.return_value = json.dumps(
+            {
+                "decision": "comment",
+                "adds_new_meaning": True,
+                "content": self.post.text,
+            },
+            ensure_ascii=False,
+        )
+        self.assertIsNone(await self.owner.generate_qzone_self_comment(self.post))
         self.plugin.call_llm.assert_awaited_once()
 
     async def test_image_only_post_does_not_invent_image_observation(self):

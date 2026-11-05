@@ -611,6 +611,18 @@ def _manager(mod):
     return manager
 
 
+async def _record_news_snapshot(manager, target, *, snapshot_data, image_url=None):
+    await manager.executor_helpers.records.record_share_history(
+        target_id=target,
+        share_type="news",
+        content="已发送新闻",
+        success=True,
+        source_type="test",
+        news_snapshot_data=snapshot_data,
+        news_image_url=image_url,
+    )
+
+
 class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
     def test_cron_weekday_uses_standard_crontab_sunday_mapping(self):
         mod = _load_tasks_module()
@@ -1993,7 +2005,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
 
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
+        ok = await _record_news_snapshot(
+            manager,
             "aiocqhttp:GroupMessage:123",
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "新闻1", "url": "https://example.com/1"}],
@@ -2002,7 +2015,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
 
         snapshot = plugin.db.news_snapshots[0]
-        self.assertTrue(ok)
+        self.assertIsNone(ok)
+        self.assertEqual(len(plugin.db.history), 1)
         self.assertEqual(plugin.news_service.calls, [])
         self.assertEqual(len(snapshot["items"]), 1)
         self.assertEqual(snapshot["source_key"], "zhihu")
@@ -2109,7 +2123,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "旧新闻", "url": "https://example.com/old"}],
@@ -2146,7 +2161,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
 
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2156,7 +2172,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 "zhihu",
             ),
         )
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2184,7 +2201,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         target = "aiocqhttp:GroupMessage:123"
 
         async def commit(source, title, suffix):
-            await manager.snapshot_store.commit_sent_news_snapshot(
+            await _record_news_snapshot(
+                manager,
                 target,
                 snapshot_data=manager.snapshot_store.news_snapshot_payload(
                     [
@@ -2236,7 +2254,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             "aiocqhttp:GroupMessage:123",
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2278,7 +2297,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2311,7 +2331,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
 
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             "aiocqhttp:GroupMessage:123",
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "目标新闻", "url": "https://example.com/original"}],
@@ -2331,7 +2352,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2378,13 +2400,15 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
                 for i in range(1, 13)
             ]
 
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 items("微博"), "weibo"
             ),
         )
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 items("抖音"), "douyin"
@@ -2410,7 +2434,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "目标新闻", "url": "https://example.com/source"}],
@@ -2433,7 +2458,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "目标新闻", "url": "https://example.com/target"}],
@@ -2455,7 +2481,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [
@@ -2480,7 +2507,8 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
         target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
+        await _record_news_snapshot(
+            manager,
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
                 [{"title": "目标新闻", "url": "https://example.com/target"}],
@@ -2575,14 +2603,15 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         )
         manager = _new_manager(mod, plugin)
 
-        selected = manager.targets._select_platform_instance_for_target(GROUP_TARGET_1)
+        selected = manager.targets.ensure_target_platform_routable(
+            GROUP_TARGET_1
+        ).instance
 
         self.assertIs(selected, main)
-        self.assertIsNone(
-            manager.targets._select_platform_instance_for_target(
+        with self.assertRaisesRegex(ValueError, "实例当前不可用"):
+            manager.targets.ensure_target_platform_routable(
                 "bot-missing:GroupMessage:group-test-001"
             )
-        )
 
     def test_target_input_auto_binds_only_available_instance(self):
         mod = _load_tasks_module()
@@ -2805,11 +2834,25 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         manager = _new_manager(mod, plugin)
 
         self.assertEqual(
-            manager.targets.get_target_platform_candidates(expected_group=True),
+            [
+                b.platform_id
+                for b in manager.targets._narrow_target_platform_bindings(
+                    manager.targets.get_target_platform_bindings(),
+                    session_id="",
+                    expected_group=True,
+                )
+            ],
             [PLATFORM_MAIN],
         )
         self.assertEqual(
-            manager.targets.get_target_platform_candidates(expected_group=False),
+            [
+                b.platform_id
+                for b in manager.targets._narrow_target_platform_bindings(
+                    manager.targets.get_target_platform_bindings(),
+                    session_id="",
+                    expected_group=False,
+                )
+            ],
             ["browser-main", "wechat-main", PLATFORM_MAIN],
         )
 
@@ -3872,10 +3915,10 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("recent_dynamics", result)
 
         manager.update_configs(context={"reference_history_count": 0})
-        self.assertEqual(await context.get_recent_post_contents(USER_TARGET_1), [])
+        self.assertEqual((await context.recent_share_context(USER_TARGET_1))[0], [])
         manager.update_configs(context={"reference_history_count": 2})
         self.assertEqual(
-            await context.get_recent_post_contents(GROUP_TARGET_1),
+            (await context.recent_share_context(GROUP_TARGET_1))[0],
             [f"{GROUP_TARGET_1}原文0", f"{GROUP_TARGET_1}原文1"],
         )
         self.assertEqual(queries, [(USER_TARGET_1, 1), (GROUP_TARGET_1, 2)])

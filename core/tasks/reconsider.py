@@ -59,16 +59,29 @@ class ShareReconsiderationService:
     async def migrate(self, jobs):
         """只恢复近期因旧快照规则取消的最新成品，绝不恢复提交不明任务。"""
         occupied = {
-            target_of(job) for job in jobs.values()
-            if isinstance(job, dict) and job.get("status") in {
-                "pending", "generating", "waiting_contact", "waiting_platform",
-                "waiting_review", "ready", "submitting",
-            } and (job.get("status") == "submitting" or not self.continuations.recovery_allowed(job)[1])
+            target_of(job)
+            for job in jobs.values()
+            if isinstance(job, dict)
+            and job.get("status")
+            in {
+                "pending",
+                "generating",
+                "waiting_contact",
+                "waiting_platform",
+                "waiting_review",
+                "ready",
+                "submitting",
+            }
+            and (
+                job.get("status") == "submitting"
+                or not self.continuations.recovery_allowed(job)[1]
+            )
         }
         now = datetime.now().timestamp()
         candidates = sorted(
             (j for j in jobs.values() if isinstance(j, dict)),
-            key=lambda j: j.get("created_at", 0), reverse=True,
+            key=lambda j: j.get("created_at", 0),
+            reverse=True,
         )
         latest = {}
         for job in candidates:
@@ -78,12 +91,15 @@ class ShareReconsiderationService:
         for job in candidates:
             target = target_of(job)
             if (
-                target in occupied or job.get("status") != "cancelled"
+                target in occupied
+                or job.get("status") != "cancelled"
                 or job.get("created_at", 0) < latest[target]
-                or job.get("reason") != STALE_REASON or job.get("submitted_at")
+                or job.get("reason") != STALE_REASON
+                or job.get("submitted_at")
                 or not job.get("delivery_prepared")
                 or not 0 <= now - job.get("created_at", 0) <= 7200
-                or (job.get("params") or {}).get("history_source") not in AUTONOMOUS_SOURCES
+                or (job.get("params") or {}).get("history_source")
+                not in AUTONOMOUS_SOURCES
                 or self.continuations.recovery_allowed(job)[1]
                 or not ("prepared_media" in job or job.get("image_path"))
             ):
@@ -91,7 +107,9 @@ class ShareReconsiderationService:
             job["review_origin"] = "legacy_stale_cancel"
             await self.defer(job, "旧快照规则停止的近期成品，等待重新判断")
             occupied.add(target)
-            logger.info(f"[日常分享] 近期成品已恢复待评估（任务 {job['id']}），尚未发送")
+            logger.info(
+                f"[日常分享] 近期成品已恢复待评估（任务 {job['id']}），尚未发送"
+            )
 
     async def review(self, job):
         if not job.get("needs_review"):
@@ -101,14 +119,18 @@ class ShareReconsiderationService:
         if datetime.now().timestamp() < job.get("review_after", 0):
             return False
         if job.get("review_attempts", 0) >= MAX_REVIEWS:
-            job.update(status="cancelled", reason="多次重评仍不适合发送，成品归档，不集中补发")
+            job.update(
+                status="cancelled", reason="多次重评仍不适合发送，成品归档，不集中补发"
+            )
             return False
         target = target_of(job)
         owner = job.setdefault("contact_owner", "share:" + job["id"])
         gate = await contact(self.plugin, target, owner)
         if not gate.get("allowed"):
             if not (gate.get("retryable") or gate.get("stale")):
-                raise ShareContactChanged(gate.get("reason") or "当前目标不允许主动联系")
+                raise ShareContactChanged(
+                    gate.get("reason") or "当前目标不允许主动联系"
+                )
             await self.defer(job, "等待合适的主动联系时机")
             return False
         if not gate.get("snapshot"):
@@ -130,7 +152,8 @@ class ShareReconsiderationService:
             params = job["params"]
             share_type = params.get("stype", params.get("target_type_enum", ""))
             share_type = (
-                share_type.get("value", "") if isinstance(share_type, dict)
+                share_type.get("value", "")
+                if isinstance(share_type, dict)
                 else getattr(share_type, "value", share_type)
             )
             expression = await self.plugin.content_service.get_expression_context(
@@ -143,12 +166,18 @@ class ShareReconsiderationService:
             await self.continuations.save(job)
             raw = await self.plugin.call_llm(
                 prompt=json.dumps(payload, ensure_ascii=False, default=str),
-                system_prompt="\n".join((
-                    build_content_system_prompt(persona.get("prompt", "")),
-                    expression["share_chat_style_hint"], expression["qzone_chat_style_hint"],
-                    expression["output_format_hint"], _RULES,
-                )),
-                umo=target, timeout=30, max_retries=0,
+                system_prompt="\n".join(
+                    (
+                        build_content_system_prompt(persona.get("prompt", "")),
+                        expression["share_chat_style_hint"],
+                        expression["qzone_chat_style_hint"],
+                        expression["output_format_hint"],
+                        _RULES,
+                    )
+                ),
+                umo=target,
+                timeout=30,
+                max_retries=0,
             )
             raw = raw.strip()
             if raw.startswith("```"):
@@ -165,14 +194,19 @@ class ShareReconsiderationService:
                     content = await self.plugin.content_service.review_expression(
                         draft["params"]["content"], expression, reflow=True
                     )
-                    if not isinstance(content, str) or not content.strip() or len(content) > 2000:
+                    if (
+                        not isinstance(content, str)
+                        or not content.strip()
+                        or len(content) > 2000
+                    ):
                         raise ValueError("invalid final expression")
                     decision = dict(decision, content=content)
                 else:
                     content = draft["params"]["content"]
                 if any(
                     row.get("success")
-                    and "".join(content.split()) == "".join(str(row.get("content") or "").split())
+                    and "".join(content.split())
+                    == "".join(str(row.get("content") or "").split())
                     for row in payload["recent_shares"]
                 ):
                     choice = "archive"
@@ -182,30 +216,46 @@ class ShareReconsiderationService:
             )
             if not checked.get("allowed"):
                 if not (checked.get("retryable") or checked.get("stale")):
-                    raise ShareContactChanged(checked.get("reason") or "当前目标不允许主动联系")
+                    raise ShareContactChanged(
+                        checked.get("reason") or "当前目标不允许主动联系"
+                    )
                 await self.defer(job, "重评期间上下文再次变化，继续保留成品")
                 return False
             allowed, cancelled = self.continuations.recovery_allowed(job)
             if not allowed:
                 if cancelled:
-                    raise ShareContactChanged("重评期间目标、配置或任务时效已变化，成品归档")
+                    raise ShareContactChanged(
+                        "重评期间目标、配置或任务时效已变化，成品归档"
+                    )
                 await self.defer(job, "已进入静默时段，保留成品稍后重评")
                 return False
             if choice == "wait":
                 minutes = decision.get("reconsider_after_minutes", 3)
-                minutes = minutes if type(minutes) in (int, float) and 2 <= minutes <= 10 else 3
-                await self.defer(job, "成品仍有价值，等待自然的接话时机", seconds=minutes * 60)
+                minutes = (
+                    minutes
+                    if type(minutes) in (int, float) and 2 <= minutes <= 10
+                    else 3
+                )
+                await self.defer(
+                    job, "成品仍有价值，等待自然的接话时机", seconds=minutes * 60
+                )
                 return False
             if choice == "archive":
-                job.update(status="cancelled", reason="结合最新交流判断不再适合发送，成品归档")
+                job.update(
+                    status="cancelled", reason="结合最新交流判断不再适合发送，成品归档"
+                )
                 return False
             self._apply(job, decision, life_context)
             job.update(
-                contact_snapshot=gate["snapshot"], needs_review=False,
-                status="ready", reason="成品已按最新交流重新确认",
+                contact_snapshot=gate["snapshot"],
+                needs_review=False,
+                status="ready",
+                reason="成品已按最新交流重新确认",
             )
             await self.continuations.save(job)
-            logger.info(f"[日常分享] 成品重评完成（任务 {job['id']}，{choice}），复用原媒体")
+            logger.info(
+                f"[日常分享] 成品重评完成（任务 {job['id']}，{choice}），复用原媒体"
+            )
             return True
         except asyncio.CancelledError:
             raise
@@ -221,39 +271,70 @@ class ShareReconsiderationService:
         params = job["params"]
         public = target == QZONE_TARGET_ID
         ctx = self.plugin.ctx_service
-        current = await (ctx.get_qzone_share_context() if public else ctx.get_chat_share_context(target))
+        current = await (
+            ctx.get_qzone_share_context()
+            if public
+            else ctx.get_chat_share_context(target)
+        )
         history = ""
         if not public:
             records = await ctx.get_history_data(target)
-            history = ctx.format_structured_history_context(records, limit=8, query=params.get("content", ""))
+            history = ctx.format_structured_history_context(
+                records, limit=8, query=params.get("content", "")
+            )
         recent = await self.plugin.db.get_recent_history_by_target(target, limit=4)
-        media = job.get("prepared_media") or [job.get("image_path"), None, None, None, ""]
+        media = job.get("prepared_media") or [
+            job.get("image_path"),
+            None,
+            None,
+            None,
+            "",
+        ]
         return {
             "destination": "公开空间" if public else "原会话（仅限该会话）",
-            "prepared_at": datetime.fromtimestamp(job["created_at"], SHANGHAI).isoformat(),
+            "prepared_at": datetime.fromtimestamp(
+                job["created_at"], SHANGHAI
+            ).isoformat(),
             "now": datetime.now(SHANGHAI).isoformat(),
             "original_content": params.get("content", ""),
             "original_scene": str(params.get("life_ctx") or "")[:6000],
-            "media": {"image": bool(media[0] or media[1]), "video": bool(media[2]),
-                      "voice": bool(media[3]), "description": media[4]},
+            "media": {
+                "image": bool(media[0] or media[1]),
+                "video": bool(media[2]),
+                "voice": bool(media[3]),
+                "description": media[4],
+            },
             "current_context": current.get("post_context", "")[:10000],
             "conversation": history[:7000],
-            "recent_shares": [{"content": r.get("content", ""), "timestamp": r.get("timestamp", ""),
-                               "success": r.get("success")} for r in recent],
+            "recent_shares": [
+                {
+                    "content": r.get("content", ""),
+                    "timestamp": r.get("timestamp", ""),
+                    "success": r.get("success"),
+                }
+                for r in recent
+            ],
         }, current.get("life_context", "")
 
     def _apply(self, job, decision, life_context):
         selection = decision.get("media")
         if selection not in {"original", "image", "none"}:
             raise ValueError("invalid media choice")
-        media = list(job.get("prepared_media") or [job.get("image_path"), job.get("image_path"), None, None, ""])
+        media = list(
+            job.get("prepared_media")
+            or [job.get("image_path"), job.get("image_path"), None, None, ""]
+        )
         if len(media) != 5:
             raise ValueError("invalid prepared media")
         params = dict(job["params"])
         reframe = decision["decision"] == "reframe"
         if reframe:
             content = decision.get("content")
-            if not isinstance(content, str) or not content.strip() or len(content) > 2000:
+            if (
+                not isinstance(content, str)
+                or not content.strip()
+                or len(content) > 2000
+            ):
                 raise ValueError("invalid reframed content")
             params["content"] = content.strip()
             media[3] = None  # 原语音读的是旧正文，不能与新表达混发。
@@ -265,9 +346,16 @@ class ShareReconsiderationService:
             media[:4] = [None] * 4
         if not any(media[:4]):
             media[4] = ""
-        job.setdefault("original_delivery", copy.deepcopy({
-            "params": job["params"], "prepared_media": job.get("prepared_media"),
-            "image_path": job.get("image_path"), "video_url": job.get("video_url"),
-        }))
+        job.setdefault(
+            "original_delivery",
+            copy.deepcopy(
+                {
+                    "params": job["params"],
+                    "prepared_media": job.get("prepared_media"),
+                    "image_path": job.get("image_path"),
+                    "video_url": job.get("video_url"),
+                }
+            ),
+        )
         params["life_ctx"] = life_context
         job.update(params=params, prepared_media=media)

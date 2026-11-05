@@ -64,7 +64,10 @@ class ContentNewsService(ContentComponent):
             for idx, payload in zip(pending_indexes, fetched_results):
                 title = selected_items[idx].get("title", "")
                 content = (
-                    search_reference(payload, content=strip_news_reference_links(payload.get("content")))
+                    search_reference(
+                        payload,
+                        content=strip_news_reference_links(payload.get("content")),
+                    )
                     if payload.get("status") == "ok"
                     else ""
                 )

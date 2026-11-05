@@ -37,9 +37,7 @@ class TaskDeliveryChainService(TaskServiceBase):
     async def send_message_chain(
         self, uid, chain: MessageChain, event: AstrMessageEvent | None = None
     ):
-        binding = await wait_target_ready(
-            self.services.targets, str(uid or "")
-        )
+        binding = await wait_target_ready(self.services.targets, str(uid or ""))
         is_weixin = self.ctx_service.is_weixin_platform(uid)
         timeout = (
             self.services.weixin_delivery.get_send_timeout_seconds()

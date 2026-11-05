@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.runner import run_module
+from tests.runner import result_counts, run_module
 
 _TESTS_DIR = Path(__file__).parent
 
@@ -17,7 +17,7 @@ class IsolatedTestModule(pytest.File):
 class IsolatedUnitTests(pytest.Item):
     def runtest(self):
         result = run_module(f"tests.{self.name}")
-        if result.returncode or "Ran 0 tests" in result.stdout:
+        if result.returncode or not result_counts(result.stdout)[0]:
             pytest.fail(result.stdout, pytrace=False)
 
 

@@ -218,9 +218,7 @@ class QzoneService:
         self._post_cache: dict[str, QzonePost] = {}
         self._cache_revision = 0
         self._post_detail_cache_at: dict[str, float] = {}
-        self._query_cache: dict[
-            tuple, tuple[float, list[QzonePost]]
-        ] = {}
+        self._query_cache: dict[tuple, tuple[float, list[QzonePost]]] = {}
         self.gateway = QzoneClientGateway(self)
         self.headers = QzoneHeaderService(self)
         self.timeline = QzoneFeedQueryService(self)

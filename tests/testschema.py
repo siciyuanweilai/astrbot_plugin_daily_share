@@ -197,7 +197,10 @@ def _load_dashboard_config_modules(config_module):
         (f"{dashboard_package_name}.meta", ROOT / "core" / "panel" / "meta.py"),
         (f"{dashboard_package_name}.payload", ROOT / "core" / "panel" / "payload.py"),
         (f"{apply_package_name}.field", ROOT / "core" / "panel" / "apply" / "field.py"),
-        (f"{apply_package_name}.general", ROOT / "core" / "panel" / "apply" / "general.py"),
+        (
+            f"{apply_package_name}.general",
+            ROOT / "core" / "panel" / "apply" / "general.py",
+        ),
         (
             f"{apply_package_name}.scheduleapply",
             ROOT / "core" / "panel" / "apply" / "scheduleapply.py",
@@ -240,14 +243,23 @@ class ConfigSchemaTests(unittest.TestCase):
         runtime = SimpleNamespace(config={})
         plugin = Plugin(runtime)
         runtime.fields = runtime.qzone_apply = runtime.validation = plugin
-        runtime.schedule_apply = SimpleNamespace(_page_apply_schedule_fields=lambda *a: None)
+        runtime.schedule_apply = SimpleNamespace(
+            _page_apply_schedule_fields=lambda *a: None
+        )
         for basic, public, expected in ((60, 120, (60, 120)), (-1, 999, (15, 360))):
-            sections = {"basic": {"autonomous_share_interval_minutes": basic},
-                        "qzone": {"autonomous_share_interval_minutes": public}}
+            sections = {
+                "basic": {"autonomous_share_interval_minutes": basic},
+                "qzone": {"autonomous_share_interval_minutes": public},
+            }
             plugin._page_apply_basic_section(sections)
             plugin._page_apply_qzone_section(sections)
-            self.assertEqual(tuple(runtime.config[section]["autonomous_share_interval_minutes"]
-                                   for section in ("basic_conf", "qzone_conf")), expected)
+            self.assertEqual(
+                tuple(
+                    runtime.config[section]["autonomous_share_interval_minutes"]
+                    for section in ("basic_conf", "qzone_conf")
+                ),
+                expected,
+            )
 
     def test_autonomous_interval_ui_submits_each_schema_bound_control(self):
         node = shutil.which("node")
@@ -272,8 +284,14 @@ class ConfigSchemaTests(unittest.TestCase):
                 assert.equal(payload.sections[group][field], value);
             }
         """)
-        result = subprocess.run([node, "--input-type=module", "-e", script], cwd=ROOT,
-                                capture_output=True, text=True, timeout=10, check=False)
+        result = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_model_config_is_in_basic_group_without_persona_overrides(self):

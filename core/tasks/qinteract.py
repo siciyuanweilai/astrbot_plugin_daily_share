@@ -216,7 +216,9 @@ class TaskQzoneAutoCommentService(TaskServiceBase):
             if not await interaction_ready(self):
                 result["skipped"] += 1
                 return _qzone_reply_skipped_payload(reply)
-            async with interaction_submission(self, "reply", post, comment, parent_comment):
+            async with interaction_submission(
+                self, "reply", post, comment, parent_comment
+            ):
                 submit_result = await self.plugin.qzone_service.reply_comment(
                     post.key,
                     comment,

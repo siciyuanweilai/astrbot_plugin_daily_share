@@ -529,15 +529,16 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
         )
         index = module.QzoneCommentIndex.build(post, 1)
 
-        self.assertFalse(
-            Manager()._qzone_auto_reply_thread_candidate(
+        self.assertEqual(
+            Manager()._qzone_auto_reply_thread_skip_reason(
                 post,
                 post.comments[0],
                 post.comments[2],
                 self_uin=1,
                 processed={},
                 index=index,
-            )
+            ),
+            "already_replied_to_target",
         )
 
     def test_thread_candidate_skips_older_friend_reply_when_newer_friend_reply_exists(
@@ -5968,16 +5969,6 @@ class QzoneAutoCommentTests(unittest.IsolatedAsyncioTestCase):
                 self, comment, *, parent_comment=None
             ):
                 return service_module.QzoneService.unsafe_thread_reply_target_reason(
-                    comment,
-                    parent_comment=parent_comment,
-                )
-
-            def has_thread_reply_submit_plan(
-                self, post, comment, *, parent_comment=None
-            ):
-                return service_module.QzoneService.has_thread_reply_submit_plan(
-                    self,
-                    post,
                     comment,
                     parent_comment=parent_comment,
                 )

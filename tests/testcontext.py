@@ -255,18 +255,33 @@ def _service(history=None, context_conf=None, platform_records=None, stars=None)
 class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
     def test_address_only_adds_information_beyond_the_normal_nickname(self):
         _, service = _service()
-        person={"id":"42","name":"Sylus","alias":"Sylus","subjective_name":"Sylus"}
-        text=service.life_memory.format_qzone_relationship([person])
-        self.assertEqual(text,"档案姓名：Sylus")
-        person["subjective_name"]="阿夜"
-        self.assertIn("习惯称呼：阿夜",service.life_memory.format_qzone_relationship([person]))
+        person = {
+            "id": "42",
+            "name": "Sylus",
+            "alias": "Sylus",
+            "subjective_name": "Sylus",
+        }
+        text = service.life_memory.format_qzone_relationship([person])
+        self.assertEqual(text, "档案姓名：Sylus")
+        person["subjective_name"] = "阿夜"
+        self.assertIn(
+            "习惯称呼：阿夜", service.life_memory.format_qzone_relationship([person])
+        )
 
     def test_relationship_dimensions_reach_private_expression_only(self):
         _, service = _service()
-        profiles = [{"name": "朋友", "relationship_state": {
-            "observed_dimensions": ["trust", "affinity"], "familiarity": 0,
-            "trust": .61, "affinity": .47, "last_reason": "PRIVATE_RELATION_EVIDENCE",
-        }}]
+        profiles = [
+            {
+                "name": "朋友",
+                "relationship_state": {
+                    "observed_dimensions": ["trust", "affinity"],
+                    "familiarity": 0,
+                    "trust": 0.61,
+                    "affinity": 0.47,
+                    "last_reason": "PRIVATE_RELATION_EVIDENCE",
+                },
+            }
+        ]
         private = service.life_memory._format_relationships(profiles)
         self.assertIn("信任 0.61", private)
         self.assertIn("好感 0.47", private)
@@ -277,9 +292,20 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
 
     def test_unknown_relationship_dimensions_do_not_become_zero_affinity(self):
         _, service = _service()
-        self.assertNotIn("好感", service.life_memory._format_relationships([
-            {"name": "朋友", "relationship_state": {"observed_dimensions": [], "affinity": .5}}
-        ]))
+        self.assertNotIn(
+            "好感",
+            service.life_memory._format_relationships(
+                [
+                    {
+                        "name": "朋友",
+                        "relationship_state": {
+                            "observed_dimensions": [],
+                            "affinity": 0.5,
+                        },
+                    }
+                ]
+            ),
+        )
 
     def test_invalid_life_snapshot_never_falls_back_to_raw_private_fields(self):
         _, service = _service()
@@ -423,13 +449,25 @@ class ContextHistoryFilteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("[", context_module.DAILY_SHARE_MEMORY_PROMPT)
         self.assertNotIn("]", context_module.DAILY_SHARE_MEMORY_PROMPT)
 
-    def test_get_bot_instance_requires_an_explicit_id_when_multiple_exist(self):
+    def test_onebot_selection_requires_an_explicit_id_when_multiple_exist(self):
         _, service = _service()
         first = object()
         second = object()
-        service.bot_map = {"V": first, "Swan": second}
-
-        self.assertIsNone(service.get_bot_instance(""))
+        platforms = [
+            types.SimpleNamespace(
+                meta=lambda name=name: types.SimpleNamespace(
+                    id=name, name="aiocqhttp", support_proactive_message=True
+                ),
+                get_client=lambda client=client: client,
+            )
+            for name, client in (("V", first), ("Swan", second))
+        ]
+        service.context.platform_manager = types.SimpleNamespace(
+            get_insts=lambda: platforms
+        )
+        self.assertIsNone(service.get_onebot_bot("0"))
+        self.assertIs(service.get_onebot_bot(adapter_id="V"), first)
+        self.assertIs(service.get_onebot_bot(adapter_id="Swan"), second)
 
     async def test_init_bots_keeps_same_display_id_across_platforms(self):
         _, service = _service()

@@ -84,12 +84,15 @@ class ContentService:
     ) -> dict:
         """首次生成与成品改写共用当前场景的表达设置。"""
         public = is_public_share_target(target_id)
-        scene = "qzone_post" if public else ("share_group" if is_group else "share_private")
+        scene = (
+            "qzone_post" if public else ("share_group" if is_group else "share_private")
+        )
         style = await self.daily_life_bridge.get_share_chat_style_prompt(scene=scene)
         if not style:
             if public:
                 label = (
-                    "QQ 空间说说" if target_id == QZONE_TARGET_ID
+                    "QQ 空间说说"
+                    if target_id == QZONE_TARGET_ID
                     else f"{public_share_target_label(target_id)}动态"
                 )
                 style = (

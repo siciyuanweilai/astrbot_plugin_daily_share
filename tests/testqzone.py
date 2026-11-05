@@ -95,10 +95,6 @@ def parse_feedinfo_html(*args, **kwargs):
     return _parser().parse_feedinfo_html(*args, **kwargs)
 
 
-def parse_home_feed_list(*args, **kwargs):
-    return _parser().parse_home_feed_list(*args, **kwargs)
-
-
 def parse_recent_feed_list(*args, **kwargs):
     return _parser().parse_recent_feed_list(*args, **kwargs)
 
@@ -308,31 +304,6 @@ class QzoneParserTests(unittest.TestCase):
         self.assertEqual(stats["today_views"], 2)
         self.assertEqual(stats["total_views"], 3087)
         self.assertEqual(stats["visitor_count"], 2)
-
-    def test_entry_parser_reads_favorites(self):
-        entry = _load_qzone_entry()
-
-        result = entry.parse_favorites(
-            {
-                "code": 0,
-                "data": {
-                    "total_num": 1,
-                    "fav_list": [
-                        {
-                            "id": "fav-1",
-                            "title": "收藏标题",
-                            "abstract": "收藏摘要",
-                            "img_list": ["https://example.com/a.jpg"],
-                            "create_time": 1781800000,
-                        }
-                    ],
-                },
-            }
-        )
-
-        self.assertEqual(result["total"], 1)
-        self.assertEqual(result["items"][0]["title"], "收藏标题")
-        self.assertEqual(result["items"][0]["image"], "https://example.com/a.jpg")
 
     def test_entry_parser_reads_message_board(self):
         entry = _load_qzone_entry()
@@ -797,7 +768,7 @@ class QzoneParserTests(unittest.TestCase):
     def test_video_album_caption_and_comments_are_separate_in_panel_payload(self):
         markup = (ROOT / "tests/fixtures/qzone_video_album_feed.html").read_text()
         item = {"appid": 4, "key": "video-album-key", "uin": 20002, "html": markup}
-        for parse in (parse_recent_feed_list, parse_home_feed_list):
+        for parse in (parse_recent_feed_list,):
             with self.subTest(parser=parse.__name__):
                 posts = parse({"data": {"data": [item]}})
                 self.assertEqual(len(posts), 1)
@@ -903,68 +874,6 @@ class QzoneParserTests(unittest.TestCase):
 
         self.assertIsNotNone(post)
         self.assertEqual(post.videos, ["qzone://video/1075_0b53vvidfield"])
-
-    def test_home_feed_parses_video_feed_from_module_html(self):
-        markup = """
-            <script>
-            var _feedsdata = {
-              code: 0,
-              data: {
-                main: {},
-                host_data: [{
-                  appid: 4,
-                  key: "home-video-key",
-                  fid: "home-video-fid",
-                  uin: 12345,
-                  abstime: 1718000000,
-                  html: "<div class='f-info'>上传了一个视频</div><div class='img-box f-video-wrap' data-vid='1075_0b53homevideo'></div>"
-                }]
-              }
-            };
-            if (window) {}
-            </script>
-            <ul>
-              <li class="f-single" data-key="home-video-key">
-                <div class="f-info">上传了一个视频</div>
-                <div class="img-box f-video-wrap" data-vid="1075_0b53homevideo"></div>
-              </li>
-            </ul>
-        """
-
-        posts = parse_home_feed_list(markup)
-
-        self.assertEqual(len(posts), 1)
-        self.assertEqual(posts[0].tid, "home-video-fid")
-        self.assertEqual(posts[0].videos, ["qzone://video/1075_0b53homevideo"])
-
-    def test_home_feed_keeps_last_item_without_closing_list_tag(self):
-        markup = """
-            <script>
-            var _feedsdata = {
-              code: 0,
-              data: {
-                main: {},
-                host_data: [{
-                  appid: 311,
-                  key: "last-feed-key",
-                  fid: "last-feed-fid",
-                  uin: 12345,
-                  abstime: 1718000000
-                }]
-              }
-            };
-            </script>
-            <ul>
-              <li class="f-single" data-key="last-feed-key">
-                <div class="f-info">最后一条动态</div>
-              </li>
-        """
-
-        posts = parse_home_feed_list(markup)
-
-        self.assertEqual(len(posts), 1)
-        self.assertEqual(posts[0].tid, "last-feed-fid")
-        self.assertEqual(posts[0].text, "最后一条动态")
 
     def test_publish_feedinfo_parses_native_video_marker(self):
         markup = """
@@ -1446,7 +1355,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.call = {
                     "method": method,
                     "url": url,
@@ -1495,14 +1406,6 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(
             "XMLHttpRequest", service.call["headers"].get("X-Requested-With", "")
         )
-        self.assertEqual(service.last_friend_feeds_meta["source"], "recent_posts")
-        self.assertEqual(service.last_friend_feeds_meta["count"], 1)
-        self.assertEqual(service.last_friend_feeds_meta["parsed_count"], 1)
-        self.assertTrue(service.last_friend_feeds_meta["has_more"])
-        self.assertEqual(
-            service.last_friend_feeds_meta["next_cursor"],
-            "pagenum=2&basetime=1773990000",
-        )
 
     async def test_query_posts_reuses_short_ttl_cache(self):
         service_module = _load_qzone_service()
@@ -1529,7 +1432,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls += 1
                 return {
                     "code": 0,
@@ -1575,7 +1480,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1638,7 +1545,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.call = {
                     "method": method,
                     "url": url,
@@ -1761,7 +1670,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.call = {"method": method, "url": url, "params": dict(params or {})}
                 return {
                     "code": 0,
@@ -1806,7 +1717,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1863,7 +1776,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -1947,7 +1862,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 if url == self.LIST_URL:
                     return {
                         "code": 0,
@@ -2239,26 +2156,6 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await service.close()
 
-    async def test_h5_headers_include_full_qzone_cookie_context_for_feed_upload(self):
-        service_module = _load_qzone_service()
-        service = _new_qzone_service(service_module, types.SimpleNamespace())
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001", "ptcz": "noise"},
-        )
-
-        headers = service._h5_headers(ctx)
-
-        self.assertEqual(headers["Content-Type"], "application/json")
-        self.assertIn("uin=100000001", headers["Cookie"])
-        self.assertIn("p_uin=100000001", headers["Cookie"])
-        self.assertIn("p_skey=p_skey", headers["Cookie"])
-        self.assertIn("skey=skey", headers["Cookie"])
-        self.assertIn("ptcz=noise", headers["Cookie"])
-
     async def test_qzone_pc_tokens_use_p_skey(self):
         service_module = _load_qzone_service()
         ctx = service_module.QzoneContext(
@@ -2320,13 +2217,6 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("p_skey=new-p-skey", headers["Cookie"])
         self.assertIn("extra=new", headers["Cookie"])
 
-    async def test_h5_success_falls_back_to_code_when_ret_is_null(self):
-        service_module = _load_qzone_service()
-        service = _new_qzone_service(service_module, types.SimpleNamespace())
-
-        self.assertTrue(service._h5_ok({"ret": None, "code": 0}))
-        self.assertFalse(service._h5_ok({"ret": None, "code": 1}))
-
     async def test_header_overrides_are_case_insensitive(self):
         service_module = _load_qzone_service()
         service = _new_qzone_service(service_module, types.SimpleNamespace())
@@ -2368,80 +2258,6 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(headers["X-Requested-With"], "XMLHttpRequest")
         self.assertEqual(headers["Sec-Fetch-Mode"], "cors")
-
-    async def test_h5_post_json_prefers_http2_and_sends_full_cookie_context(self):
-        service_module = _load_qzone_service()
-        client_module = sys.modules[CLIENT_SERVICE_MODULE_NAME]
-        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
-        service = _new_qzone_service(service_module, plugin)
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001", "extra": "ignored"},
-        )
-
-        class FakeResponse:
-            status_code = 200
-            text = '{"ret":0,"data":{"flag":1}}'
-
-        class FakeAsyncClient:
-            def __init__(self, *, http2, timeout, headers):
-                self.http2 = http2
-                self.timeout = timeout
-                self.headers = headers
-                self.calls = []
-                self.closed = False
-
-            async def post(self, url, *, params=None, content=None, headers=None):
-                self.calls.append(
-                    {
-                        "url": url,
-                        "params": params,
-                        "content": content,
-                        "headers": headers,
-                    }
-                )
-                return FakeResponse()
-
-            async def aclose(self):
-                self.closed = True
-
-        fake_httpx = types.SimpleNamespace(
-            AsyncClient=FakeAsyncClient,
-            TimeoutException=TimeoutError,
-            HTTPError=Exception,
-        )
-
-        try:
-            with (
-                patch.object(client_module, "httpx", fake_httpx),
-                patch.object(
-                    client_module.importlib.util,
-                    "find_spec",
-                    lambda name: object() if name == "h2" else None,
-                ),
-            ):
-                result = await service._h5_post_json(
-                    ctx,
-                    "https://h5.qzone.qq.com/webapp/json/sliceUpload/FileUpload",
-                    {"hello": "world"},
-                    params={"g_tk": ctx.gtk},
-                    label="cover-chunk-0",
-                )
-
-            self.assertEqual(result["ret"], 0)
-            self.assertEqual(result["_endpoint"], "cover-chunk-0")
-            self.assertTrue(service._h2_session.http2)
-            call = service._h2_session.calls[0]
-            self.assertIn("uin=100000001", call["headers"]["Cookie"])
-            self.assertIn("p_skey=p_skey", call["headers"]["Cookie"])
-            self.assertIn("skey=skey", call["headers"]["Cookie"])
-            self.assertIn("extra=ignored", call["headers"]["Cookie"])
-            self.assertEqual(call["content"], b'{"hello":"world"}')
-        finally:
-            await service.close()
 
     async def test_fetch_bot_cookie_merges_qzone_cookie_domains(self):
         service_module = _load_qzone_service()
@@ -2546,8 +2362,10 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_context_retries_after_failure(self):
         service_module = _load_qzone_service()
         service = _new_qzone_service(service_module)
+
         async def ready():
             return object()
+
         service.gateway.wait_until_ready = ready
         attempts = 0
 
@@ -2610,373 +2428,6 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["code"], 0)
         self.assertIsNone(service._session.calls[0]["cookies"])
 
-    async def test_h5_post_json_native_h2_empty_response_falls_back_to_httpx(self):
-        service_module = _load_qzone_service()
-        client_module = sys.modules[CLIENT_SERVICE_MODULE_NAME]
-        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
-        service = _new_qzone_service(service_module, plugin)
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001"},
-        )
-        service.native_calls = 0
-
-        async def native_h2(ctx_arg, url, payload, *, params=None, headers=None):
-            service.native_calls += 1
-            service.native_headers = dict(headers or {})
-            return 200, ""
-
-        class FakeResponse:
-            status_code = 200
-            text = '{"ret":0,"data":{"session":"cover-session"}}'
-
-        class FakeAsyncClient:
-            def __init__(self, *, http2, timeout, headers):
-                self.http2 = http2
-                self.timeout = timeout
-                self.headers = headers
-                self.calls = []
-
-            async def post(self, url, *, params=None, content=None, headers=None):
-                self.calls.append(
-                    {
-                        "url": url,
-                        "params": params,
-                        "content": content,
-                        "headers": headers,
-                    }
-                )
-                return FakeResponse()
-
-            async def aclose(self):
-                return None
-
-        fake_httpx = types.SimpleNamespace(
-            AsyncClient=FakeAsyncClient,
-            TimeoutException=TimeoutError,
-            HTTPError=Exception,
-        )
-
-        try:
-            with (
-                patch.object(service, "_h5_post_json_native_h2", native_h2),
-                patch.object(client_module, "httpx", fake_httpx),
-                patch.object(
-                    client_module.importlib.util,
-                    "find_spec",
-                    lambda name: object() if name == "h2" else None,
-                ),
-            ):
-                result = await service._h5_post_json(
-                    ctx,
-                    "https://h5.qzone.qq.com/webapp/json/sliceUpload/FileBatchControl/covermd5",
-                    {"hello": "world"},
-                    params={"g_tk": ctx.gtk},
-                    label="cover-init",
-                    prefer_native_h2=True,
-                )
-
-            self.assertEqual(service.native_calls, 1)
-            self.assertIn("uin=100000001", service.native_headers["Cookie"])
-            self.assertEqual(result["data"]["session"], "cover-session")
-            self.assertEqual(result["_transport"], "HTTP/2")
-        finally:
-            await service.close()
-
-    async def test_h5_post_json_http2_gateway_timeout_retries_http11(self):
-        service_module = _load_qzone_service()
-        client_module = sys.modules[CLIENT_SERVICE_MODULE_NAME]
-        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
-        service = _new_qzone_service(service_module, plugin)
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001"},
-        )
-
-        class H2Response:
-            status_code = 504
-            text = "<html><body>504 Gateway Time-out</body></html>"
-
-        class FakeAsyncClient:
-            def __init__(self, *, http2, timeout, headers):
-                self.http2 = http2
-                self.timeout = timeout
-                self.headers = headers
-                self.calls = []
-
-            async def post(self, url, *, params=None, content=None, headers=None):
-                self.calls.append(
-                    {
-                        "url": url,
-                        "params": params,
-                        "content": content,
-                        "headers": headers,
-                    }
-                )
-                return H2Response()
-
-            async def aclose(self):
-                return None
-
-        class H1Response:
-            status = 200
-
-            async def text(self):
-                return '{"ret":0,"data":{"session":"video-session"}}'
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return None
-
-        class FakeSession:
-            closed = False
-
-            def __init__(self):
-                self.calls = []
-
-            def post(self, url, **kwargs):
-                self.calls.append({"url": url, **kwargs})
-                return H1Response()
-
-            async def close(self):
-                self.closed = True
-
-        async def no_sleep(_seconds):
-            return None
-
-        fake_httpx = types.SimpleNamespace(
-            AsyncClient=FakeAsyncClient,
-            TimeoutException=TimeoutError,
-            HTTPError=Exception,
-        )
-
-        service._session = FakeSession()
-        service._session_timeout_seconds = service._api_timeout_seconds()
-        try:
-            with (
-                patch.object(client_module, "httpx", fake_httpx),
-                patch.object(
-                    client_module.importlib.util,
-                    "find_spec",
-                    lambda name: object() if name == "h2" else None,
-                ),
-                patch.object(service_module.asyncio, "sleep", no_sleep),
-            ):
-                result = await service._h5_post_json(
-                    ctx,
-                    "https://h5.qzone.qq.com/webapp/json/sliceUpload/FileBatchControl",
-                    {"hello": "world"},
-                    params={"g_tk": ctx.gtk},
-                    label="video-init",
-                )
-
-            self.assertEqual(result["ret"], 0)
-            self.assertEqual(result["data"]["session"], "video-session")
-            self.assertEqual(result["_transport"], "HTTP/1.1")
-            self.assertEqual(len(service._h2_session.calls), 1)
-            self.assertEqual(len(service._session.calls), 1)
-            self.assertEqual(service._session.calls[0]["data"], b'{"hello":"world"}')
-        finally:
-            await service.close()
-
-    async def test_h5_post_bytes_http2_gateway_timeout_retries_http11(self):
-        service_module = _load_qzone_service()
-        client_module = sys.modules[CLIENT_SERVICE_MODULE_NAME]
-        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
-        service = _new_qzone_service(service_module, plugin)
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001"},
-        )
-
-        class H2Response:
-            status_code = 504
-            text = "<html><body>504 Gateway Time-out</body></html>"
-
-        class FakeAsyncClient:
-            def __init__(self, *, http2, timeout, headers):
-                self.calls = []
-
-            async def post(self, url, *, params=None, content=None, headers=None):
-                self.calls.append(
-                    {
-                        "url": url,
-                        "params": params,
-                        "content": content,
-                        "headers": headers,
-                    }
-                )
-                return H2Response()
-
-            async def aclose(self):
-                return None
-
-        class H1Response:
-            status = 200
-
-            async def text(self):
-                return '{"ret":0,"data":{"uploaded":true}}'
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return None
-
-        class FakeSession:
-            closed = False
-
-            def __init__(self):
-                self.calls = []
-
-            def post(self, url, **kwargs):
-                self.calls.append({"url": url, **kwargs})
-                return H1Response()
-
-            async def close(self):
-                self.closed = True
-
-        async def no_sleep(_seconds):
-            return None
-
-        fake_httpx = types.SimpleNamespace(
-            AsyncClient=FakeAsyncClient,
-            TimeoutException=TimeoutError,
-            HTTPError=Exception,
-        )
-
-        service._session = FakeSession()
-        service._session_timeout_seconds = service._api_timeout_seconds()
-        try:
-            with (
-                patch.object(client_module, "httpx", fake_httpx),
-                patch.object(
-                    client_module.importlib.util,
-                    "find_spec",
-                    lambda name: object() if name == "h2" else None,
-                ),
-                patch.object(service_module.asyncio, "sleep", no_sleep),
-            ):
-                result = await service._h5_post_bytes(
-                    ctx,
-                    "https://h5.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_re_feeds",
-                    b"payload-bytes",
-                    "application/octet-stream",
-                    label="h5-body",
-                )
-
-            self.assertEqual(result["ret"], 0)
-            self.assertEqual(result["_transport"], "HTTP/1.1")
-            self.assertEqual(len(service._h2_session.calls), 1)
-            self.assertEqual(len(service._session.calls), 1)
-            self.assertEqual(service._session.calls[0]["data"], b"payload-bytes")
-            self.assertEqual(
-                service._session.calls[0]["headers"]["Content-Type"],
-                "application/octet-stream",
-            )
-        finally:
-            await service.close()
-
-    async def test_h5_post_json_native_h2_gateway_timeout_retries_http11(self):
-        service_module = _load_qzone_service()
-        plugin = types.SimpleNamespace(qzone_conf={"qzone_api_timeout_seconds": 120})
-        service = _new_qzone_service(service_module, plugin)
-        ctx = service_module.QzoneContext(
-            uin=100000001,
-            skey="skey",
-            p_skey="p_skey",
-            nickname="测试用户乙",
-            cookie_values={"uin": "o100000001"},
-        )
-        service.native_calls = 0
-
-        async def native_h2(ctx_arg, url, payload, *, params=None, headers=None):
-            service.native_calls += 1
-            return 504, "<html><body>504 Gateway Time-out</body></html>"
-
-        class H1Response:
-            status = 200
-
-            async def text(self):
-                return '{"ret":0,"data":{"session":"cover-session"}}'
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *args):
-                return None
-
-        class FakeSession:
-            closed = False
-
-            def __init__(self):
-                self.calls = []
-
-            def post(self, url, **kwargs):
-                self.calls.append({"url": url, **kwargs})
-                return H1Response()
-
-            async def close(self):
-                self.closed = True
-
-        async def no_sleep(_seconds):
-            return None
-
-        service._session = FakeSession()
-        service._session_timeout_seconds = service._api_timeout_seconds()
-        try:
-            with (
-                patch.object(service, "_h5_post_json_native_h2", native_h2),
-                patch.object(service_module.asyncio, "sleep", no_sleep),
-            ):
-                result = await service._h5_post_json(
-                    ctx,
-                    "https://h5.qzone.qq.com/webapp/json/sliceUpload/FileBatchControl/covermd5",
-                    {"hello": "world"},
-                    params={"g_tk": ctx.gtk},
-                    label="cover-init",
-                    prefer_native_h2=True,
-                )
-
-            self.assertEqual(service.native_calls, 1)
-            self.assertEqual(result["data"]["session"], "cover-session")
-            self.assertEqual(result["_transport"], "HTTP/1.1")
-            self.assertEqual(len(service._session.calls), 1)
-        finally:
-            await service.close()
-
-    async def test_h5_error_message_keeps_5xx_gateway_status_as_primary_error(self):
-        service_module = _load_qzone_service()
-        service = _new_qzone_service(service_module, types.SimpleNamespace())
-
-        message = service._h5_error_message(
-            {
-                "code": -1,
-                "message": "QQ 空间返回内容不是结构化数据",
-                "_endpoint": "video-init",
-                "_http_status": 504,
-                "_raw_length": 164,
-                "_transport": "HTTP/2",
-            },
-            "QQ 空间 H5 上传接口暂不可用（HTTP 504）",
-        )
-
-        self.assertIn("QQ 空间 H5 上传接口暂不可用（HTTP 504）", message)
-        self.assertIn("阶段: video-init", message)
-        self.assertIn("传输: HTTP/2", message)
-        self.assertNotIn("返回内容不是结构化数据", message)
-
     async def test_publish_timeout_confirms_existing_post_without_resubmitting(self):
         service_module = _load_qzone_service()
         submission = importlib.import_module(PACKAGE_NAME + ".core.submission")
@@ -3004,8 +2455,19 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 return "picbo", "richval"
 
             async def _request(
-                self, method, url, *, params=None, data=None, headers=None, retry=True, submission=""):
-                await importlib.import_module(PACKAGE_NAME + ".core.submission").mark_submission()
+                self,
+                method,
+                url,
+                *,
+                params=None,
+                data=None,
+                headers=None,
+                retry=True,
+                submission="",
+            ):
+                await importlib.import_module(
+                    PACKAGE_NAME + ".core.submission"
+                ).mark_submission()
                 if phases != ["submitting"]:
                     raise AssertionError("请求前没有保存提交防重状态")
                 self.submit_calls += 1
@@ -3134,7 +2596,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 self.request_headers = headers
@@ -3190,7 +2654,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 return {"code": 0}
@@ -3247,7 +2713,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.request_url = url
                 self.request_data = dict(data or {})
                 return {"code": 0}
@@ -3316,7 +2784,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.request_data = dict(data or {})
                 return {"code": 0}
 
@@ -3361,7 +2831,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.request_data = dict(data or {})
                 return {"code": 0}
 
@@ -3407,7 +2879,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {}), dict(headers or {})))
                 return {"code": 0}
 
@@ -3490,7 +2964,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {}), dict(headers or {})))
                 return {"code": -10004, "message": "参数错误", "_http_status": 200}
 
@@ -3578,7 +3054,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 return {"code": -100, "message": "登录态失效", "_http_status": 401}
 
         service = Service(_qzone_plugin())
@@ -3644,7 +3122,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return (
                     {"code": -10000, "message": "使用人数过多，请稍后再试"}
@@ -3712,7 +3192,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3780,7 +3262,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3838,7 +3322,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -3903,7 +3389,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4150,7 +3638,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return (
                     {"code": -10049, "message": "该条内容已被删除"}
@@ -4211,7 +3701,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4564,7 +4056,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": 0}
 
@@ -4637,7 +4131,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 if len(self.calls) < 3:
                     return {"code": -10049, "message": "该条内容已被删除"}
@@ -4696,7 +4192,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -10049, "message": "该条内容已被删除"}
 
@@ -4781,7 +4279,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -1, "message": "该条内容已被删除"}
 
@@ -4838,7 +4338,9 @@ class QzoneServiceTests(unittest.IsolatedAsyncioTestCase):
                 data=None,
                 headers=None,
                 retry=True,
-                retry_parse_error=True, submission=""):
+                retry_parse_error=True,
+                submission="",
+            ):
                 self.calls.append((url, dict(data or {})))
                 return {"code": -10049, "message": "该条内容已被删除"}
 

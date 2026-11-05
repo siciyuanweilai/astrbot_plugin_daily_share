@@ -105,8 +105,11 @@ def share_material(data: dict, now: datetime) -> list[dict]:
                 "activity": action.get("activity"),
                 "state": "running",
             },
-            episode=(["life_episode", action["episode_id"]] if action.get("episode_id") else
-                     ["experience", facts.get("date"), compact(action.get("activity"))]),
+            episode=(
+                ["life_episode", action["episode_id"]]
+                if action.get("episode_id")
+                else ["experience", facts.get("date"), compact(action.get("activity"))]
+            ),
         )
     for row in data.get("timeline") or []:
         if not isinstance(row, dict):
@@ -119,14 +122,18 @@ def share_material(data: dict, now: datetime) -> list[dict]:
         ):
             add(
                 "completed_activity",
-                row.get("episode_id") or [facts.get("date"), row.get("time"), row.get("activity")],
+                row.get("episode_id")
+                or [facts.get("date"), row.get("time"), row.get("activity")],
                 {
                     "activity": row.get("activity"),
                     "state": "completed",
                     "evidence": row.get("execution_evidence"),
                 },
-                episode=(["life_episode", row["episode_id"]] if row.get("episode_id") else
-                         ["experience", facts.get("date"), compact(row.get("activity"))]),
+                episode=(
+                    ["life_episode", row["episode_id"]]
+                    if row.get("episode_id")
+                    else ["experience", facts.get("date"), compact(row.get("activity"))]
+                ),
             )
     continuity = data.get("continuity") or {}
     for kind in ("activities", "objects"):
@@ -164,7 +171,10 @@ def share_material(data: dict, now: datetime) -> list[dict]:
                 kind,
                 [row.get("event_id") or row.get("title"), progress_version(row)],
                 selected,
-                episode=[kind, row.get("event_id") or [facts.get("date"), row.get("title")]],
+                episode=[
+                    kind,
+                    row.get("event_id") or [facts.get("date"), row.get("title")],
+                ],
                 legacy_identity=[
                     row.get("title"),
                     row.get("state"),

@@ -1,16 +1,26 @@
 """局部评论编号下的第三方续评：提交楼层、对象与落点核验。"""
 
+import importlib.util
 import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock
 
-from .testqzone import _load_qzone_service, _new_qzone_service
+from .testqzone import ROOT, _load_qzone_service, _new_qzone_service
 
 
 class ThirdPartyThreadTargetTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.module = _load_qzone_service()
         self.service = _new_qzone_service(self.module)
+        # 只加载预检模块，避免导入任务入口时覆盖空间协议测试的框架替身。
+        spec = importlib.util.spec_from_file_location(
+            self.module.__package__.rsplit(".", 1)[0] + ".tasks.interact.placement",
+            ROOT / "core" / "tasks" / "interact" / "placement.py",
+        )
+        placement = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(placement)
+        self.can_submit = placement._has_thread_reply_submit_plan
         self.ctx = self.module.QzoneContext(10001, "skey", "p_skey")
         self.parent = self.module.QzoneComment(
             uin=20002, tid="2", submit_tid="2", raw_tid="2", content="原评论"
@@ -70,8 +80,12 @@ class ThirdPartyThreadTargetTests(unittest.IsolatedAsyncioTestCase):
                 )
 
                 self.assertTrue(
-                    self.service.has_thread_reply_submit_plan(
-                        post, target, parent_comment=self.parent, self_uin=self.ctx.uin
+                    self.can_submit(
+                        self.service,
+                        post,
+                        target,
+                        parent_comment=self.parent,
+                        self_uin=self.ctx.uin,
                     )
                 )
                 result = await self.service.reply_comment(
@@ -118,8 +132,12 @@ class ThirdPartyThreadTargetTests(unittest.IsolatedAsyncioTestCase):
                 self.service.context = AsyncMock(return_value=self.ctx)
                 self.service._request = AsyncMock()
                 self.assertFalse(
-                    self.service.has_thread_reply_submit_plan(
-                        post, target, parent_comment=self.parent, self_uin=self.ctx.uin
+                    self.can_submit(
+                        self.service,
+                        post,
+                        target,
+                        parent_comment=self.parent,
+                        self_uin=self.ctx.uin,
                     )
                 )
                 with self.assertRaises(RuntimeError):
@@ -140,12 +158,18 @@ class ThirdPartyThreadTargetTests(unittest.IsolatedAsyncioTestCase):
             return_value={"status": "confirmed"}
         )
 
-        for identity in ({}, {"self_uin": self.ctx.uin}):
-            self.assertTrue(
-                self.service.has_thread_reply_submit_plan(
-                    post, target, parent_comment=parent, **identity
-                )
+        self.assertFalse(
+            self.can_submit(self.service, post, target, parent_comment=parent)
+        )
+        self.assertTrue(
+            self.can_submit(
+                self.service,
+                post,
+                target,
+                parent_comment=parent,
+                self_uin=self.ctx.uin,
             )
+        )
         result = await self.service.reply_comment(
             post.key, target, "好呀", parent_comment=parent
         )

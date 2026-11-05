@@ -15,7 +15,9 @@ def search_reference(payload, *, content=None):
         )
     ):
         return ""
-    text = str((payload.get("content") if content is None else content) or "").strip()[:2000]
+    text = str((payload.get("content") if content is None else content) or "").strip()[
+        :2000
+    ]
     if not text:
         return ""
     result = {"content": text}
@@ -24,10 +26,17 @@ def search_reference(payload, *, content=None):
             result[key] = payload[key][:80]
     for key in ("missing_aspects", "providers"):
         if isinstance(payload.get(key), list):
-            result[key] = [item[:180] for item in payload[key][:5] if isinstance(item, str)]
+            result[key] = [
+                item[:180] for item in payload[key][:5] if isinstance(item, str)
+            ]
     sources = payload.get("sources")
     result["sources"] = [
-        {key: row[key][:400] for key in ("title", "url", "provider") if isinstance(row.get(key), str)}
-        for row in (sources[:5] if isinstance(sources, list) else []) if isinstance(row, dict)
+        {
+            key: row[key][:400]
+            for key in ("title", "url", "provider")
+            if isinstance(row.get(key), str)
+        }
+        for row in (sources[:5] if isinstance(sources, list) else [])
+        if isinstance(row, dict)
     ]
     return json.dumps(result, ensure_ascii=False)

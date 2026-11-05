@@ -1,4 +1,5 @@
 """B站动态分享决策与草稿恢复；账户投递通过 daily_life 的唯一适配层完成。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,27 +37,75 @@ class BiliDynamicShare:
         self.posts = BiliPostComposer(plugin)
 
     def owns_channel(self):
-        return bool(self.plugin.config.get("bilibili_conf", {}).get("enabled", False)
-                    and not self.plugin._is_terminated)
+        return bool(
+            self.plugin.config.get("bilibili_conf", {}).get("enabled", False)
+            and not self.plugin._is_terminated
+        )
 
     def owns_interactions(self):
-        return self.owns_channel() and self.plugin.config.get("bilibili_conf", {}).get("manage_interactions", True)
+        return self.owns_channel() and self.plugin.config.get("bilibili_conf", {}).get(
+            "manage_interactions", True
+        )
 
     async def interact(self, context, *, expression=False):
-        if (not self.owns_interactions() or not self.plugin._is_initialized or
-                not self.plugin.config.get("enable_auto_share", False)):
+        if (
+            not self.owns_interactions()
+            or not self.plugin._is_initialized
+            or not self.plugin.config.get("enable_auto_share", False)
+        ):
             return {"action": "wait"}
-        supported = {"wait", "mention", "contact", "comment", "reply", "dismiss", "danmaku"}
-        allowed = [action for action in context.get("allowed_actions", []) if action in supported]
-        payload = {key: value for key, value in context.items() if key in {
-            "persona", "public_material", "recent_public_actions", "current_live", "incoming", "contact",
-            "contact_rhythm", "bound_contact", "mention_candidates", "bili_dialogue", "id"}}
+        supported = {
+            "wait",
+            "mention",
+            "contact",
+            "comment",
+            "reply",
+            "dismiss",
+            "danmaku",
+        }
+        allowed = [
+            action
+            for action in context.get("allowed_actions", [])
+            if action in supported
+        ]
+        payload = {
+            key: value
+            for key, value in context.items()
+            if key
+            in {
+                "persona",
+                "public_material",
+                "recent_public_actions",
+                "current_live",
+                "incoming",
+                "contact",
+                "contact_rhythm",
+                "bound_contact",
+                "mention_candidates",
+                "bili_dialogue",
+                "id",
+            }
+        }
         payload["allowed_actions"] = allowed
         if expression:
-            payload = {key: value for key, value in payload.items() if key in {
-                "persona", "public_material", "recent_public_actions", "incoming", "bound_contact", "id", "allowed_actions"}}
-        raw = await self.plugin.llm_service.call(json.dumps(payload, ensure_ascii=False),
-                                                 system_prompt=EXPRESSION_RULE if expression else INTERACTION_RULE)
+            payload = {
+                key: value
+                for key, value in payload.items()
+                if key
+                in {
+                    "persona",
+                    "public_material",
+                    "recent_public_actions",
+                    "incoming",
+                    "bound_contact",
+                    "id",
+                    "allowed_actions",
+                }
+            }
+        raw = await self.plugin.llm_service.call(
+            json.dumps(payload, ensure_ascii=False),
+            system_prompt=EXPRESSION_RULE if expression else INTERACTION_RULE,
+        )
         result = json.loads(raw or "{}")
         if not isinstance(result, dict) or result.get("action") not in allowed:
             return {"action": "wait"}
@@ -74,8 +123,12 @@ class BiliDynamicShare:
         await self.plugin.db.set_share_state(self.state_key(job["account"]), state)
 
     async def prepare(self, opportunity):
-        if (not self.owns_channel() or not self.plugin._is_initialized or
-                not self.plugin.config.get("enable_auto_share", False) or self.lock.locked()):
+        if (
+            not self.owns_channel()
+            or not self.plugin._is_initialized
+            or not self.plugin.config.get("enable_auto_share", False)
+            or self.lock.locked()
+        ):
             return {"status": "wait"}
         async with self.lock:
             return await self._prepare(opportunity)
@@ -86,26 +139,49 @@ class BiliDynamicShare:
         sources = {row["id"]: row for row in opportunity.get("materials", [])}
         job = state.get("job")
         if job and job.get("status") == "failed":
-            state["seen"] = list(dict.fromkeys([*state.get("seen", []), job["source_id"]]))[-256:]
+            state["seen"] = list(
+                dict.fromkeys([*state.get("seen", []), job["source_id"]])
+            )[-256:]
             state.pop("job", None)
             await self.plugin.db.set_share_state(key, state)
             return {"status": "wait"}
         if job and job.get("status") == "uncertain":
-            return {"status": "check", "intent": job["id"], "source_id": job["source_id"]}
+            return {
+                "status": "check",
+                "intent": job["id"],
+                "source_id": job["source_id"],
+            }
         if job and job.get("composition_version") != 2:
             # 旧草稿可能已进入平台事务，先查回执，不能就地换文案或配图后重发。
-            return {"status": "check", "intent": job["id"], "source_id": job["source_id"], "source_expired": True}
+            return {
+                "status": "check",
+                "intent": job["id"],
+                "source_id": job["source_id"],
+                "source_expired": True,
+            }
         if job and job.get("source_id") not in sources:
             # 旧素材失效后不补发；有未决投递的任务由 receipt/check 路径处理。
-            return {"status": "check", "intent": job["id"], "source_id": job["source_id"], "source_expired": True}
-        pacing = getattr(getattr(self.plugin, "share_continuations", None), "pacing", None)
+            return {
+                "status": "check",
+                "intent": job["id"],
+                "source_id": job["source_id"],
+                "source_expired": True,
+            }
+        pacing = getattr(
+            getattr(self.plugin, "share_continuations", None), "pacing", None
+        )
         if pacing:
-            gate = await pacing.check("bilibili_broadcast", selected=(job or {}).get("pacing_episodes") or [])
+            gate = await pacing.check(
+                "bilibili_broadcast", selected=(job or {}).get("pacing_episodes") or []
+            )
             if not gate["ready"]:
                 return {"status": "wait"}
             # 旧版本的动态回执也参与升级后的间隔，避免空账本立即再发。
             for row in opportunity.get("recent_public_actions") or []:
-                if row.get("kind") != "dynamic" or row.get("status") not in {"accepted", "confirmed"}:
+                if row.get("kind") != "dynamic" or row.get("status") not in {
+                    "accepted",
+                    "confirmed",
+                }:
                     continue
                 try:
                     sent = datetime.fromisoformat(row["at"])
@@ -119,24 +195,61 @@ class BiliDynamicShare:
         if not job:
             if time.time() < float(state.get("review_after") or 0):
                 return {"status": "wait"}
-            available = [row for identity, row in sources.items() if identity not in state.get("seen", [])]
+            available = [
+                row
+                for identity, row in sources.items()
+                if identity not in state.get("seen", [])
+            ]
             if pacing:
-                allowed = await pacing.filter_materials("bilibili_broadcast", [
-                    {"id": row["id"], "episode_id": row.get("pacing_episode") or row["id"]} for row in available])
+                allowed = await pacing.filter_materials(
+                    "bilibili_broadcast",
+                    [
+                        {
+                            "id": row["id"],
+                            "episode_id": row.get("pacing_episode") or row["id"],
+                        }
+                        for row in available
+                    ],
+                )
                 allowed_ids = {row["id"] for row in allowed}
                 available = [row for row in available if row["id"] in allowed_ids]
             if not available:
                 return {"status": "wait"}
             # 文件路径属于执行层，不能交给模型选择或生成。
-            public = [{k: row.get(k) for k in ("id", "title", "evidence", "impression", "appearance", "images")}
-                      for row in available]
+            public = [
+                {
+                    k: row.get(k)
+                    for k in (
+                        "id",
+                        "title",
+                        "evidence",
+                        "impression",
+                        "appearance",
+                        "images",
+                    )
+                }
+                for row in available
+            ]
             state["review_after"] = time.time() + 300
             await self.plugin.db.set_share_state(key, state)
-            raw = await self.plugin.llm_service.call(json.dumps({
-                "persona": opportunity.get("persona", ""), "materials": public,
-                "recent_public_actions": opportunity.get("recent_public_actions", []),
-                "allow_images": bool(self.plugin.config.get("bilibili_conf", {}).get("enable_image", True)),
-            }, ensure_ascii=False), system_prompt=RULE)
+            raw = await self.plugin.llm_service.call(
+                json.dumps(
+                    {
+                        "persona": opportunity.get("persona", ""),
+                        "materials": public,
+                        "recent_public_actions": opportunity.get(
+                            "recent_public_actions", []
+                        ),
+                        "allow_images": bool(
+                            self.plugin.config.get("bilibili_conf", {}).get(
+                                "enable_image", True
+                            )
+                        ),
+                    },
+                    ensure_ascii=False,
+                ),
+                system_prompt=RULE,
+            )
             decision = json.loads(raw or "{}")
             if not isinstance(decision, dict):
                 raise ValueError("动态决策必须返回结构化对象")
@@ -146,46 +259,83 @@ class BiliDynamicShare:
             state["review_after"] = time.time() + max(5, min(120, minutes)) * 60
             await self.plugin.db.set_share_state(key, state)
             source = sources.get(decision.get("source_id"))
-            if not self.owns_channel() or not self.plugin.config.get("enable_auto_share", False):
+            if not self.owns_channel() or not self.plugin.config.get(
+                "enable_auto_share", False
+            ):
                 return {"status": "wait"}
             if decision.get("decision") != "share" or source not in available:
                 return {"status": "wait"}
             image_ids = decision.get("image_ids", [])
-            if (not isinstance(image_ids, list) or len(image_ids) > 9 or
-                    any(not isinstance(i, str) for i in image_ids)):
+            if (
+                not isinstance(image_ids, list)
+                or len(image_ids) > 9
+                or any(not isinstance(i, str) for i in image_ids)
+            ):
                 raise ValueError("动态决策未提供有效的配图选择")
             assets = opportunity.get("assets", {})
             allowed = {row["id"] for row in source.get("images", [])}
-            if any(identity not in allowed or identity not in assets for identity in image_ids):
+            if any(
+                identity not in allowed or identity not in assets
+                for identity in image_ids
+            ):
                 raise ValueError("动态配图不属于所选公开素材")
-            with_image = self.plugin.config.get("bilibili_conf", {}).get("enable_image", True)
+            with_image = self.plugin.config.get("bilibili_conf", {}).get(
+                "enable_image", True
+            )
             if with_image and not image_ids:
-                image_ids = [row["id"] for row in source.get("images", []) if row["id"] in assets][:1]
+                image_ids = [
+                    row["id"] for row in source.get("images", []) if row["id"] in assets
+                ][:1]
             if not with_image:
                 image_ids = []
             generate_image = bool(with_image and not image_ids)
-            if generate_image and not self.plugin.config.get("image_conf", {}).get("enable_ai_image", False):
-                return {"status": "wait", "reason": "等待开启AI配图或出现可用的公开图片"}
+            if generate_image and not self.plugin.config.get("image_conf", {}).get(
+                "enable_ai_image", False
+            ):
+                return {
+                    "status": "wait",
+                    "reason": "等待开启AI配图或出现可用的公开图片",
+                }
             text = await self.posts.compose(opportunity, source)
-            if not text or not self.owns_channel() or not self.plugin.config.get("enable_auto_share", False):
+            if (
+                not text
+                or not self.owns_channel()
+                or not self.plugin.config.get("enable_auto_share", False)
+            ):
                 return {"status": "wait"}
             # 正文生成期间两个方向的配图设置变化都需重新判断，不能提交旧选择。
-            if bool(with_image) != bool(self.plugin.config.get("bilibili_conf", {}).get("enable_image", True)):
+            if bool(with_image) != bool(
+                self.plugin.config.get("bilibili_conf", {}).get("enable_image", True)
+            ):
                 return {"status": "wait"}
-            identity = hashlib.sha256((str(opportunity["account"]) + ":" + source["id"]).encode()).hexdigest()
-            job = {"id": "bili:" + identity, "account": str(opportunity["account"]),
-                   "kind": "bilibili", "params": {"target_umo": "bilibili_broadcast"},
-                   "source_id": source["id"], "text": text.strip(),
-                   "pacing_episodes": [source.get("pacing_episode") or source["id"]],
-                   "images": [assets[i] for i in dict.fromkeys(image_ids)],
-                   "source_material": self.posts.material(source), "generate_image": generate_image,
-                   "composition_version": 2, "public_only": True, "status": "preparing"}
+            identity = hashlib.sha256(
+                (str(opportunity["account"]) + ":" + source["id"]).encode()
+            ).hexdigest()
+            job = {
+                "id": "bili:" + identity,
+                "account": str(opportunity["account"]),
+                "kind": "bilibili",
+                "params": {"target_umo": "bilibili_broadcast"},
+                "source_id": source["id"],
+                "text": text.strip(),
+                "pacing_episodes": [source.get("pacing_episode") or source["id"]],
+                "images": [assets[i] for i in dict.fromkeys(image_ids)],
+                "source_material": self.posts.material(source),
+                "generate_image": generate_image,
+                "composition_version": 2,
+                "public_only": True,
+                "status": "preparing",
+            }
             await self.save(job)
         job = {**job, "service": self}
-        if (job.get("images") or job.get("generate_image")) and not self.plugin.config.get("bilibili_conf", {}).get("enable_image", True):
+        if (
+            job.get("images") or job.get("generate_image")
+        ) and not self.plugin.config.get("bilibili_conf", {}).get("enable_image", True):
             return {"status": "wait"}
         if job.get("generate_image"):
-            if not self.plugin.config.get("image_conf", {}).get("enable_ai_image", False):
+            if not self.plugin.config.get("image_conf", {}).get(
+                "enable_ai_image", False
+            ):
                 return {"status": "wait"}
             token = current_share_job.set(job)
             try:
@@ -202,9 +352,14 @@ class BiliDynamicShare:
             job["images"] = [path]
         job["status"] = "ready"
         await self.save(job)
-        return {"status": "ready", "intent": job["id"], "source_id": job["source_id"],
-                "pacing_episodes": job.get("pacing_episodes") or [],
-                "text": job["text"], "images": job["images"]}
+        return {
+            "status": "ready",
+            "intent": job["id"],
+            "source_id": job["source_id"],
+            "pacing_episodes": job.get("pacing_episodes") or [],
+            "text": job["text"],
+            "images": job["images"],
+        }
 
     async def receipt(self, account, intent, receipt):
         async with self.lock:
@@ -215,10 +370,19 @@ class BiliDynamicShare:
                 return
             status = receipt.get("status")
             if status in {"accepted", "confirmed", "cancelled"}:
-                state["seen"] = list(dict.fromkeys([*state.get("seen", []), job["source_id"]]))[-256:]
-                state["last_receipt"] = {"intent": intent, "status": status, "remote_id": receipt.get("remote_id", "")}
+                state["seen"] = list(
+                    dict.fromkeys([*state.get("seen", []), job["source_id"]])
+                )[-256:]
+                state["last_receipt"] = {
+                    "intent": intent,
+                    "status": status,
+                    "remote_id": receipt.get("remote_id", ""),
+                }
                 state.pop("job", None)
-            elif status in {"sending", "uncertain"} and receipt.get("phase") != "preparing":
+            elif (
+                status in {"sending", "uncertain"}
+                and receipt.get("phase") != "preparing"
+            ):
                 job["status"] = "uncertain"
             elif status == "rejected" and int(receipt.get("attempts") or 0) >= 3:
                 job["status"] = "failed"

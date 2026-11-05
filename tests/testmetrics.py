@@ -58,6 +58,18 @@ def _load_db_module():
     return module
 
 
+async def _record_news_snapshot(db, target, source, source_name, image_url, items):
+    return await db.add_sent_history_with_news_snapshot(
+        {"target_id": target, "share_type": "news", "content": source_name},
+        {
+            "source_key": source,
+            "source_name": source_name,
+            "image_url": image_url,
+            "items": items,
+        },
+    )
+
+
 class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
     async def test_deferred_database_initialization_creates_schema_asynchronously(self):
         mod = _load_db_module()
@@ -91,7 +103,8 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             db = mod.DatabaseManager(Path(tmp))
             target = "aiocqhttp:GroupMessage:123"
             focus_key = f"news_snapshot:{target}:focus"
-            await db.add_news_snapshot(
+            await _record_news_snapshot(
+                db,
                 target,
                 "thepaper",
                 "澎湃热搜",
@@ -409,14 +422,29 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_db_module()
         with tempfile.TemporaryDirectory() as tmp:
             db = mod.DatabaseManager(Path(tmp))
-            await db.add_news_snapshot(
-                "group-1", "weibo", "微博热搜", "weibo-09.png", [{"title": "微博09"}]
+            await _record_news_snapshot(
+                db,
+                "group-1",
+                "weibo",
+                "微博热搜",
+                "weibo-09.png",
+                [{"title": "微博09"}],
             )
-            await db.add_news_snapshot(
-                "group-1", "douyin", "抖音热榜", "douyin-10.png", [{"title": "抖音10"}]
+            await _record_news_snapshot(
+                db,
+                "group-1",
+                "douyin",
+                "抖音热榜",
+                "douyin-10.png",
+                [{"title": "抖音10"}],
             )
-            await db.add_news_snapshot(
-                "group-1", "weibo", "微博热搜", "weibo-11.png", [{"title": "微博11"}]
+            await _record_news_snapshot(
+                db,
+                "group-1",
+                "weibo",
+                "微博热搜",
+                "weibo-11.png",
+                [{"title": "微博11"}],
             )
 
             latest = await db.get_latest_news_snapshot("group-1")
@@ -544,7 +572,8 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
         mod = _load_db_module()
         with tempfile.TemporaryDirectory() as tmp:
             db = mod.DatabaseManager(Path(tmp))
-            await db.add_news_snapshot(
+            await _record_news_snapshot(
+                db,
                 "group-1",
                 "douyin",
                 "抖音热榜",
@@ -552,7 +581,8 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
                 [{"title": "抖音保底快照"}],
             )
             for index in range(100):
-                await db.add_news_snapshot(
+                await _record_news_snapshot(
+                    db,
                     "group-1",
                     "weibo",
                     "微博热搜",
@@ -574,11 +604,11 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
             await db.set_qzone_state("qzone", {"enabled": True})
             await db.set_context_state("session", {"items": [1]})
             await db.set_cache_state("focus", {"index": 1})
-            await db.add_news_snapshot(
-                "group-1", "weibo", "微博热搜", "old-1.png", [{"title": "旧快照"}]
+            await _record_news_snapshot(
+                db, "group-1", "weibo", "微博热搜", "old-1.png", [{"title": "旧快照"}]
             )
-            await db.add_news_snapshot(
-                "group-1", "weibo", "微博热搜", "old-2.png", [{"title": "最新快照"}]
+            await _record_news_snapshot(
+                db, "group-1", "weibo", "微博热搜", "old-2.png", [{"title": "最新快照"}]
             )
 
             old_time = (datetime.now() - timedelta(days=10)).strftime(
@@ -639,7 +669,7 @@ class DashboardDbMetricsTests(unittest.IsolatedAsyncioTestCase):
 
             recent = await db.get_recent_history(limit=5)
             failures = await db.get_recent_failures(limit=5)
-            media = await db.get_recent_media(limit=5)
+            media = await db.get_recent_dynamics(limit=5, media_kind="image")
             dynamics = await db.get_recent_dynamics(limit=5)
             stats = await db.get_target_stats(days=30)
             summary = await db.get_history_summary()

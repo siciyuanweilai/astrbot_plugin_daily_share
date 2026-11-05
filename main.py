@@ -136,13 +136,17 @@ class DailySharePlugin(Star):
     def bili_interaction_enabled(self) -> bool:
         return self.bili_dynamics.owns_interactions()
 
-    async def decide_bili_interaction(self, context: dict, *, expression: bool = False) -> dict:
+    async def decide_bili_interaction(
+        self, context: dict, *, expression: bool = False
+    ) -> dict:
         return await self.bili_dynamics.interact(context, expression=expression)
 
     async def prepare_bili_dynamic(self, opportunity: dict) -> dict:
         return await self.bili_dynamics.prepare(opportunity)
 
-    async def record_bili_dynamic_receipt(self, account: str, intent: str, receipt: dict) -> None:
+    async def record_bili_dynamic_receipt(
+        self, account: str, intent: str, receipt: dict
+    ) -> None:
         await self.bili_dynamics.receipt(account, intent, receipt)
 
     async def initialize(self) -> None:
@@ -156,14 +160,21 @@ class DailySharePlugin(Star):
                 await self.runtime_service.terminate()
             raise
 
-    async def coordinate_autonomous_contact(self, target: str, *, owner: str = "",
-                                           action: str = "check", rhythm: dict | None = None,
-                                           selected: list | None = None) -> dict:
+    async def coordinate_autonomous_contact(
+        self,
+        target: str,
+        *,
+        owner: str = "",
+        action: str = "check",
+        rhythm: dict | None = None,
+        selected: list | None = None,
+    ) -> dict:
         """统一独立主动联系的节奏，不接收正文或私人关系资料。"""
         if not self._is_initialized or self._is_terminated:
             return {"ready": False, "retry_after": 60, "reason": "分享协调服务正在重载"}
         return await self.share_continuations.pacing.coordinate(
-            target, owner=owner, action=action, rhythm=rhythm, selected=selected or [])
+            target, owner=owner, action=action, rhythm=rhythm, selected=selected or []
+        )
 
     async def terminate(self) -> None:
         try:

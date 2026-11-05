@@ -320,7 +320,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_real_feed_reply_buttons_do_not_hide_other_users_root_comments(self):
-        parser = importlib.import_module(f"{self.models.__package__}.parser")
+        parser = importlib.import_module(f"{self.models.__package__}.parse")
         # 好友动态 HTML 的回复按钮指向当前评论，不表示当前评论正在回复自己。
         html = """
         <li class="comments-item" data-type="commentroot" data-tid="1"
@@ -604,7 +604,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_joined_third_party_thread_continues_with_short_json_ids(self):
         await self.run_task()
-        parser = importlib.import_module(f"{self.models.__package__}.parser")
+        parser = importlib.import_module(f"{self.models.__package__}.parse")
         self.post.comments = parser.parse_comments(
             [
                 {
@@ -644,7 +644,7 @@ class FriendCommentReplyTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_joined_third_party_thread_continues_with_short_html_ids(self):
         await self.run_task()
-        parser = importlib.import_module(f"{self.models.__package__}.parser")
+        parser = importlib.import_module(f"{self.models.__package__}.parse")
         post = parser.parse_feed_item(
             {
                 "uin": self.post.uin,

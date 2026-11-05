@@ -113,10 +113,18 @@ async def mark_interaction_submission(
 
 
 @asynccontextmanager
-async def interaction_submission(owner, action, post, comment=None, parent=None, *, key=""):
+async def interaction_submission(
+    owner, action, post, comment=None, parent=None, *, key=""
+):
     """准备失败保留重新判断机会；实际写请求一旦开始便保留防重。"""
-    keys = list(dict.fromkeys([key or interaction_key(action, post, comment, parent),
-                              interaction_key(action, post, comment, parent)]))
+    keys = list(
+        dict.fromkeys(
+            [
+                key or interaction_key(action, post, comment, parent),
+                interaction_key(action, post, comment, parent),
+            ]
+        )
+    )
 
     async def checkpoint(completed=False):
         for item in keys:
@@ -147,12 +155,15 @@ async def wants_interaction(owner, action, post, comment=None, parent=None):
             previous = states.get(key) or {}
             now = datetime.now(SHANGHAI).timestamp()
             preference = (
-                {"like_willingness": _like_willingness(owner)} if action == "like" else {}
+                {"like_willingness": _like_willingness(owner)}
+                if action == "like"
+                else {}
             )
             # 用户修改点赞偏好后只重评未提交的决定；生活状态变化不反复抽签。
             reconsider = bool(
                 preference
-                and previous.get("like_willingness", -1) != preference["like_willingness"]
+                and previous.get("like_willingness", -1)
+                != preference["like_willingness"]
                 and (
                     previous.get("decision") == "skip"
                     or (
@@ -199,8 +210,12 @@ async def wants_interaction(owner, action, post, comment=None, parent=None):
                 },
                 max_items=512,
             )
-            target = QZONE_TARGET_ID if action.startswith("self_") else (
-                qzone_relationship_target(owner, comment or post) or QZONE_TARGET_ID
+            target = (
+                QZONE_TARGET_ID
+                if action.startswith("self_")
+                else (
+                    qzone_relationship_target(owner, comment or post) or QZONE_TARGET_ID
+                )
             )
             context, persona = await gather_readonly(
                 owner.ctx_service.get_qzone_interaction_context(target),

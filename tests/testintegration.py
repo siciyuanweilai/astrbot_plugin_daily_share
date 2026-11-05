@@ -227,6 +227,10 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("语" * 500, prompt)
         self.assertNotIn("语" * 501, prompt)
 
+    @unittest.skipUnless(
+        (WORKSPACE / "astrbot_plugin_daily_life" / "main.py").is_file(),
+        "需要同级 daily_life 源码",
+    )
     def test_life_145_public_projection_preserves_resources_and_hides_private_kernel(
         self,
     ):
@@ -237,8 +241,6 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             import sys
             import types
 
-            sys.path.insert(0, {str(WORKSPACE / "astrbot_plugin_daily_life" / "tests")!r})
-            import support
             sys.path.insert(0, {str(WORKSPACE)!r})
             from astrbot_plugin_daily_life.core.runtime.mirror.export import SnapshotExportComponent
             from astrbot_plugin_daily_life.core.runtime.mirror.sharing import project_continuity
@@ -299,7 +301,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         result = subprocess.run(
             [sys.executable, "-c", script],
-            cwd=WORKSPACE,
+            cwd=Path.cwd(),
             capture_output=True,
             text=True,
             timeout=30,
@@ -307,6 +309,10 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(
+        (WORKSPACE / "astrbot_plugin_daily_life" / "main.py").is_file(),
+        "需要同级 daily_life 源码",
+    )
     def test_bridge_calls_real_daily_life_plugin_entry_in_isolated_runtime(self):
         script = textwrap.dedent(
             f"""
@@ -316,8 +322,6 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             import types
             from pathlib import Path
 
-            sys.path.insert(0, {str(WORKSPACE / "astrbot_plugin_daily_life" / "tests")!r})
-            import support
             sys.path.insert(0, {str(WORKSPACE)!r})
 
             from astrbot_plugin_daily_life.main import DailyLifePlugin
@@ -398,9 +402,10 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 async def generate_life_video_asset(self, event, prompt, reference_image=''):
                     return types.SimpleNamespace(url=f'video://{{prompt}}')
 
-                async def generate_share_image_task(self, event, prompt, *, task_key, contains_character=False, target_umo=''):
+                async def generate_share_image_task(self, event, prompt, *, task_key, contains_character=False, target_umo='', public_only=False):
                     assert target_umo == 'bot-test:FriendMessage:user-test-a'
                     assert task_key == 'contract:image'
+                    assert public_only is False
                     return {{'status': 'ready', 'path': 'original.png'}}
 
                 async def generate_share_video_task(self, event, prompt, *, task_key, reference_image='', target_umo=''):
@@ -528,7 +533,7 @@ class DailyLifeBridgeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         result = subprocess.run(
             [sys.executable, "-c", script],
-            cwd=WORKSPACE,
+            cwd=Path.cwd(),
             capture_output=True,
             text=True,
             timeout=30,

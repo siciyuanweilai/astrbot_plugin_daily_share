@@ -256,7 +256,9 @@ class MediaRecoveryTests(unittest.IsolatedAsyncioTestCase):
             all(call.kwargs["expected"] == "original-facts" for call in check)
         )
 
-    async def test_waiting_contact_defers_for_review_on_new_chat_without_resubmitting(self):
+    async def test_waiting_contact_defers_for_review_on_new_chat_without_resubmitting(
+        self,
+    ):
         self.enable_scheduled()
         job = await self.job()
         job.update(

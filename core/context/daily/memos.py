@@ -87,12 +87,25 @@ class ContextLifeMemoryService(ContextComponent):
             if isinstance(state, dict):
                 known = state.get("observed_dimensions", [])
                 dimensions = []
-                for key, label in (("familiarity", "熟悉"), ("trust", "信任"), ("affinity", "好感")):
+                for key, label in (
+                    ("familiarity", "熟悉"),
+                    ("trust", "信任"),
+                    ("affinity", "好感"),
+                ):
                     value = state.get(key)
-                    if key in known and isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                    if (
+                        key in known
+                        and isinstance(value, (int, float))
+                        and not isinstance(value, bool)
+                        and math.isfinite(value)
+                    ):
                         dimensions.append(f"{label} {max(0, min(1, value)):.2f}")
                 if dimensions:
-                    details.append("长期关系：" + "、".join(dimensions) + "（独立维度，非当前心情或行为许可）")
+                    details.append(
+                        "长期关系："
+                        + "、".join(dimensions)
+                        + "（独立维度，非当前心情或行为许可）"
+                    )
             count = item.get("interactions", 0)
             suffix = f"；{'；'.join(details)}" if details else ""
             lines.append(f"- {name}：互动 {count} 次{suffix}")

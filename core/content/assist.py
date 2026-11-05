@@ -64,7 +64,12 @@ class ContentSupportService(ContentComponent):
         return result
 
     async def _review_share_expression(
-        self, text: str | None, ctx: dict, *, required_terms=(), reflow: bool = False,
+        self,
+        text: str | None,
+        ctx: dict,
+        *,
+        required_terms=(),
+        reflow: bool = False,
         require_review: bool = False,
     ) -> str | None:
         """只检查当前分享正文；题目、受众及独立格式不能被二次润色覆盖。"""
@@ -117,7 +122,11 @@ class ContentSupportService(ContentComponent):
                 if require_review:
                     raise ValueError("review lost protected terms")
                 return text
-            if output_format and not reflow and len(rewritten.splitlines()) != len(text.splitlines()):
+            if (
+                output_format
+                and not reflow
+                and len(rewritten.splitlines()) != len(text.splitlines())
+            ):
                 if require_review:
                     raise ValueError("review changed preserved layout")
                 return text

@@ -78,12 +78,10 @@ class AccountIsolationTests(unittest.IsolatedAsyncioTestCase):
         first = await service.context()
         service._store_query_posts(("recent",), [object()])
         service._post_cache["101:old"] = object()
-        service._last_friend_feeds_meta = {"account": 101}
         plugin._cached_qq_adapter_id = "b"
 
         self.assertIsNone(service._cached_query_posts(("recent",)))
         self.assertEqual(service._post_cache, {})
-        self.assertEqual(service._last_friend_feeds_meta, {})
         second = await service.context()
         self.assertEqual((first.uin, second.uin), (101, 202))
         self.assertIsNot(first, second)
@@ -288,7 +286,7 @@ class ChatAndModelHealthTests(unittest.IsolatedAsyncioTestCase):
             "new-context",
         )
         release.set()
-        self.assertEqual(await pending, "old-context")
+        self.assertEqual(await pending, "")
         await asyncio.sleep(0)
         self.assertEqual(
             await helper.cached_context_prompt(

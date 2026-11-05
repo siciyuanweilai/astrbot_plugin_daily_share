@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-ef6f8f" alt="版本 1.3.0"></a>
+  <a href="./CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.1-ef6f8f" alt="版本 1.3.1"></a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.26.0-4c78a8" alt="AstrBot >= 4.26.0">
   <img src="https://img.shields.io/badge/platform-aiocqhttp%20%7C%20qq__official%20%7C%20weixin__oc-4f8a66" alt="支持 aiocqhttp、qq_official 和 weixin_oc">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555" alt="MIT License"></a>
@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.3.0 版本更新**：自评按独立意愿和新增表达价值判断，续接分享承接最新对话并沿用自然语气与分段；优化新闻、记忆和上下文缓存，限制后台并发与等待，清理废弃发布链和重复代码。详见 [更新日志](./CHANGELOG.md) 。
+> **v1.3.1 版本更新**：整理源码与开发文档，修复测试入口和过时用例，补齐新闻缓存回归检查。本次为维护升级，可直接沿用现有配置和数据。详见 [更新日志](./CHANGELOG.md) 。
 
 ---
 
@@ -366,16 +366,16 @@ B站独立选择素材和发布时间，复用 QQ 空间的“决定是否分享
 
 ## 🧪 开发与验证
 
-在插件根目录执行：
+在已配置 AstrBot 和插件运行依赖的 Python 3.12 环境中，从插件根目录执行检查；pytest 和 Ruff 按需安装：
 
 ~~~bash
-pytest -q
+python -m pytest -p tests.pytestplugin -q tests
 python -m tests
 python -m ruff check .
 python -m ruff format --check .
 ~~~
 
-测试覆盖配置、指令、新闻、调度、多平台路由、权限、媒体、QQ 空间、仪表盘和生命周期。测试模块隔离运行，`python -m tests` 汇总实际用例数，`pytest` 每个模块显示一个测试项。
+测试覆盖配置、指令、新闻、调度、多平台路由、权限、媒体、QQ 空间、仪表盘和生命周期。测试模块隔离运行，`python -m tests` 汇总实际用例数，`pytest` 每个模块显示一个测试项。两项真实跨插件接口测试需要同级 `astrbot_plugin_daily_life` 源码及其运行依赖；未提供源码时明确跳过，汇总结果同时显示跳过数。
 
 `python -m tests tests.testcachehealth tests.testperformance tests.testhealth` 验证缓存、并发与聊天响应边界。新闻和百科资料使用有界短缓存；最新生活状态、主动联系判断与生成文案每次重新核对，保持自然互动的连续性。
 

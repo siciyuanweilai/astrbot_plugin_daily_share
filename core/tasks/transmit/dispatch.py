@@ -7,7 +7,11 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 
 from ...toolkit import format_exception, log_exception
 from ...readiness import PlatformNotReady
-from ...integrations.contact import ShareContactPending, ShareContactChanged, ShareContactReview
+from ...integrations.contact import (
+    ShareContactPending,
+    ShareContactChanged,
+    ShareContactReview,
+)
 from ..taskbase import TaskServiceBase
 from .chain import TaskDeliveryChainService
 from .chainmedia import TaskDeliveryMediaService
@@ -112,7 +116,12 @@ class TaskDeliveryService(TaskServiceBase):
             )
             return state["sent_any"]
 
-        except (PlatformNotReady, ShareContactPending, ShareContactChanged, ShareContactReview):
+        except (
+            PlatformNotReady,
+            ShareContactPending,
+            ShareContactChanged,
+            ShareContactReview,
+        ):
             if state["sent_any"] or self.status.has_sent_stage(media_result):
                 return True
             raise

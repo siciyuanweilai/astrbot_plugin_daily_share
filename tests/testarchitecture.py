@@ -681,24 +681,20 @@ class TaskArchitectureTests(unittest.TestCase):
             "delete_comment",
             "reply_comment",
             "detail",
-            "last_friend_feeds_meta",
             "query_posts",
-            "query_home_posts",
             "query_recent_posts",
             "query_about_me",
             "query_mention_posts",
             "query_last_year",
-            "query_favorites",
             "query_message_board",
             "query_relations",
             "query_visit_stats",
         }
 
         self.assertTrue(public_operations <= qzone_type.__dict__.keys())
-        for name in public_operations - {"last_friend_feeds_meta"}:
+        for name in public_operations:
             with self.subTest(operation=name):
                 self.assertTrue(callable(qzone_type.__dict__[name]))
-        self.assertIsInstance(qzone_type.__dict__["last_friend_feeds_meta"], property)
 
     def test_main_plugin_registers_the_complete_llm_tool_contract(self):
         mod = _load_main_module()
@@ -913,12 +909,8 @@ class TaskArchitectureTests(unittest.TestCase):
             "daily_life_bridge": ("delivery",),
             "qzone_service": (
                 "gateway",
-                "native",
                 "headers",
-                "cookies",
                 "timeline",
-                "errors",
-                "requests",
                 "replies",
                 "comment_tools",
                 "comments",
@@ -926,7 +918,6 @@ class TaskArchitectureTests(unittest.TestCase):
                 "details",
                 "extra",
                 "posts",
-                "home",
                 "recent",
                 "reply_targets",
                 "reply_payloads",

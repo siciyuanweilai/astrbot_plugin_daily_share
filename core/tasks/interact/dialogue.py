@@ -133,7 +133,10 @@ class QzoneAutoPromptService:
             result = json.loads(raw)
         except (TypeError, ValueError) as exc:
             raise RuntimeError("自评判断未返回有效内容") from exc
-        if not isinstance(result, dict) or result.get("decision") not in {"comment", "skip"}:
+        if not isinstance(result, dict) or result.get("decision") not in {
+            "comment",
+            "skip",
+        }:
             raise RuntimeError("自评判断格式无效")
         if result["decision"] == "skip":
             return None

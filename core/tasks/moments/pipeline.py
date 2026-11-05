@@ -198,7 +198,13 @@ class TaskQzoneFlowService:
                 event=event,
             )
             if job is not None:
-                job["prepared_media"] = [target_local_img, target_local_img, None, None, ""]
+                job["prepared_media"] = [
+                    target_local_img,
+                    target_local_img,
+                    None,
+                    None,
+                    "",
+                ]
                 await job["service"].save(job)
         qzone_images = await self.owner._prepare_qzone_publish_media(
             target_local_img=target_local_img,

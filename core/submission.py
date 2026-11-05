@@ -11,7 +11,9 @@ current_request_submission = ContextVar("daily_share_request_submission", defaul
 
 
 @asynccontextmanager
-async def request_submission(checkpoint: Callable[[], Awaitable[None]]) -> AsyncIterator[dict]:
+async def request_submission(
+    checkpoint: Callable[[], Awaitable[None]],
+) -> AsyncIterator[dict]:
     """仅当前动作的实际写请求能领取提交标记；子任务退出后不能补写。"""
     state = {"checkpoint": checkpoint, "submitted": False, "active": True}
     token = current_request_submission.set(state)

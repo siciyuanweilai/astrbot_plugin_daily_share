@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import types
+import json
 import unittest
 from pathlib import Path
 
@@ -345,7 +346,14 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
         class Bridge:
             async def search_evidence(self, query, **kwargs):
                 calls.append((query, kwargs))
-                return {"status": "ok", "content": "联网证据"}
+                return {
+                    "status": "ok",
+                    "content": "联网证据",
+                    "quality": "verified",
+                    "sources": [],
+                    "missing_aspects": [],
+                    "providers": ["test"],
+                }
 
         service.daily_life_bridge = Bridge()
         result = await service.news._collect_news_backgrounds(
@@ -361,7 +369,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result[0][1], "这是来自新闻接口且足够长的真实摘要内容。")
-        self.assertEqual(result[1][1], "联网证据")
+        self.assertEqual(json.loads(result[1][1])["content"], "联网证据")
         self.assertEqual(
             calls,
             [
@@ -441,7 +449,14 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
         class Bridge:
             async def search_evidence(self, query, **kwargs):
                 calls.append((query, kwargs))
-                return {"status": "ok", "content": "有效联网证据"}
+                return {
+                    "status": "ok",
+                    "content": "有效联网证据",
+                    "quality": "verified",
+                    "sources": [],
+                    "missing_aspects": [],
+                    "providers": ["test"],
+                }
 
         service.daily_life_bridge = Bridge()
         result = await service.recommendation._fetch_content_reference(
@@ -457,7 +472,7 @@ class ContentPrefixSwitchesTests(unittest.IsolatedAsyncioTestCase):
             [("测试主题", {"category": "recommendation", "target_umo": "target"})],
         )
         self.assertIn("百科：测试主题 的百科资料", result)
-        self.assertIn("联网：有效联网证据", result)
+        self.assertIn('"content": "有效联网证据"', result)
 
     def test_default_content_library_survives_missing_schema_defaults(self):
         content_module = _load_content_module()

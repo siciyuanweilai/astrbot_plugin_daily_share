@@ -10,7 +10,7 @@ class CommentIdentityTests(unittest.TestCase):
     def setUp(self):
         self.service = _load_qzone_service().QzoneService
         self.parser = importlib.import_module(
-            f"{self.service.__module__.rsplit('.', 1)[0]}.parser"
+            f"{self.service.__module__.rsplit('.', 1)[0]}.parse"
         )
 
     def test_reply_button_self_target_is_not_a_root_reply(self):
