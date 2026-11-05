@@ -2424,139 +2424,11 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
             index="1",
         )
 
-        self.assertIn("标题：�commit_news_snapshot_stores_payload_without_fetch(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
+        self.assertIn("标题：目标新闻", result)
+        self.assertIn(f"来源：{YICAI_NAME}", result)
+        self.assertIn("来源标识：yicai", result)
 
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 8)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻1", "url": "https://example.com/1"}],
-                "zhihu",
-            ),
-        )
-
-        snapshot = plugin.db.news_snapshots[0]
-        self.assertTrue(ok)
-        self.assertEqual(plugin.news_service.calls, [])
-        self.assertEqual(len(snapshot["items"]), 1)
-        self.assertEqual(snapshot["source_key"], "zhihu")
-
-    async def test_news_history_commit_invalidates_tool_context(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        invalidations = []
-        plugin.support_service = types.SimpleNamespace(
-            operations=types.SimpleNamespace(
-                tool_context=types.SimpleNamespace(
-                    invalidate_context_prompt=lambda kind, target: invalidations.append(
-                        (kind, target)
-                    )
-                )
-            )
-        )
-        manager = _new_manager(mod, plugin)
-        target = GROUP_TARGET_1
-
-        await manager.executor_helpers.records.record_share_history(
-            target_id=target,
-            share_type=mod.ShareType.NEWS,
-            content="新闻内容",
-            success=True,
-            source_type="scheduled",
-            news_snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻", "url": "https://example.com/news"}],
-                "yicai",
-            ),
-        )
-
-        self.assertEqual(invalidations, [("news", target)])
-
-    async def test_load_execute_share_news_does_not_publish_snapshot_before_send(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            def select_news_source(self, excluded_source=None):
-                return "yicai"
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 21)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        loaded, news_data = await manager.share.news.load_news(
-            uid="aiocqhttp:GroupMessage:123",
-            stype=mod.ShareType.NEWS,
-            news_source="yicai",
-            history_source="test",
-            progress_id="progress",
-        )
-
-        self.assertTrue(loaded)
-        self.assertEqual(len(news_data[0]), 20)
-        self.assertEqual(plugin.news_service.calls, [("yicai", 50, True)])
-        self.assertEqual(plugin.db.news_snapshots, [])
-        self.assertNotIn(
-            manager.snapshot_store._news_snapshot_key("aiocqhttp:GroupMessage:123"),
-            plugin.db.state,
-        )
-
-    async def test_news_link_ignores_unsent_share_state_and_does_not_refresh(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def get_hot_news(self, *args, **kwargs):
-                raise AssertionError("news-link lookup must not refresh remote news")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        plugin.db.state[manager.snapshot_store._news_snapshot_key(target)] = {
-            "source_key": "weibo",
-            "source_name": "微博热搜",
-            "items": [{"title": "未发送新闻", "url": "https://example.com/unsent"}],
-        }
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="1",
-            source_key="weibo",
-        )
-
-        self.assertIn("还没有可用于反查的新闻列表", result)
-        self.assertNotIn("https://example.com/unsent", result)
-
-    async def test_news_link_rejects_expired_sent_snapshot(self):
+    async def test_get_cached_news_link_keeps_full_sentence_query_as_keyword(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
         manager = _new_manager(mod, plugin)
@@ -2564,1400 +2436,2226 @@ class TaskFailureMessageTests(unittest.IsolatedAsyncioTestCase):
         await manager.snapshot_store.commit_sent_news_snapshot(
             target,
             snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "旧新闻", "url": "https://example.com/old"}],
+                [{"title": "目标新闻", "url": "https://example.com/target"}],
+                "yicai",
+            ),
+        )
+
+        result = await manager.snapshot_store.get_cached_news_link(
+            target,
+            query="第1条链接",
+        )
+
+        self.assertIn("新闻列表里没找到", result)
+        self.assertNotIn("https://example.com/target", result)
+        self.assertNotIn("阿拉伯数字", result)
+
+    async def test_get_cached_news_link_prefers_valid_index_over_query(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        await manager.snapshot_store.commit_sent_news_snapshot(
+            target,
+            snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [
+                    {"title": "第一条", "url": "https://example.com/1"},
+                    {"title": "第二条", "url": "https://example.com/2"},
+                ],
+                "yicai",
+            ),
+        )
+
+        result = await manager.snapshot_store.get_cached_news_link(
+            target,
+            index="第二条",
+            query="第一条",
+        )
+
+        self.assertIn("第二条", result)
+        self.assertIn("https://example.com/2", result)
+
+    async def test_get_cached_news_link_uses_query_when_index_is_invalid(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        target = "aiocqhttp:GroupMessage:123"
+        await manager.snapshot_store.commit_sent_news_snapshot(
+            target,
+            snapshot_data=manager.snapshot_store.news_snapshot_payload(
+                [{"title": "目标新闻", "url": "https://example.com/target"}],
+                "yicai",
+            ),
+        )
+
+        result = await manager.snapshot_store.get_cached_news_link(
+            target,
+            index="无法识别",
+            query="目标新闻",
+        )
+
+        self.assertIn("目标新闻", result)
+        self.assertIn("https://example.com/target", result)
+
+    async def test_share_history_keeps_success_and_records_media_degradation(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+
+        await manager.executor_helpers.records.record_share_history(
+            target_id=GROUP_TARGET_1,
+            share_type=mod.ShareType.MOOD,
+            content="已发送内容",
+            success=True,
+            source_type="scheduled",
+            degradation_reason="视频生成失败，继续发送图片",
+            media_result={
+                "text_sent": True,
+                "image_sent": True,
+                "image_path": "generated.png",
+                "partial_errors": [
+                    {
+                        "stage": "audio",
+                        "stage_label": "语音",
+                        "message": "平台不支持",
+                    }
+                ],
+            },
+        )
+
+        _args, history = plugin.db.history[0]
+        self.assertTrue(history["success"])
+        self.assertTrue(history["degraded"])
+        self.assertIn("视频生成失败", history["degradation_reason"])
+        self.assertIn("语音发送失败", history["degradation_reason"])
+
+    def test_independent_target_schedule_accepts_clock_time(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+
+        parsed = manager.targets.parse_targets_config(
+            [f"{GROUP_TARGET_1}:8:30:问候"], expected_group=True
+        )
+
+        self.assertEqual(parsed[GROUP_TARGET_1]["cron"], "30 8 * * *")
+        self.assertEqual(parsed[GROUP_TARGET_1]["seq"], "问候")
+
+    def test_target_config_rejects_incomplete_session_id_and_wrong_bucket(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+
+        self.assertEqual(
+            manager.targets.parse_targets_config(["group-test-001"]),
+            {},
+        )
+        self.assertEqual(
+            manager.targets.parse_targets_config([USER_TARGET_1], expected_group=True),
+            {},
+        )
+
+    def test_target_platform_selection_uses_exact_instance_id(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class Platform:
+            def __init__(self, platform_id):
+                self.platform_id = platform_id
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=self.platform_id,
+                    name="aiocqhttp",
+                    support_proactive_message=True,
+                )
+
+        main = Platform(PLATFORM_MAIN)
+        backup = Platform(PLATFORM_BACKUP)
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(get_insts=lambda: [backup, main])
+        )
+        manager = _new_manager(mod, plugin)
+
+        selected = manager.targets._select_platform_instance_for_target(GROUP_TARGET_1)
+
+        self.assertIs(selected, main)
+        self.assertIsNone(
+            manager.targets._select_platform_instance_for_target(
+                "bot-missing:GroupMessage:group-test-001"
+            )
+        )
+
+    def test_target_input_auto_binds_only_available_instance(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class Platform:
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=PLATFORM_MAIN,
+                    name="aiocqhttp",
+                    support_proactive_message=True,
+                )
+
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(get_insts=lambda: [Platform()])
+        )
+        manager = _new_manager(mod, plugin)
+
+        target = manager.targets.resolve_target_input(
+            "group-test-003",
+            expected_group=True,
+        )
+
+        self.assertEqual(
+            target,
+            f"{PLATFORM_MAIN}:GroupMessage:group-test-003",
+        )
+
+    def test_target_input_requires_selection_with_multiple_instances(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class Platform:
+            def __init__(self, platform_id):
+                self.platform_id = platform_id
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=self.platform_id,
+                    name="aiocqhttp",
+                    support_proactive_message=True,
+                )
+
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(
+                get_insts=lambda: [
+                    Platform(PLATFORM_MAIN),
+                    Platform(PLATFORM_BACKUP),
+                ]
+            )
+        )
+        manager = _new_manager(mod, plugin)
+
+        with self.assertRaisesRegex(ValueError, "多个机器人实例"):
+            manager.targets.resolve_target_input(
+                "user-test-003",
+                expected_group=False,
+            )
+
+        target = manager.targets.resolve_target_input(
+            "user-test-003",
+            expected_group=False,
+            adapter_id=PLATFORM_BACKUP,
+        )
+        self.assertEqual(
+            target,
+            f"{PLATFORM_BACKUP}:FriendMessage:user-test-003",
+        )
+
+    def test_same_id_across_platforms_is_resolved_by_target_shape(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class Platform:
+            def __init__(self, platform_type):
+                self.platform_type = platform_type
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=PLATFORM_MAIN,
+                    name=self.platform_type,
+                    support_proactive_message=True,
+                )
+
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(
+                get_insts=lambda: [Platform("aiocqhttp"), Platform("weixin_oc")]
+            )
+        )
+        manager = _new_manager(mod, plugin)
+
+        qq_target = manager.targets.resolve_target_input(
+            "10001",
+            expected_group=False,
+        )
+        weixin_target = manager.targets.resolve_target_input(
+            "contact@im.wechat",
+            expected_group=False,
+        )
+
+        self.assertEqual(qq_target, f"{PLATFORM_MAIN}:FriendMessage:10001")
+        self.assertEqual(
+            weixin_target,
+            f"{PLATFORM_MAIN}:FriendMessage:contact@im.wechat",
+        )
+        self.assertEqual(
+            manager.targets.ensure_target_platform_routable(qq_target).platform_type,
+            "aiocqhttp",
+        )
+        self.assertEqual(
+            manager.targets.ensure_target_platform_routable(
+                weixin_target
+            ).platform_type,
+            "weixin_oc",
+        )
+
+    async def test_same_id_across_platforms_sends_through_selected_instance(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        calls = []
+
+        class Platform:
+            def __init__(self, platform_type):
+                self.platform_type = platform_type
+
+            def get_client(self):
+                return object()
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=PLATFORM_MAIN,
+                    name=self.platform_type,
+                    support_proactive_message=True,
+                )
+
+            async def send_by_session(self, session, chain):
+                calls.append((self.platform_type, session.session_id, chain))
+
+        async def unexpected_framework_send(_uid, _chain):
+            raise AssertionError("同名平台不应交给框架按 ID 取第一个实例")
+
+        plugin.context = types.SimpleNamespace(
+            send_message=unexpected_framework_send,
+            platform_manager=types.SimpleNamespace(
+                get_insts=lambda: [Platform("weixin_oc"), Platform("aiocqhttp")]
+            ),
+        )
+        manager = _new_manager(mod, plugin)
+        target = f"{PLATFORM_MAIN}:FriendMessage:10001"
+
+        await manager.delivery.send_message_chain(
+            target,
+            _MessageChain().message("测试内容"),
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][:2], ("aiocqhttp", "10001"))
+
+    async def test_duplicate_platform_ids_block_delivery_before_framework_send(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        calls = []
+
+        class Platform:
+            def __init__(self, platform_type):
+                self.platform_type = platform_type
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=PLATFORM_MAIN,
+                    name=self.platform_type,
+                    support_proactive_message=True,
+                )
+
+        async def send_message(_uid, _chain):
+            calls.append(True)
+            return True
+
+        plugin.context = types.SimpleNamespace(
+            send_message=send_message,
+            platform_manager=types.SimpleNamespace(
+                get_insts=lambda: [Platform("aiocqhttp"), Platform("aiocqhttp")]
+            ),
+        )
+        manager = _new_manager(mod, plugin)
+
+        with self.assertRaisesRegex(ValueError, "ID.*冲突"):
+            await manager.delivery.send_message_chain(
+                USER_TARGET_1,
+                _MessageChain().message("测试内容"),
+            )
+
+        self.assertEqual(calls, [])
+
+    def test_webchat_and_weixin_are_private_only_target_candidates(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        class Platform:
+            def __init__(self, platform_id, platform_type):
+                self.platform_id = platform_id
+                self.platform_type = platform_type
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=self.platform_id,
+                    name=self.platform_type,
+                    support_proactive_message=True,
+                )
+
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(
+                get_insts=lambda: [
+                    Platform("browser-main", "webchat"),
+                    Platform("wechat-main", "weixin_oc"),
+                    Platform(PLATFORM_MAIN, "aiocqhttp"),
+                ]
+            )
+        )
+        manager = _new_manager(mod, plugin)
+
+        self.assertEqual(
+            manager.targets.get_target_platform_candidates(expected_group=True),
+            [PLATFORM_MAIN],
+        )
+        self.assertEqual(
+            manager.targets.get_target_platform_candidates(expected_group=False),
+            ["browser-main", "wechat-main", PLATFORM_MAIN],
+        )
+
+    def test_target_input_keeps_matching_offline_binding(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(get_insts=lambda: [])
+        )
+        manager = _new_manager(mod, plugin)
+
+        target = manager.targets.resolve_target_input(
+            "group-test-004",
+            expected_group=True,
+            adapter_id=PLATFORM_MAIN,
+            original_umo=f"{PLATFORM_MAIN}:GroupMessage:group-test-004",
+        )
+
+        self.assertEqual(
+            target,
+            f"{PLATFORM_MAIN}:GroupMessage:group-test-004",
+        )
+        with self.assertRaisesRegex(ValueError, "当前没有可绑定"):
+            manager.targets.resolve_target_input(
+                "group-test-005",
+                expected_group=True,
+            )
+
+    def test_event_reuse_requires_exact_platform_session(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        event = _Event(unified_msg_origin=GROUP_TARGET_1)
+
+        self.assertTrue(manager.targets.event_matches_target(event, GROUP_TARGET_1))
+        self.assertFalse(
+            manager.targets.event_matches_target(
+                event,
+                f"{PLATFORM_BACKUP}:GroupMessage:group-test-001",
+            )
+        )
+
+    def test_custom_schedule_keeps_full_session_before_platform_startup(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.context = types.SimpleNamespace(
+            platform_manager=types.SimpleNamespace(get_insts=lambda: [])
+        )
+        plugin.receiver_conf = {
+            "groups": [f"{GROUP_TARGET_1}:08:30:心情"],
+            "users": [],
+        }
+        manager = _new_manager(mod, plugin)
+
+        manager.schedule.setup_custom_target_crons()
+
+        job_ids = {job["kwargs"].get("id") for job in plugin.scheduler.jobs}
+        self.assertIn(f"custom_share_{GROUP_TARGET_1}", job_ids)
+
+    def test_broadcast_targets_can_be_limited_to_groups_or_users(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {
+            "groups": [GROUP_TARGET_1, GROUP_TARGET_2],
+            "users": [USER_TARGET_1],
+        }
+        manager = _new_manager(mod, plugin)
+
+        self.assertEqual(
+            manager.targets.get_broadcast_targets(target_scope="all"),
+            [GROUP_TARGET_1, GROUP_TARGET_2, USER_TARGET_1],
+        )
+        self.assertEqual(
+            manager.targets.get_broadcast_targets(target_scope="groups"),
+            [GROUP_TARGET_1, GROUP_TARGET_2],
+        )
+        self.assertEqual(
+            manager.targets.get_broadcast_targets(target_scope="users"),
+            [USER_TARGET_1],
+        )
+
+    def test_manual_target_resolution_includes_independent_cron_targets(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {
+            "groups": [],
+            "users": [f"{USER_TARGET_1}:0 9,12,15,18 * * *:新闻"],
+        }
+        manager = _new_manager(mod, plugin)
+
+        self.assertEqual(
+            manager.share.resolve_execute_share_targets(target_scope="users"),
+            [],
+        )
+        self.assertEqual(
+            manager.share.resolve_execute_share_targets(
+                target_scope="users",
+                exclude_custom_cron=False,
+            ),
+            [USER_TARGET_1],
+        )
+
+    async def test_execute_share_sends_plain_news_failure_message(self):
+        mod = _load_tasks_module()
+        event = _Event()
+
+        await _manager(mod).share.execute_share(
+            force_type=mod.ShareType.NEWS,
+            news_source="yicai",
+            specific_target="aiocqhttp:GroupMessage:123",
+            event=event,
+        )
+
+        self.assertEqual(
+            event.sent,
+            [
+                f"\u83b7\u53d6\u3010{YICAI_NAME}\u3011"
+                "\u65b0\u95fb\u5931\u8d25\uff0c\u5206\u4eab\u5df2\u53d6\u6d88\u3002"
+            ],
+        )
+
+    async def test_execute_share_returns_false_without_targets(self):
+        mod = _load_tasks_module()
+        event = _Event()
+
+        result = await _manager(mod).share.execute_share(event=event)
+
+        self.assertFalse(result)
+        self.assertEqual(
+            event.sent,
+            ["分享失败：未配置接收对象，也没有指定当前会话目标。"],
+        )
+
+    async def test_execute_share_continues_after_one_target_send_failure(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {
+            "groups": [GROUP_TARGET_1, GROUP_TARGET_2],
+            "users": [],
+        }
+        manager = _new_manager(mod, plugin)
+        calls = []
+
+        async def send(uid, *args, **kwargs):
+            calls.append(uid)
+            return len(calls) > 1
+
+        manager.delivery.send = send
+
+        result = await manager.share.execute_share(force_type=mod.ShareType.MOOD)
+
+        self.assertTrue(result)
+        self.assertEqual(
+            calls,
+            [GROUP_TARGET_1, GROUP_TARGET_2],
+        )
+        self.assertEqual(
+            plugin.ctx_service.life_context_targets,
+            [GROUP_TARGET_1, GROUP_TARGET_2],
+        )
+        self.assertTrue(
+            any(item[1].get("success") is False for item in plugin.db.history)
+        )
+        self.assertTrue(
+            any(item[1].get("success") is True for item in plugin.db.history)
+        )
+
+    async def test_framework_false_send_result_is_delivery_failure(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+
+        async def send_message(_uid, _chain):
+            return False
+
+        class Platform:
+            def get_client(self):
+                return object()
+
+            def meta(self):
+                return types.SimpleNamespace(
+                    id=PLATFORM_MAIN,
+                    name="aiocqhttp",
+                    support_proactive_message=True,
+                )
+
+        plugin.context = types.SimpleNamespace(
+            send_message=send_message,
+            platform_manager=types.SimpleNamespace(get_insts=lambda: [Platform()]),
+        )
+        manager = _new_manager(mod, plugin)
+
+        with self.assertRaisesRegex(RuntimeError, "未找到目标平台实例"):
+            await manager.delivery.send_message_chain(
+                GROUP_TARGET_1,
+                _MessageChain().message("测试内容"),
+            )
+
+    async def test_failed_delivery_does_not_write_success_side_effects(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {"groups": [GROUP_TARGET_1], "users": []}
+        memory_calls = []
+
+        async def record_memory(*args, **kwargs):
+            memory_calls.append((args, kwargs))
+
+        plugin.ctx_service.record_bot_reply_to_history = record_memory
+        plugin.ctx_service.record_external_share = record_memory
+        manager = _new_manager(mod, plugin)
+        manager.delivery.send = lambda *args, **kwargs: asyncio.sleep(0, result=False)
+
+        result = await manager.share.execute_share(force_type=mod.ShareType.MOOD)
+
+        self.assertFalse(result)
+        self.assertEqual(memory_calls, [])
+        self.assertEqual(plugin.db.news_snapshots, [])
+        self.assertEqual(len(plugin.db.history), 1)
+        self.assertFalse(plugin.db.history[0][1]["success"])
+
+    async def test_news_image_failure_after_text_success_skips_snapshot(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+
+        async def attach_news_image(**kwargs):
+            return "https://example.com/news-image.png"
+
+        async def generate_media(**kwargs):
+            return None, "https://example.com/news-image.png", None, None, ""
+
+        async def send(*args, media_result=None, **kwargs):
+            media_result.update(
+                {
+                    "text_sent": True,
+                    "audio_sent": False,
+                    "image_sent": False,
+                    "video_sent": False,
+                    "partial_errors": [
+                        {
+                            "stage": "image",
+                            "stage_label": "配图",
+                            "message": "发送失败",
+                        }
+                    ],
+                }
+            )
+            return True
+
+        manager.share.news.hot_news_image_url = attach_news_image
+        manager.share.media.generate_media = generate_media
+        manager.delivery.send = send
+
+        result = await manager.share._send_execute_share_content(
+            uid=GROUP_TARGET_1,
+            stype=mod.ShareType.NEWS,
+            content="新闻测试内容",
+            news_data=(
+                [{"title": "测试新闻", "url": "https://example.com/news"}],
                 "weibo",
             ),
-        )
-        plugin.db.news_snapshots[0]["created_at"] = (
-            datetime.now() - timedelta(hours=1)
-        ).strftime("%Y-%m-%d %H:%M:%S")
-
-        result = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertIn("新闻列表已过期", result)
-        self.assertNotIn("https://example.com/old", result)
-
-    async def test_cached_news_link_keeps_same_target_source_snapshots(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                return (
-                    [
-                        {
-                            "title": f"{source}新闻{i}",
-                            "url": f"https://example.com/{source}/{i}",
-                        }
-                        for i in range(1, 3)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "知乎新闻1", "url": "https://example.com/zhihu/1"},
-                    {"title": "zhihu新闻2", "url": "https://example.com/zhihu/2"},
-                ],
-                "zhihu",
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "澎湃新闻1", "url": "https://example.com/thepaper/1"},
-                    {"title": "thepaper新闻2", "url": "https://example.com/thepaper/2"},
-                ],
-                "thepaper",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-            source_key="zhihu",
-        )
-
-        self.assertIn("zhihu新闻2", result)
-        self.assertIn("https://example.com/zhihu/2", result)
-        self.assertNotIn("thepaper", result)
-
-    async def test_sent_news_snapshot_history_uses_latest_matching_source(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        async def commit(source, title, suffix):
-            await manager.snapshot_store.commit_sent_news_snapshot(
-                target,
-                snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                    [
-                        {
-                            "title": f"{title}{index}",
-                            "url": f"https://example.com/{suffix}/{index}",
-                        }
-                        for index in range(1, 15)
-                    ],
-                    source,
-                ),
-                image_url=f"C:/Temp/{suffix}.png",
-            )
-
-        await commit("weibo", "09时微博", "weibo-09")
-        await commit("douyin", "10时抖音", "douyin-10")
-        await commit("weibo", "11时微博", "weibo-11")
-
-        latest = await manager.snapshot_store.get_cached_news_link(target, index="14")
-        douyin = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="douyin",
-        )
-        weibo = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="weibo",
-        )
-
-        self.assertIn("11时微博14", latest)
-        self.assertIn("weibo-11/14", latest)
-        self.assertIn("10时抖音14", douyin)
-        self.assertIn("douyin-10/14", douyin)
-        self.assertIn("11时微博14", weibo)
-        self.assertNotIn("09时微博14", weibo)
-
-    async def test_get_cached_news_link_uses_short_url(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.seen_url = None
-
-            async def shorten_url(self, url):
-                self.seen_url = url
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                        "description": "这是一条摘要",
-                    }
-                ],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            index="1",
-        )
-
-        self.assertEqual(
-            plugin.news_service.seen_url,
-            "https://www.36kr.com/p/3841823029447170",
-        )
-        self.assertIn("http://qdls.top/?c=abc123", result)
-        self.assertNotIn("https://www.36kr.com/p/3841823029447170", result)
-        self.assertIn("摘要：这是一条摘要", result)
-
-    async def test_get_cached_news_link_reuses_short_url_cache(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def shorten_url(self, url):
-                self.calls.append(url)
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                    }
-                ],
-                "yicai",
-            ),
-        )
-
-        first = await manager.snapshot_store.get_cached_news_link(target, index="1")
-        second = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertEqual(
-            plugin.news_service.calls, ["https://www.36kr.com/p/3841823029447170"]
-        )
-        self.assertIn("http://qdls.top/?c=abc123", first)
-        self.assertIn("http://qdls.top/?c=abc123", second)
-        self.assertIn("news_short_url_cache", plugin.db.state)
-
-    async def test_get_cached_news_link_keeps_original_url_when_shortener_fails(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def shorten_url(self, url):
-                raise RuntimeError("shortener unavailable")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/original"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            query="目标",
-        )
-
-        self.assertIn("https://example.com/original", result)
-
-    async def test_get_cached_news_link_reuses_last_focused_item_for_followup(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "第一条新闻",
-                        "url": "https://example.com/1",
-                        "description": "第一条摘要",
-                    },
-                    {
-                        "title": "第二条新闻",
-                        "url": "https://example.com/2",
-                        "description": "第二条摘要",
-                    },
-                ],
-                "yicai",
-            ),
-        )
-
-        first = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("第二条新闻", first)
-        self.assertIn("第二条新闻", followup)
-        self.assertIn("摘要：第二条摘要", followup)
-
-    async def test_get_cached_news_link_does_not_reuse_focus_across_sources(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        def items(source):
-            return [
-                {
-                    "title": f"{source}新闻{i}",
-                    "url": f"https://example.com/{source}/{i}",
-                }
-                for i in range(1, 13)
-            ]
-
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("微博"), "weibo"
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("抖音"), "douyin"
-            ),
-        )
-
-        focused = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="12",
-            source_key="weibo",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("微博新闻12", focused)
-        self.assertIn("1. 抖音新闻1", followup)
-        self.assertNotIn("抖音新闻12", followup)
-
-    async def test_get_cached_news_link_returns_source_detail(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/source"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="source",
-            index="1",
-        )
-
-        self.assertIn("标题：�commit_news_snapshot_stores_payload_without_fetch(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 8)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻1", "url": "https://example.com/1"}],
-                "zhihu",
-            ),
-        )
-
-        snapshot = plugin.db.news_snapshots[0]
-        self.assertTrue(ok)
-        self.assertEqual(plugin.news_service.calls, [])
-        self.assertEqual(len(snapshot["items"]), 1)
-        self.assertEqual(snapshot["source_key"], "zhihu")
-
-    async def test_news_history_commit_invalidates_tool_context(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        invalidations = []
-        plugin.support_service = types.SimpleNamespace(
-            operations=types.SimpleNamespace(
-                tool_context=types.SimpleNamespace(
-                    invalidate_context_prompt=lambda kind, target: invalidations.append(
-                        (kind, target)
-                    )
-                )
-            )
-        )
-        manager = _new_manager(mod, plugin)
-        target = GROUP_TARGET_1
-
-        await manager.executor_helpers.records.record_share_history(
-            target_id=target,
-            share_type=mod.ShareType.NEWS,
-            content="新闻内容",
-            success=True,
-            source_type="scheduled",
-            news_snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻", "url": "https://example.com/news"}],
-                "yicai",
-            ),
-        )
-
-        self.assertEqual(invalidations, [("news", target)])
-
-    async def test_load_execute_share_news_does_not_publish_snapshot_before_send(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            def select_news_source(self, excluded_source=None):
-                return "yicai"
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 21)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        loaded, news_data = await manager.share.news.load_news(
-            uid="aiocqhttp:GroupMessage:123",
-            stype=mod.ShareType.NEWS,
-            news_source="yicai",
+            life_ctx="",
+            period="morning",
+            progress_id="progress-test",
             history_source="test",
-            progress_id="progress",
         )
 
-        self.assertTrue(loaded)
-        self.assertEqual(len(news_data[0]), 20)
-        self.assertEqual(plugin.news_service.calls, [("yicai", 50, True)])
+        self.assertTrue(result)
         self.assertEqual(plugin.db.news_snapshots, [])
-        self.assertNotIn(
-            manager.snapshot_store._news_snapshot_key("aiocqhttp:GroupMessage:123"),
-            plugin.db.state,
-        )
+        self.assertEqual(len(plugin.db.history), 1)
+        self.assertTrue(plugin.db.history[0][1]["success"])
 
-    async def test_news_link_ignores_unsent_share_state_and_does_not_refresh(self):
+    async def test_execute_qzone_share_keeps_qzone_news_failure_message(self):
         mod = _load_tasks_module()
-        plugin = _Plugin()
+        event = _Event()
 
-        class NewsService(_NewsService):
-            async def get_hot_news(self, *args, **kwargs):
-                raise AssertionError("news-link lookup must not refresh remote news")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        plugin.db.state[manager.snapshot_store._news_snapshot_key(target)] = {
-            "source_key": "weibo",
-            "source_name": "微博热搜",
-            "items": [{"title": "未发送新闻", "url": "https://example.com/unsent"}],
-        }
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="1",
-            source_key="weibo",
-        )
-
-        self.assertIn("还没有可用于反查的新闻列表", result)
-        self.assertNotIn("https://example.com/unsent", result)
-
-    async def test_news_link_rejects_expired_sent_snapshot(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "旧新闻", "url": "https://example.com/old"}],
-                "weibo",
-            ),
-        )
-        plugin.db.news_snapshots[0]["created_at"] = (
-            datetime.now() - timedelta(hours=1)
-        ).strftime("%Y-%m-%d %H:%M:%S")
-
-        result = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertIn("新闻列表已过期", result)
-        self.assertNotIn("https://example.com/old", result)
-
-    async def test_cached_news_link_keeps_same_target_source_snapshots(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                return (
-                    [
-                        {
-                            "title": f"{source}新闻{i}",
-                            "url": f"https://example.com/{source}/{i}",
-                        }
-                        for i in range(1, 3)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "知乎新闻1", "url": "https://example.com/zhihu/1"},
-                    {"title": "zhihu新闻2", "url": "https://example.com/zhihu/2"},
-                ],
-                "zhihu",
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "澎湃新闻1", "url": "https://example.com/thepaper/1"},
-                    {"title": "thepaper新闻2", "url": "https://example.com/thepaper/2"},
-                ],
-                "thepaper",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-            source_key="zhihu",
-        )
-
-        self.assertIn("zhihu新闻2", result)
-        self.assertIn("https://example.com/zhihu/2", result)
-        self.assertNotIn("thepaper", result)
-
-    async def test_sent_news_snapshot_history_uses_latest_matching_source(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        async def commit(source, title, suffix):
-            await manager.snapshot_store.commit_sent_news_snapshot(
-                target,
-                snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                    [
-                        {
-                            "title": f"{title}{index}",
-                            "url": f"https://example.com/{suffix}/{index}",
-                        }
-                        for index in range(1, 15)
-                    ],
-                    source,
-                ),
-                image_url=f"C:/Temp/{suffix}.png",
-            )
-
-        await commit("weibo", "09时微博", "weibo-09")
-        await commit("douyin", "10时抖音", "douyin-10")
-        await commit("weibo", "11时微博", "weibo-11")
-
-        latest = await manager.snapshot_store.get_cached_news_link(target, index="14")
-        douyin = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="douyin",
-        )
-        weibo = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="weibo",
-        )
-
-        self.assertIn("11时微博14", latest)
-        self.assertIn("weibo-11/14", latest)
-        self.assertIn("10时抖音14", douyin)
-        self.assertIn("douyin-10/14", douyin)
-        self.assertIn("11时微博14", weibo)
-        self.assertNotIn("09时微博14", weibo)
-
-    async def test_get_cached_news_link_uses_short_url(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.seen_url = None
-
-            async def shorten_url(self, url):
-                self.seen_url = url
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                        "description": "这是一条摘要",
-                    }
-                ],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            index="1",
-        )
-
-        self.assertEqual(
-            plugin.news_service.seen_url,
-            "https://www.36kr.com/p/3841823029447170",
-        )
-        self.assertIn("http://qdls.top/?c=abc123", result)
-        self.assertNotIn("https://www.36kr.com/p/3841823029447170", result)
-        self.assertIn("摘要：这是一条摘要", result)
-
-    async def test_get_cached_news_link_reuses_short_url_cache(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def shorten_url(self, url):
-                self.calls.append(url)
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                    }
-                ],
-                "yicai",
-            ),
-        )
-
-        first = await manager.snapshot_store.get_cached_news_link(target, index="1")
-        second = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertEqual(
-            plugin.news_service.calls, ["https://www.36kr.com/p/3841823029447170"]
-        )
-        self.assertIn("http://qdls.top/?c=abc123", first)
-        self.assertIn("http://qdls.top/?c=abc123", second)
-        self.assertIn("news_short_url_cache", plugin.db.state)
-
-    async def test_get_cached_news_link_keeps_original_url_when_shortener_fails(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def shorten_url(self, url):
-                raise RuntimeError("shortener unavailable")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/original"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            query="目标",
-        )
-
-        self.assertIn("https://example.com/original", result)
-
-    async def test_get_cached_news_link_reuses_last_focused_item_for_followup(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "第一条新闻",
-                        "url": "https://example.com/1",
-                        "description": "第一条摘要",
-                    },
-                    {
-                        "title": "第二条新闻",
-                        "url": "https://example.com/2",
-                        "description": "第二条摘要",
-                    },
-                ],
-                "yicai",
-            ),
-        )
-
-        first = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("第二条新闻", first)
-        self.assertIn("第二条新闻", followup)
-        self.assertIn("摘要：第二条摘要", followup)
-
-    async def test_get_cached_news_link_does_not_reuse_focus_across_sources(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        def items(source):
-            return [
-                {
-                    "title": f"{source}新闻{i}",
-                    "url": f"https://example.com/{source}/{i}",
-                }
-                for i in range(1, 13)
-            ]
-
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("微博"), "weibo"
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("抖音"), "douyin"
-            ),
-        )
-
-        focused = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="12",
-            source_key="weibo",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("微博新闻12", focused)
-        self.assertIn("1. 抖音新闻1", followup)
-        self.assertNotIn("抖音新闻12", followup)
-
-    async def test_get_cached_news_link_returns_source_detail(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/source"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="source",
-            index="1",
-        )
-
-        self.assertIn("标题：�commit_news_snapshot_stores_payload_without_fetch(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 8)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻1", "url": "https://example.com/1"}],
-                "zhihu",
-            ),
-        )
-
-        snapshot = plugin.db.news_snapshots[0]
-        self.assertTrue(ok)
-        self.assertEqual(plugin.news_service.calls, [])
-        self.assertEqual(len(snapshot["items"]), 1)
-        self.assertEqual(snapshot["source_key"], "zhihu")
-
-    async def test_news_history_commit_invalidates_tool_context(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        invalidations = []
-        plugin.support_service = types.SimpleNamespace(
-            operations=types.SimpleNamespace(
-                tool_context=types.SimpleNamespace(
-                    invalidate_context_prompt=lambda kind, target: invalidations.append(
-                        (kind, target)
-                    )
-                )
-            )
-        )
-        manager = _new_manager(mod, plugin)
-        target = GROUP_TARGET_1
-
-        await manager.executor_helpers.records.record_share_history(
-            target_id=target,
-            share_type=mod.ShareType.NEWS,
-            content="新闻内容",
-            success=True,
-            source_type="scheduled",
-            news_snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻", "url": "https://example.com/news"}],
-                "yicai",
-            ),
-        )
-
-        self.assertEqual(invalidations, [("news", target)])
-
-    async def test_load_execute_share_news_does_not_publish_snapshot_before_send(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            def select_news_source(self, excluded_source=None):
-                return "yicai"
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 21)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        loaded, news_data = await manager.share.news.load_news(
-            uid="aiocqhttp:GroupMessage:123",
-            stype=mod.ShareType.NEWS,
+        await _manager(mod).qzone_share.execute_qzone_share(
+            force_type=mod.ShareType.NEWS,
             news_source="yicai",
-            history_source="test",
-            progress_id="progress",
-        )
-
-        self.assertTrue(loaded)
-        self.assertEqual(len(news_data[0]), 20)
-        self.assertEqual(plugin.news_service.calls, [("yicai", 50, True)])
-        self.assertEqual(plugin.db.news_snapshots, [])
-        self.assertNotIn(
-            manager.snapshot_store._news_snapshot_key("aiocqhttp:GroupMessage:123"),
-            plugin.db.state,
-        )
-
-    async def test_news_link_ignores_unsent_share_state_and_does_not_refresh(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def get_hot_news(self, *args, **kwargs):
-                raise AssertionError("news-link lookup must not refresh remote news")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        plugin.db.state[manager.snapshot_store._news_snapshot_key(target)] = {
-            "source_key": "weibo",
-            "source_name": "微博热搜",
-            "items": [{"title": "未发送新闻", "url": "https://example.com/unsent"}],
-        }
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="1",
-            source_key="weibo",
-        )
-
-        self.assertIn("还没有可用于反查的新闻列表", result)
-        self.assertNotIn("https://example.com/unsent", result)
-
-    async def test_news_link_rejects_expired_sent_snapshot(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "旧新闻", "url": "https://example.com/old"}],
-                "weibo",
-            ),
-        )
-        plugin.db.news_snapshots[0]["created_at"] = (
-            datetime.now() - timedelta(hours=1)
-        ).strftime("%Y-%m-%d %H:%M:%S")
-
-        result = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertIn("新闻列表已过期", result)
-        self.assertNotIn("https://example.com/old", result)
-
-    async def test_cached_news_link_keeps_same_target_source_snapshots(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                return (
-                    [
-                        {
-                            "title": f"{source}新闻{i}",
-                            "url": f"https://example.com/{source}/{i}",
-                        }
-                        for i in range(1, 3)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "知乎新闻1", "url": "https://example.com/zhihu/1"},
-                    {"title": "zhihu新闻2", "url": "https://example.com/zhihu/2"},
-                ],
-                "zhihu",
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {"title": "澎湃新闻1", "url": "https://example.com/thepaper/1"},
-                    {"title": "thepaper新闻2", "url": "https://example.com/thepaper/2"},
-                ],
-                "thepaper",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-            source_key="zhihu",
-        )
-
-        self.assertIn("zhihu新闻2", result)
-        self.assertIn("https://example.com/zhihu/2", result)
-        self.assertNotIn("thepaper", result)
-
-    async def test_sent_news_snapshot_history_uses_latest_matching_source(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        async def commit(source, title, suffix):
-            await manager.snapshot_store.commit_sent_news_snapshot(
-                target,
-                snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                    [
-                        {
-                            "title": f"{title}{index}",
-                            "url": f"https://example.com/{suffix}/{index}",
-                        }
-                        for index in range(1, 15)
-                    ],
-                    source,
-                ),
-                image_url=f"C:/Temp/{suffix}.png",
-            )
-
-        await commit("weibo", "09时微博", "weibo-09")
-        await commit("douyin", "10时抖音", "douyin-10")
-        await commit("weibo", "11时微博", "weibo-11")
-
-        latest = await manager.snapshot_store.get_cached_news_link(target, index="14")
-        douyin = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="douyin",
-        )
-        weibo = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="14",
-            source_key="weibo",
-        )
-
-        self.assertIn("11时微博14", latest)
-        self.assertIn("weibo-11/14", latest)
-        self.assertIn("10时抖音14", douyin)
-        self.assertIn("douyin-10/14", douyin)
-        self.assertIn("11时微博14", weibo)
-        self.assertNotIn("09时微博14", weibo)
-
-    async def test_get_cached_news_link_uses_short_url(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.seen_url = None
-
-            async def shorten_url(self, url):
-                self.seen_url = url
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                        "description": "这是一条摘要",
-                    }
-                ],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            index="1",
+            event=event,
         )
 
         self.assertEqual(
-            plugin.news_service.seen_url,
-            "https://www.36kr.com/p/3841823029447170",
+            event.sent,
+            [
+                f"\u83b7\u53d6\u3010{YICAI_NAME}\u3011"
+                "\u65b0\u95fb\u5931\u8d25\uff0cQQ\u7a7a\u95f4"
+                "\u5206\u4eab\u5df2\u53d6\u6d88\u3002"
+            ],
         )
-        self.assertIn("http://qdls.top/?c=abc123", result)
-        self.assertNotIn("https://www.36kr.com/p/3841823029447170", result)
-        self.assertIn("摘要：这是一条摘要", result)
 
-    async def test_get_cached_news_link_reuses_short_url_cache(self):
+    async def test_execute_qzone_share_syncs_weixin_event_through_delivery_send(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
+        plugin.image_conf = {"enable_ai_image": True}
+        plugin.qzone_conf = {"qzone_enable_image": True}
+        published = []
 
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
+        async def safe_publish_qzone(text, images):
+            published.append({"text": text, "images": images})
 
-            async def shorten_url(self, url):
-                self.calls.append(url)
-                return "http://qdls.top/?c=abc123"
-
-        plugin.news_service = NewsService()
+        plugin.publish_qzone = safe_publish_qzone
         manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "目标新闻",
-                        "url": "https://www.36kr.com/p/3841823029447170",
-                    }
-                ],
-                "yicai",
-            ),
-        )
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        sent = []
 
-        first = await manager.snapshot_store.get_cached_news_link(target, index="1")
-        second = await manager.snapshot_store.get_cached_news_link(target, index="1")
-
-        self.assertEqual(
-            plugin.news_service.calls, ["https://www.36kr.com/p/3841823029447170"]
-        )
-        self.assertIn("http://qdls.top/?c=abc123", first)
-        self.assertIn("http://qdls.top/?c=abc123", second)
-        self.assertIn("news_short_url_cache", plugin.db.state)
-
-    async def test_get_cached_news_link_keeps_original_url_when_shortener_fails(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            async def shorten_url(self, url):
-                raise RuntimeError("shortener unavailable")
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/original"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            "aiocqhttp:GroupMessage:123",
-            query="目标",
-        )
-
-        self.assertIn("https://example.com/original", result)
-
-    async def test_get_cached_news_link_reuses_last_focused_item_for_followup(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [
-                    {
-                        "title": "第一条新闻",
-                        "url": "https://example.com/1",
-                        "description": "第一条摘要",
-                    },
-                    {
-                        "title": "第二条新闻",
-                        "url": "https://example.com/2",
-                        "description": "第二条摘要",
-                    },
-                ],
-                "yicai",
-            ),
-        )
-
-        first = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="2",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("第二条新闻", first)
-        self.assertIn("第二条新闻", followup)
-        self.assertIn("摘要：第二条摘要", followup)
-
-    async def test_get_cached_news_link_does_not_reuse_focus_across_sources(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-
-        def items(source):
-            return [
+        async def send(
+            uid,
+            text,
+            img_path=None,
+            audio_path=None,
+            video_url=None,
+            event=None,
+            image_optional=False,
+        ):
+            sent.append(
                 {
-                    "title": f"{source}新闻{i}",
-                    "url": f"https://example.com/{source}/{i}",
+                    "uid": uid,
+                    "text": text,
+                    "img_path": img_path,
+                    "audio_path": audio_path,
+                    "video_url": video_url,
+                    "event": event,
+                    "image_optional": image_optional,
                 }
-                for i in range(1, 13)
-            ]
+            )
+            return True
 
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("微博"), "weibo"
-            ),
-        )
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                items("抖音"), "douyin"
-            ),
+        manager.delivery.send = send
+        event = _Event(unified_msg_origin="weixin_oc:FriendMessage:o9test@im.wechat")
+
+        ok = await manager.qzone_share.execute_qzone_share(
+            force_type=mod.ShareType.MOOD, event=event
         )
 
-        focused = await manager.snapshot_store.get_cached_news_link(
-            target,
-            index="12",
-            source_key="weibo",
-        )
-        followup = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="summary",
-        )
-
-        self.assertIn("微博新闻12", focused)
-        self.assertIn("1. 抖音新闻1", followup)
-        self.assertNotIn("抖音新闻12", followup)
-
-    async def test_get_cached_news_link_returns_source_detail(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-        manager = _new_manager(mod, plugin)
-        target = "aiocqhttp:GroupMessage:123"
-        await manager.snapshot_store.commit_sent_news_snapshot(
-            target,
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "目标新闻", "url": "https://example.com/source"}],
-                "yicai",
-            ),
-        )
-
-        result = await manager.snapshot_store.get_cached_news_link(
-            target,
-            action="source",
-            index="1",
-        )
-
-        self.assertIn("标题：�commit_news_snapshot_stores_payload_without_fetch(self):
-        mod = _load_tasks_module()
-        plugin = _Plugin()
-
-        class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 8)
-                    ],
-                    source,
-                )
-
-        plugin.news_service = NewsService()
-        manager = _new_manager(mod, plugin)
-
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻1", "url": "https://example.com/1"}],
-                "zhihu",
-            ),
-        )
-
-        snapshot = plugin.db.news_snapshots[0]
         self.assertTrue(ok)
-        self.assertEqual(plugin.news_service.calls, [])
-        self.assertEqual(len(snapshot["items"]), 1)
-        self.assertEqual(snapshot["source_key"], "zhihu")
+        self.assertEqual(event.sent, [])
+        self.assertEqual(published, [{"text": "content", "images": []}])
+        self.assertEqual(
+            sent,
+            [
+                {
+                    "uid": "weixin_oc:FriendMessage:o9test@im.wechat",
+                    "text": "content",
+                    "img_path": "generated.png",
+                    "audio_path": None,
+                    "video_url": None,
+                    "event": event,
+                    "image_optional": True,
+                }
+            ],
+        )
 
-    async def test_news_history_commit_invalidates_tool_context(self):
+    async def test_chat_share_manual_and_scheduled_use_one_snapshot_and_separate_media(
+        self,
+    ):
+        for manual in (False, True):
+            with self.subTest(manual=manual):
+                mod = _load_tasks_module()
+                plugin = _Plugin()
+                manager = _new_manager(mod, plugin)
+                calls = []
+                media = []
+                target = "aiocqhttp:FriendMessage:100000002"
+
+                async def share_context(target_umo):
+                    calls.append(target_umo)
+                    return {
+                        "life_context": "完整穿搭资料",
+                        "post_context": "当前在休息",
+                    }
+
+                async def history(target_id, limit=3):
+                    return [{"type": "mood", "content": "旧分享正文"}]
+
+                async def send_prepared(**kwargs):
+                    media.append(kwargs["life_ctx"])
+                    return True
+
+                plugin.ctx_service.get_chat_share_context = share_context
+                plugin.ctx_service.format_life_context = lambda context, *args: context
+                plugin.db.get_recent_history_by_target = history
+                if manual:
+                    manager.command_share.send_prepared_command_share = send_prepared
+                    result = await manager.command_share.async_daily_share_task(
+                        _Event(unified_msg_origin=target),
+                        share_type="心情",
+                        source=None,
+                        get_image=False,
+                        need_image=False,
+                        need_video=False,
+                        need_voice=False,
+                        to_qzone=False,
+                    )
+                else:
+                    manager.share._send_execute_share_content = send_prepared
+                    result = await manager.share.execute_share(
+                        force_type=mod.ShareType.MOOD, specific_target=target
+                    )
+                if not manual:
+                    self.assertTrue(result)
+                self.assertEqual(calls, [target])
+                args, kwargs = plugin.content_service.calls[-1]
+                self.assertTrue(args[4].startswith("当前在休息"))
+                self.assertIn("向当前对象已确认发出的历史分享", args[4])
+                self.assertIn("旧分享正文", args[4])
+                self.assertNotIn("recent_dynamics", kwargs)
+                self.assertEqual(kwargs["recent_post_contents"], ["旧分享正文"])
+                self.assertEqual(media, ["完整穿搭资料"])
+
+    async def test_qzone_life_expression_uses_current_facts_for_text_and_full_context_for_image(
+        self,
+    ):
         mod = _load_tasks_module()
         plugin = _Plugin()
-        invalidations = []
-        plugin.support_service = types.SimpleNamespace(
-            operations=types.SimpleNamespace(
-                tool_context=types.SimpleNamespace(
-                    invalidate_context_prompt=lambda kind, target: invalidations.append(
-                        (kind, target)
+        plugin.qzone_conf = {
+            "qzone_follow_life_chat_style": False,
+            "qzone_enable_image": True,
+        }
+        plugin.image_conf = {"enable_ai_image": True}
+        manager = _new_manager(mod, plugin)
+        context_calls = []
+        image_calls = []
+        published = []
+
+        async def share_context():
+            context_calls.append("share_context")
+            return {
+                "life_context": "完整穿搭和外观资料",
+                "post_context": "当前提着双皮奶往回走",
+            }
+
+        async def unexpected_full_context(*args, **kwargs):
+            self.fail("联动模式不能额外读取完整生活上下文")
+
+        async def history(target_id, limit=3):
+            return [{"type": "mood", "content": "以前的长篇文艺说说"}]
+
+        async def image(**kwargs):
+            image_calls.append(kwargs)
+            return None
+
+        async def publish(text, images):
+            published.append((text, images))
+
+        plugin.ctx_service.get_qzone_share_context = share_context
+        plugin.ctx_service.get_life_context = unexpected_full_context
+        plugin.db.get_recent_history_by_target = history
+        manager.qzone_share._generate_qzone_image = image
+        plugin.publish_qzone = publish
+        self.assertTrue(
+            await manager.qzone_share.execute_qzone_share(force_type=mod.ShareType.MOOD)
+        )
+        self.assertEqual(context_calls, ["share_context"])
+        args, kwargs = plugin.content_service.calls[-1]
+        self.assertTrue(args[4].startswith("当前提着双皮奶往回走"))
+        self.assertIn("以前的长篇文艺说说", args[4])
+        self.assertIn("不是当前生活事实", args[4])
+        self.assertEqual(kwargs.get("recent_dynamics", ""), "")
+        self.assertEqual(kwargs["recent_post_contents"], ["以前的长篇文艺说说"])
+        self.assertEqual(image_calls[0]["life_ctx"], "完整穿搭和外观资料")
+        self.assertEqual(published, [("content", [])])
+
+    async def test_execute_qzone_share_ignores_removed_video_config_and_publishes_image(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.image_conf = {"enable_ai_image": True, "enable_ai_video": True}
+        plugin.qzone_conf = {
+            "qzone_enable_image": True,
+        }
+        published = []
+
+        async def safe_publish_qzone(text, images):
+            published.append({"text": text, "images": list(images or [])})
+
+        plugin.publish_qzone = safe_publish_qzone
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+
+        async def prepare_qzone_image(image_ref):
+            return b"image-bytes"
+
+        manager.delivery_assets.prepare_qzone_image = prepare_qzone_image
+
+        ok = await manager.qzone_share.execute_qzone_share(
+            force_type=mod.ShareType.MOOD
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(published, [{"text": "content", "images": [b"image-bytes"]}])
+        history_args, history_kwargs = plugin.db.history[0]
+        self.assertEqual(
+            history_kwargs["target_id"], sys.modules[KEYS_MODULE_NAME].QZONE_TARGET_ID
+        )
+        self.assertTrue(history_kwargs["success"])
+        self.assertEqual(history_kwargs["media_type"], "image")
+        self.assertEqual(history_kwargs["media_path"], "generated.png")
+
+    async def test_execute_qzone_share_falls_back_to_text_when_image_publish_fails(
+        self,
+    ):
+        mod = _load_tasks_module()
+        errors = importlib.import_module(CORE_PACKAGE_NAME + ".space.errors")
+        plugin = _Plugin()
+        plugin.image_conf = {"enable_ai_image": True, "enable_ai_video": True}
+        plugin.qzone_conf = {
+            "qzone_enable_image": True,
+        }
+        published = []
+
+        async def safe_publish_qzone(text, images):
+            payload = {"text": text, "images": list(images or [])}
+            published.append(payload)
+            if payload["images"]:
+                raise errors.QzoneImageUploadError("image upload failed")
+
+        plugin.publish_qzone = safe_publish_qzone
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+
+        async def prepare_qzone_image(image_ref):
+            return b"image-bytes"
+
+        manager.delivery_assets.prepare_qzone_image = prepare_qzone_image
+
+        ok = await manager.qzone_share.execute_qzone_share(
+            force_type=mod.ShareType.MOOD
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(
+            published,
+            [
+                {"text": "content", "images": [b"image-bytes"]},
+                {"text": "content", "images": []},
+            ],
+        )
+        _history_args, history_kwargs = plugin.db.history[0]
+        self.assertTrue(history_kwargs["success"])
+        self.assertNotIn("media_type", history_kwargs)
+        self.assertNotIn("media_path", history_kwargs)
+
+    async def test_composed_delivery_reads_hot_config_without_rebuilding_components(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        delivery = manager.delivery
+        components = (delivery.status, delivery.delay, delivery.chains, delivery.media)
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+
+        delivery.chains.send_message_chain = send_chain
+        manager.update_configs(
+            image={"separate_text_and_image": False, "separate_send_delay": "0"},
+            tts={"prefer_audio_only": False},
+        )
+        result = {}
+        self.assertTrue(
+            await delivery.send(USER_TARGET_1, "正文", "image.png", media_result=result)
+        )
+        self.assertEqual(sent, [["正文", ("file_image", "image.png")]])
+        self.assertTrue(result["text_sent"])
+        self.assertTrue(result["image_sent"])
+
+        sent.clear()
+        manager.update_configs(
+            image={"separate_text_and_image": True, "separate_send_delay": "0"},
+            tts={"prefer_audio_only": True},
+        )
+        self.assertTrue(
+            await delivery.send(
+                USER_TARGET_1,
+                "正文",
+                "image.png",
+                audio_path="audio.wav",
+                media_result=result,
+            )
+        )
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0][0].file, "audio.wav")
+        self.assertEqual(sent[1], [("file_image", "image.png")])
+        self.assertFalse(result["text_sent"])
+        self.assertTrue(result["audio_sent"])
+        self.assertTrue(result["image_sent"])
+        self.assertIs(manager.delivery, delivery)
+        self.assertEqual(
+            components,
+            (delivery.status, delivery.delay, delivery.chains, delivery.media),
+        )
+        self.assertEqual(delivery.delay._separate_send_delay_seconds(), 0)
+        manager.update_configs(image={"separate_send_delay": "0.25"})
+        self.assertEqual(delivery.delay._separate_send_delay_seconds(), 0.25)
+
+    async def test_composed_delivery_partial_failure_does_not_resend_text(self):
+        mod = _load_tasks_module()
+        for visual in ("image", "video"):
+            with self.subTest(visual=visual):
+                plugin = _Plugin()
+                manager = _new_manager(mod, plugin)
+                manager.update_configs(image={"separate_send_delay": "0"})
+                sent, receipts = [], []
+
+                async def send_chain(uid, chain, event=None):
+                    sent.append(list(chain.items))
+                    if len(sent) == 2:
+                        raise RuntimeError("media rejected")
+
+                async def record_delivery(uid, sent_at, *, media_kinds):
+                    receipts.append((uid, sent_at, media_kinds))
+
+                plugin.daily_life_bridge = types.SimpleNamespace(
+                    record_delivery=record_delivery
+                )
+                manager.delivery.chains.send_message_chain = send_chain
+                result = {}
+                self.assertTrue(
+                    await manager.delivery.send(
+                        USER_TARGET_1,
+                        "已发送正文",
+                        "image.png" if visual == "image" else None,
+                        video_url="video.mp4" if visual == "video" else None,
+                        media_result=result,
                     )
                 )
+                self.assertEqual(len(sent), 2)
+                self.assertEqual(sent[0], ["已发送正文"])
+                self.assertTrue(result["text_sent"])
+                self.assertFalse(result[f"{visual}_sent"])
+                self.assertEqual(result["partial_errors"][0]["stage"], visual)
+                self.assertEqual(
+                    receipts, [(USER_TARGET_1, result["text_sent_at"], ())]
+                )
+
+    async def test_composed_delivery_probable_image_timeout_does_not_retry_or_record_receipt(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        sent, retries, receipts = [], [], []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            raise RuntimeError("sendmsg timeout retcode=1200")
+
+        async def prepare_image(uid, path):
+            return path
+
+        async def retry_image(path):
+            retries.append(path)
+            return "small.jpg"
+
+        async def record_delivery(*args, **kwargs):
+            receipts.append((args, kwargs))
+
+        plugin.daily_life_bridge = types.SimpleNamespace(
+            record_delivery=record_delivery
+        )
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.weixin_delivery.prepare_image_for_target = prepare_image
+        manager.weixin_delivery.prepare_weixin_retry_image = retry_image
+        result = {}
+        self.assertTrue(
+            await manager.delivery.send(
+                "weixin_oc:FriendMessage:test@im.wechat",
+                "",
+                "large.jpg",
+                media_result=result,
             )
         )
-        manager = _new_manager(mod, plugin)
-        target = GROUP_TARGET_1
+        self.assertEqual(sent, [[("file_image", "large.jpg")]])
+        self.assertEqual(retries, [])
+        self.assertEqual(receipts, [])
+        self.assertTrue(result["image_sent"])
+        self.assertTrue(result["image_probable_sent"])
+        self.assertNotIn("image_sent_at", result)
 
-        await manager.executor_helpers.records.record_share_history(
-            target_id=target,
-            share_type=mod.ShareType.NEWS,
-            content="新闻内容",
-            success=True,
-            source_type="scheduled",
-            news_snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻", "url": "https://example.com/news"}],
-                "yicai",
+    async def test_composed_delivery_first_stage_failure_returns_false(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            raise RuntimeError("text rejected")
+
+        manager.delivery.chains.send_message_chain = send_chain
+        result = {}
+        self.assertFalse(
+            await manager.delivery.send(
+                USER_TARGET_1, "正文", "image.png", media_result=result
+            )
+        )
+        self.assertEqual(sent, [["正文"]])
+        self.assertFalse(result["text_sent"])
+        self.assertFalse(result["image_sent"])
+        self.assertEqual(result["partial_errors"][0]["stage"], "text")
+
+    async def test_composed_delivery_weixin_retry_only_clears_recovered_error(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+        prior_error = {"stage": "audio", "message": "earlier error"}
+        result = {"partial_errors": [prior_error]}
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            if len(sent) == 1:
+                raise RuntimeError("upload media to cdn failed: 500")
+
+        async def prepare_retry(path):
+            return "small.jpg"
+
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
+        await manager.delivery.media.send_image_chain_with_retry(
+            "weixin_oc:FriendMessage:test@im.wechat", "large.jpg", media_result=result
+        )
+        self.assertEqual(
+            sent, [[("file_image", "large.jpg")], [("file_image", "small.jpg")]]
+        )
+        self.assertEqual(result["partial_errors"], [prior_error])
+        self.assertTrue(result["image_sent"])
+        self.assertGreater(result["image_sent_at"], 0)
+
+    async def test_weixin_image_send_retries_with_smaller_copy(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        calls = []
+
+        async def send_image(uid, img_path, event=None, media_result=None):
+            calls.append(img_path)
+            if len(calls) == 1:
+                raise RuntimeError("upload media to cdn failed: 500")
+
+        async def prepare_retry(img_path):
+            return "small.jpg"
+
+        manager.delivery.media.send_image_chain = send_image
+        manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
+
+        await manager.delivery.media.send_image_chain_with_retry(
+            "weixin_oc:FriendMessage:o9test@im.wechat",
+            "large.jpg",
+        )
+
+        self.assertEqual(calls, ["large.jpg", "small.jpg"])
+
+    async def test_optional_weixin_image_failure_keeps_text_success(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+            if (
+                chain.items
+                and isinstance(chain.items[0], tuple)
+                and chain.items[0][0] == "file_image"
+            ):
+                raise RuntimeError("upload media to cdn failed: 500")
+
+        async def prepare_image(uid, img_path):
+            return "prepared.jpg"
+
+        async def prepare_retry(img_path):
+            return "retry.jpg"
+
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.weixin_delivery.prepare_image_for_target = prepare_image
+        manager.weixin_delivery.prepare_weixin_retry_image = prepare_retry
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+
+        ok = await manager.delivery.send(
+            "weixin_oc:FriendMessage:o9test@im.wechat",
+            "content",
+            "large.jpg",
+            event=_Event(),
+            image_optional=True,
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(
+            sent,
+            [
+                ["content"],
+                [("file_image", "retry.jpg")],
+            ],
+        )
+
+    async def test_send_reports_downloaded_remote_image_path(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+        sent = []
+
+        async def download_image(url, filename=None):
+            self.assertEqual(url, "https://example.com/news.png")
+            self.assertEqual(filename, "weibo_8005ce727817.png")
+            return "Temp/weibo_8005ce727817.png"
+
+        async def prepare_image(target, image_path):
+            return image_path
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+
+        manager.delivery_assets.build_news_image_filename = lambda url: (
+            "weibo_8005ce727817.png"
+        )
+        manager.delivery_assets.download_image_to_local = download_image
+        manager.weixin_delivery.prepare_image_for_target = prepare_image
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+
+        media_result = {}
+        ok = await manager.delivery.send(
+            "aiocqhttp:GroupMessage:123",
+            "content",
+            "https://example.com/news.png",
+            media_result=media_result,
+        )
+
+        self.assertTrue(ok)
+        self.assertGreater(media_result["text_sent_at"], 0)
+        self.assertGreaterEqual(
+            media_result["image_sent_at"], media_result["text_sent_at"]
+        )
+        self.assertEqual(
+            {
+                key: value
+                for key, value in media_result.items()
+                if not key.endswith("_sent_at")
+            },
+            {
+                "text_sent": True,
+                "audio_sent": False,
+                "image_sent": True,
+                "video_sent": False,
+                "downloaded_image_path": "Temp/weibo_8005ce727817.png",
+                "image_path": "Temp/weibo_8005ce727817.png",
+            },
+        )
+        self.assertEqual(
+            sent,
+            [
+                ["content"],
+                [("file_image", "Temp/weibo_8005ce727817.png")],
+            ],
+        )
+
+    async def test_daily_life_image_ignores_legacy_models_and_preserves_character_signal(
+        self,
+    ):
+        mod = _load_tasks_module()
+        image_mod = importlib.import_module(f"{CORE_PACKAGE_NAME}.image")
+        calls = []
+
+        class Runtime:
+            def __init__(self):
+                self.media = types.SimpleNamespace(
+                    image=types.SimpleNamespace(generate_image=lambda _prompt: None)
+                )
+
+            async def generate_life_image_asset(
+                self,
+                received_event,
+                prompt,
+                aspect_ratio,
+                *,
+                contains_character=False,
+                preserve_reference_ratio=True,
+                trusted_identity=False,
+                text_model="",
+                edit_model="",
+            ):
+                calls.append(
+                    (
+                        received_event,
+                        prompt,
+                        aspect_ratio,
+                        contains_character,
+                        preserve_reference_ratio,
+                        trusted_identity,
+                        text_model,
+                        edit_model,
+                    )
+                )
+                return types.SimpleNamespace(path="daily-life-image.jpg")
+
+        class Context:
+            def get_all_stars(self):
+                plugin = _DailyLifePublicPlugin(Runtime())
+                return [
+                    types.SimpleNamespace(
+                        name="astrbot_plugin_daily_life",
+                        root_dir_name="astrbot_plugin_daily_life",
+                        display_name="daily_life",
+                        activated=True,
+                        star_cls=plugin,
+                    )
+                ]
+
+        service = image_mod.ImageService(
+            Context(),
+            {
+                "image_conf": {
+                    "enable_ai_image": True,
+                    "daily_life_text_image_model": "gpt-image-text",
+                    "daily_life_edit_image_model": "gpt-image-edit",
+                },
+            },
+            lambda *args, **kwargs: asyncio.sleep(0, result=""),
+        )
+        service._check_involves_self = lambda *args, **kwargs: asyncio.sleep(
+            0, result=True
+        )
+        service._agent_extract_visuals = lambda *args, **kwargs: asyncio.sleep(
+            0,
+            result={"environment": "卧室", "subject": "台灯"},
+        )
+        service._assemble_final_prompt = lambda *args, **kwargs: asyncio.sleep(
+            0, result="图片提示词"
+        )
+        event = _Event()
+
+        result = await service.generate_image(
+            "content",
+            mod.ShareType.MOOD,
+            "life",
+            target_umo="aiocqhttp:FriendMessage:100000002",
+            event=event,
+        )
+
+        self.assertEqual(result.path, "daily-life-image.jpg")
+        self.assertEqual(result.description, "图片提示词")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    event,
+                    "图片提示词",
+                    "",
+                    True,
+                    False,
+                    True,
+                    "",
+                    "",
+                )
+            ],
+        )
+        self.assertEqual(event.sent, [])
+
+        service._check_involves_self = lambda *args, **kwargs: asyncio.sleep(
+            0, result=False
+        )
+        result = await service.generate_image(
+            "静物文案",
+            mod.ShareType.MOOD,
+            target_umo="aiocqhttp:FriendMessage:100000002",
+            event=event,
+        )
+        self.assertEqual(result.path, "daily-life-image.jpg")
+        self.assertEqual(calls[-1][3:], (False, False, False, "", ""))
+        self.assertEqual(event.sent, [])
+
+    async def test_chat_share_components_follow_hot_updated_configs(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.news_service.get_hot_news_image_url = lambda source: (
+            "https://example.com/news.png",
+            source,
+        )
+        manager = _new_manager(mod, plugin)
+        components = (
+            manager.share.targets,
+            manager.share.news,
+            manager.share.media,
+            manager.share.sender,
+        )
+        media_args = {
+            "progress_id": "",
+            "content": "今天的心情",
+            "stype": mod.ShareType.MOOD,
+            "life_ctx": "当前生活状态",
+            "target_umo": USER_TARGET_1,
+            "period": mod.TimePeriod.NIGHT,
+        }
+        self.assertEqual(
+            await manager.share.media.generate_media(**media_args),
+            (None, None, None, None, ""),
+        )
+        self.assertEqual(manager.share.resolve_execute_share_targets(), [])
+        self.assertEqual(
+            await manager.share.news.hot_news_image_url(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.NEWS,
+                news_data=([{"title": "新闻"}], "weibo"),
+            ),
+            "https://example.com/news.png",
+        )
+
+        manager.update_configs(
+            basic={"share_type": "知识"},
+            receiver={"users": [USER_TARGET_1], "groups": []},
+            image={
+                "enable_ai_image": True,
+                "image_enabled_types": ["心情"],
+                "attach_hot_news_image": False,
+            },
+        )
+        self.assertEqual(manager.share.resolve_execute_share_targets(), [USER_TARGET_1])
+        self.assertEqual(
+            manager.share.targets.share_type_config(USER_TARGET_1, False, {}, {}),
+            "知识",
+        )
+        self.assertIsNone(
+            await manager.share.news.hot_news_image_url(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.NEWS,
+                news_data=([{"title": "新闻"}], "weibo"),
+            )
+        )
+        media = await manager.share.media.generate_media(**media_args)
+        self.assertEqual(media[0], "generated.png")
+        self.assertEqual(len(plugin.image_service.generated), 1)
+        self.assertEqual(
+            components,
+            (
+                manager.share.targets,
+                manager.share.news,
+                manager.share.media,
+                manager.share.sender,
             ),
         )
 
-        self.assertEqual(invalidations, [("news", target)])
-
-    async def test_load_execute_share_news_does_not_publish_snapshot_before_send(self):
+    async def test_helper_context_hot_update_keeps_history_target_scoped(self):
         mod = _load_tasks_module()
         plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        queries = []
+
+        async def recent_history(target_id, limit=3):
+            queries.append((target_id, limit))
+            return [{"content": f"{target_id}原文{index}"} for index in range(limit)]
+
+        plugin.db.get_recent_history_by_target = recent_history
+        context = manager.executor_helpers.context
+        manager.update_configs(context={"reference_history_count": 1})
+        result = await context.prepare_content_context(
+            target_umo=USER_TARGET_1,
+            share_type=mod.ShareType.MOOD,
+            life_ctx="当前生活",
+            is_group=False,
+        )
+        self.assertEqual(result["recent_post_contents"], [f"{USER_TARGET_1}原文0"])
+        self.assertNotIn("recent_dynamics", result)
+
+        manager.update_configs(context={"reference_history_count": 0})
+        self.assertEqual(await context.get_recent_post_contents(USER_TARGET_1), [])
+        manager.update_configs(context={"reference_history_count": 2})
+        self.assertEqual(
+            await context.get_recent_post_contents(GROUP_TARGET_1),
+            [f"{GROUP_TARGET_1}原文0", f"{GROUP_TARGET_1}原文1"],
+        )
+        self.assertEqual(queries, [(USER_TARGET_1, 1), (GROUP_TARGET_1, 2)])
+        self.assertIs(manager.executor_helpers.context, context)
+
+    async def test_helper_locks_preserve_target_isolation(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        locks = manager.executor_helpers.locks
+        user_lock = locks.get_command_share_lock(USER_TARGET_1)
+        group_lock = locks.get_command_share_lock(GROUP_TARGET_1)
+        self.assertIs(user_lock, plugin.get_share_lock(USER_TARGET_1))
+        self.assertIsNot(user_lock, group_lock)
+        self.assertIs(locks.get_command_share_lock(global_scope=True), plugin._lock)
+        async with user_lock:
+            self.assertTrue(locks.is_command_share_busy(USER_TARGET_1))
+            self.assertFalse(locks.is_command_share_busy(GROUP_TARGET_1))
+        self.assertFalse(locks.is_command_share_busy(USER_TARGET_1))
+        locks.release_command_share_lock(USER_TARGET_1)
+        self.assertIsNot(locks.get_command_share_lock(USER_TARGET_1), user_lock)
+        self.assertIs(locks.get_command_share_lock(GROUP_TARGET_1), group_lock)
+
+    async def test_composed_chat_share_resumes_original_media_once(self):
+        mod = _load_tasks_module()
+        from daily_share_tasks_testpkg.core.integrations.mediajob import (
+            ShareMediaPending,
+            current_share_job,
+        )
+        from daily_share_tasks_testpkg.core.tasks.continuation import (
+            ShareContinuationService,
+        )
+
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        plugin.task_manager = manager
+        plugin.runtime_service = types.SimpleNamespace(
+            is_share_busy=lambda target: False,
+            get_share_lock=plugin.get_share_lock,
+        )
+        continuations = ShareContinuationService(plugin)
+        plugin.share_continuations = continuations
+        submitted = []
+        sent = []
+
+        async def send_chain(uid, chain, event=None):
+            sent.append((uid, list(chain.items), event))
+
+        manager.delivery.chains.send_message_chain = send_chain
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = str(Path(temp_dir) / "original.png")
+            Path(image_path).touch()
+
+            async def generate_image(*args, **kwargs):
+                job = current_share_job.get()
+                if job.get("image_path"):
+                    return job["image_path"]
+                submitted.append((job["id"], kwargs["target_umo"]))
+                job["pending_media"] = "image"
+                raise ShareMediaPending()
+
+            plugin.image_service.generate_image = generate_image
+            plugin.daily_life_bridge = types.SimpleNamespace(
+                get_image_task=lambda task_id: asyncio.sleep(
+                    0, result={"status": "ready", "path": image_path}
+                )
+            )
+            manager.update_configs(
+                image={
+                    "enable_ai_image": True,
+                    "image_enabled_types": ["心情"],
+                    "separate_send": True,
+                }
+            )
+            result = await manager.share.send_prepared_chat_share(
+                uid=USER_TARGET_1,
+                stype=mod.ShareType.MOOD,
+                content="保留原来的这句话",
+                news_data=None,
+                life_ctx="原生活快照",
+                period=mod.TimePeriod.NIGHT,
+                progress_id="",
+                history_source="command",
+                event=_Event(unified_msg_origin=USER_TARGET_1),
+            )
+
+            self.assertFalse(result)
+            self.assertEqual(sent, [])
+            self.assertEqual(plugin.db.history, [])
+            self.assertIsNone(current_share_job.get())
+            row = next(iter(plugin.db.state["share_media_continuations"].values()))
+            self.assertEqual(row["status"], "pending")
+            self.assertEqual(row["params"]["uid"], USER_TARGET_1)
+            self.assertNotIn("event", row["params"])
+
+            await continuations.recover_once()
+            await continuations.recover_once()
+
+            self.assertEqual(len(submitted), 1)
+            self.assertEqual(
+                sent,
+                [
+                    (USER_TARGET_1, ["保留原来的这句话"], None),
+                    (USER_TARGET_1, [("file_image", image_path)], None),
+                ],
+            )
+            self.assertEqual(len(plugin.db.history), 1)
+            self.assertTrue(plugin.db.history[0][1]["success"])
+            row = next(iter(plugin.db.state["share_media_continuations"].values()))
+            self.assertEqual(row["status"], "completed")
+            self.assertEqual(plugin.content_service.calls, [])
+
+    async def test_execute_share_generates_visual_media_before_audio(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {
+            "users": ["aiocqhttp:FriendMessage:100000002"],
+            "groups": [],
+        }
+        plugin.image_conf = {
+            "enable_ai_image": True,
+            "enable_ai_video": False,
+            "image_enabled_types": ["心情"],
+        }
+        plugin.tts_conf = {"enable_tts": True, "tts_enabled_types": ["心情"]}
+        order = []
+
+        async def text_to_speech(*args, **kwargs):
+            order.append("audio")
+            return "audio.wav"
+
+        async def generate_image(*args, **kwargs):
+            order.append("image")
+            return "image.png"
+
+        plugin.ctx_service.text_to_speech = text_to_speech
+        plugin.image_service.generate_image = generate_image
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+
+        await manager.share.execute_share(
+            force_type=mod.ShareType.MOOD,
+            specific_target="aiocqhttp:FriendMessage:100000002",
+        )
+
+        self.assertEqual(order, ["image", "audio"])
+
+    async def test_execute_share_sends_audio_then_video_without_image_when_video_exists(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.receiver_conf = {
+            "users": ["aiocqhttp:FriendMessage:100000002"],
+            "groups": [],
+        }
+        plugin.image_conf = {
+            "enable_ai_image": True,
+            "enable_ai_video": True,
+            "image_enabled_types": ["心情"],
+            "video_enabled_types": ["心情"],
+        }
+        plugin.tts_conf = {"enable_tts": True, "tts_enabled_types": ["心情"]}
+        order = []
+        sent = []
+
+        async def generate_image(*args, **kwargs):
+            order.append("image")
+            return "image.png"
+
+        async def generate_video_from_image(*args, **kwargs):
+            order.append("video")
+            return "video.mp4"
+
+        async def text_to_speech(*args, **kwargs):
+            order.append("audio")
+            return "audio.wav"
+
+        async def send_chain(uid, chain, event=None):
+            sent.append(list(chain.items))
+
+        plugin.image_service.generate_image = generate_image
+        plugin.image_service.generate_video_from_image = generate_video_from_image
+        plugin.ctx_service.text_to_speech = text_to_speech
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.weixin_delivery.prepare_image_for_target = lambda _uid, path: (
+            asyncio.sleep(0, result=path)
+        )
+        manager.delivery.random_sleep = lambda: asyncio.sleep(0)
+        manager.delivery.chains.send_message_chain = send_chain
+
+        await manager.share.execute_share(
+            force_type=mod.ShareType.MOOD,
+            specific_target="aiocqhttp:FriendMessage:100000002",
+            event=_Event(unified_msg_origin="aiocqhttp:FriendMessage:100000002"),
+        )
+
+        self.assertEqual(order, ["image", "video", "audio"])
+        self.assertEqual(len(sent), 3)
+        self.assertEqual(sent[0], ["content"])
+        self.assertEqual(getattr(sent[1][0], "file", None), "audio.wav")
+        self.assertEqual(
+            getattr(sent[2][0], "source", None), ("file_video", "video.mp4")
+        )
+        self.assertFalse(any(("file_image", "image.png") in chain for chain in sent))
+
+    async def test_async_daily_share_resolves_auto_before_requested_video(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.image_conf = {"enable_ai_image": True, "enable_ai_video": False}
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        sent = []
+
+        async def send(
+            target,
+            content,
+            image_path=None,
+            audio_path=None,
+            video_url=None,
+            event=None,
+            media_result=None,
+        ):
+            sent.append(
+                {
+                    "target": target,
+                    "content": content,
+                    "image_path": image_path,
+                    "audio_path": audio_path,
+                    "video_url": video_url,
+                }
+            )
+            if media_result is not None:
+                media_result["image_sent"] = bool(image_path)
+                if image_path:
+                    media_result["image_path"] = image_path
+            return True
+
+        async def prepare_image_for_target(target, image_path):
+            return image_path
+
+        manager.delivery.send = send
+        manager.weixin_delivery.prepare_image_for_target = prepare_image_for_target
+        event = _Event()
+
+        await manager.command_share.async_daily_share_task(
+            event,
+            share_type="\u81ea\u52a8",
+            source=None,
+            get_image=True,
+            need_image=False,
+            need_video=True,
+            need_voice=False,
+            to_qzone=False,
+        )
+
+        self.assertEqual(event.sent, [])
+        self.assertEqual(
+            plugin.content_service.calls[0][0][0], mod.ShareType.RECOMMENDATION
+        )
+        self.assertEqual(
+            plugin.image_service.generated[0]["share_type"],
+            mod.ShareType.RECOMMENDATION,
+        )
+        self.assertEqual(sent[0]["image_path"], "generated.png")
+        self.assertEqual(len(plugin.db.history), 1)
+        history_args, history_kwargs = plugin.db.history[0]
+        self.assertEqual(history_kwargs["target_id"], event.unified_msg_origin)
+        self.assertEqual(
+            history_kwargs["share_type"], mod.ShareType.RECOMMENDATION.value
+        )
+        self.assertTrue(history_kwargs["success"])
+        self.assertEqual(history_kwargs["media_type"], "image")
+        self.assertEqual(history_kwargs["media_path"], "generated.png")
+
+    async def test_async_daily_share_history_uses_downloaded_news_image_path(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.image_conf = {"attach_hot_news_image": True}
 
         class NewsService(_NewsService):
-            def __init__(self):
-                self.calls = []
-
-            def select_news_source(self, excluded_source=None):
-                return "yicai"
-
             async def get_hot_news(self, source=None, limit=None, allow_fallback=True):
-                self.calls.append((source, limit, allow_fallback))
-                return (
-                    [
-                        {"title": f"新闻{i}", "url": f"https://example.com/{i}"}
-                        for i in range(1, 21)
-                    ],
-                    source,
-                )
+                return (["news"], "weibo")
+
+            def get_hot_news_image_url(self, source):
+                return "https://example.com/news.png", None
 
         plugin.news_service = NewsService()
         manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
 
-        loaded, news_data = await manager.share.news.load_news(
-            uid="aiocqhtthedu�nager.snapshot_storeemcanagi3Thnews_tfn excluded_source=Nonppn)
-   tle": f"新闻{i}/news_sllow_fl(invalidcn)
-         uid="aiocqhtthedu�news_se= "aiocqhttp:Gfor i in range(1, 21)
-           
-        plugin = _Plugin()
-    n range(1, 21)
-0ource=Nonpr.snapshotnsSer manager.snapshot� for i in r�t man
-       ed_news_link_keepssample.com/{i}"}ync def get_hot_ni�an
-       ednfple.n = _Plugin(14")
-        douyin = await manager.snapshot_store.get_cached_news_link(
-      ep=e.geter.snce=Nonhort_url(selfls = []
-
-            def select_news_source(self, excludt manahot_store.get_cached_news_link(
-      ert_u, soget_cached_news_link(target, index="1")
-             rrce=Nonppn)
-   tle"eibo",
-        )
-        followup = await �= weibo)
-
-    async def ��t_get_cached_news  self.a sc�-{��           []
-
-      =9�news_lEgr.snws_lEgr.snws_lEganavailable    s                 ],
-                    so_manager(mod, p= []"�{��urceh�r(mod, plsnapshotnsSeple.com/zhihu/2"},
-      _�c\              ],
-                    so_manager(mod, p= []"�{��urceh�r(mod, plsnapshotnsSeplyt�c\             0e_()
-        invalidatiog
-     ni3Thnews_tfn et        iksnapshotnsSer manplugin.newoad_ne manager.snapshot� for i in r�t man
-       ed_news_link_keepssample.com/{i}"}ync desut refresh remote n�b�tore.news_snapsho"ws_snapsho"ws_snapshpB�  _�cawait manager.share.news.load_news(
-    psho"ws_snapshpBt manager.snapshot_store.commit_sent_news_snapshot(
+        async def send(
             target,
-            snapshot_data=manager.snaps{jsertIn("nd}             source,
-   �/�D6kr.�news.l:yu�dews_snabqual(
-__(self):
-           (
-  et_cachekr.�news.l:yu�dewul(se def get_hot_ni�an
-       ednfple.n = _Plugp      manager o\     plugie_key": "weibo",ka��闻{pews(
-            uid="aiocqhtthedu�In("nd}                  0e_()                source,
-                )
+            content,
+            image_path=None,
+            audio_path=None,
+            video_url=None,
+            event=None,
+            media_result=None,
+        ):
+            self.assertEqual(image_path, "https://example.com/news.png")
+            if media_result is not None:
+                media_result["image_sent"] = True
+                media_result["downloaded_image_path"] = "Temp/weibo_8005ce727817.png"
+                media_result["image_path"] = "Temp/weibo_8005ce727817.png"
+            return True
 
-        plugin.news_segin = _Plugine_()def      )
+        manager.delivery.send = send
+        event = _Event()
 
-        0hot_dr                        "url": "httself.as     iksnapshotnsSer mar_ws_snapsce(self, excludt manarl":w_manager(mod, plugin)
+        await manager.command_share.async_daily_share_task(
+            event,
+            share_type="\u65b0\u95fb",
+            source="weibo",
+            get_image=True,
+            need_image=False,
+            need_video=False,
+            need_voice=True,
+            to_qzone=False,
+        )
 
-        ok = await manager.snapshot_store.commit_sent_news_snapshot(
-            "aiocqhttp:GroupMessage:123",
-            snapshot_data=manager.snapshot_store.news_snapshot_payload(
-                [{"title": "新闻1", "url": "https    rollowup = await �= weibop = await �= we           )
+        self.assertEqual(len(plugin.db.history), 1)
+        _history_args, history_kwargs = plugin.db.history[0]
+        self.assertTrue(history_kwargs["success"])
+        self.assertEqual(history_kwargs["media_type"], "image")
+        self.assertEqual(history_kwargs["media_path"], "Temp/weibo_8005ce727817.png")
+        self.assertNotIn("media_url", history_kwargs)
 
-        plugin.newsugine_()def             )
-        ).(ervice(_NewsServi�c          sna"     defanews_snapshot_data=manager.sna{fails(self):
-  de    }
-           )
-     roupMessage:123"
-        awm �-{���ewsugine_()def       elf):cesh remoten23"
-  manager.slf):
-  de plugi       [t_cached_news_link(
-      ert_uohttp:GroupMessage:123"   operation refrink(
-   t          
-                �0er.sows_snapshot_history_uses_      snapshot_d�(    }
-           )
-     roupget_cachf.assertTrue(loadegin = _Plugin()
-        manager = _nefttlugin_      snaervip170",
-�"news_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__i (kind, target)
-           70",
-�"news_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnnews_/{i}"rnnews__ws_/{i}"rnne��tasks_module()
-        plugin�e   ws_/{i}f{i}"rnnews_/u:GroupMessage:123"
+    async def test_async_daily_share_marks_llm_success_with_emoji(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        manager.executor_helpers.period.get_curr_period = lambda: mod.TimePeriod.NIGHT
+        manager.delivery.send = lambda *args, **kwargs: asyncio.sleep(0, result=True)
+        bot = _EmojiBot()
+        event = _Event(bot=bot, message_id=321)
 
-  cessage:123"
+        await manager.command_share.async_daily_share_task(
+            event,
+            share_type="\u5fc3\u60c5",
+            source=None,
+            get_image=True,
+            need_image=False,
+            need_video=False,
+            need_voice=False,
+            to_qzone=False,
+        )
 
-  cessage:123"
+        self.assertEqual([call["emoji_id"] for call in bot.calls], [125, 79])
 
-  cessage:123"
+    async def test_async_daily_share_marks_llm_failure_with_emoji(self):
+        mod = _load_tasks_module()
+        bot = _EmojiBot()
+        event = _Event(bot=bot, message_id=322)
 
-  canager.snapshot_stormodule�      )    ".share.news.loaiourcen0.g.(ernaps3"
+        await _manager(mod).command_share.async_daily_share_task(
+            event,
+            share_type="\u4e0d\u5b58\u5728",
+            source=None,
+            get_image=True,
+            need_image=False,
+            need_video=False,
+            need_voice=False,
+            to_qzone=False,
+        )
 
-  cessage:123"ksIn("http://qdls.to,r�otpr  )         �内news_/{i}"rnnews_  snapshot_data=manager.t thedu�In("nd}     _key": "�./{i}"rnnews__ws_/{i}"rnne_manarl":w_manager(mod, plge_u         target,
-ssage0bn ras�_=(
-            t  "url":        as�_=(
-            t  "url":    tem_for_followup(self):
- %sf):
-        mod = _load_tasks_e   sour�rews_/{i}"rnnewsnews.loaiourcenur�re[
-        modddddddddddddddddmanarl":w_manager(mod, plge_u         target,
-ssage0bn ras�_=(
-    aAhare.news.loaiourcen0.g.(ernaps3"
+        self.assertEqual([call["emoji_id"] for call in bot.calls], [125, 106])
+        self.assertEqual(
+            event.sent,
+            [
+                "不支持的分享类型：不存在。支持：自动、问候、新闻、心情、知识、"
+                "推荐、60 秒新闻、AI 资讯。"
+            ],
+        )
 
-     pe)data[    aAhare.news.loaiourcen0.gds3"
+    async def test_briefing_wrapper_schedules_random_delay(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.extra_shares_conf = {
+            "briefing_schedule_mode": "cron",
+            "briefing_cron_random_delay": 5,
+        }
+        manager = _new_manager(mod, plugin)
+        called = False
 
-  c_�)  "url": "httself     ("http://qdls.t�    news.�n__/u:Gro",
-            ne", "url": "https    rollowup = await �= weibop = await �= we           )
+        async def execute_briefing_share(*args, **kwargs):
+            nonlocal called
+            called = True
 
-        plug
+        manager.briefing.execute_briefing_share = execute_briefing_share
+        old_randint = mod.random.randint
+        mod.random.randint = lambda start, end: 120
+        try:
+            await manager.schedule.triggers._task_wrapper_briefing()
+        finally:
+            mod.random.randint = old_randint
+
+        self.assertFalse(called)
+        self.assertEqual(len(plugin.scheduler.jobs), 1)
+        job = plugin.scheduler.jobs[0]
+        self.assertEqual(job["trigger"], "date")
+        self.assertEqual(job["kwargs"]["id"], "delayed_briefing_share")
+        self.assertIn("run_date", job["kwargs"])
+        self.assertGreater(
+            plugin.db.state["briefing"]["pending_delay_job"]["target_time"],
+            datetime.now().timestamp(),
+        )
+
+    async def test_execute_briefing_share_returns_false_without_images(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+
+        result = await manager.briefing.execute_briefing_share()
+
+        self.assertFalse(result)
+
+    async def test_briefing_random_period_ignores_random_delay(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.extra_shares_conf = {
+            "briefing_schedule_mode": "random_period",
+            "briefing_cron_random_delay": 5,
+        }
+        manager = _new_manager(mod, plugin)
+        called = False
+
+        async def execute_briefing_share(*args, **kwargs):
+            nonlocal called
+            called = True
+
+        manager.briefing.execute_briefing_share = execute_briefing_share
+        old_randint = mod.random.randint
+        mod.random.randint = lambda start, end: 120
+        try:
+            await manager.schedule.triggers._task_wrapper_briefing()
+        finally:
+            mod.random.randint = old_randint
+
+        await asyncio.wait_for(asyncio.gather(*plugin._bg_tasks), timeout=1)
+        self.assertTrue(called)
+        self.assertEqual(plugin.scheduler.jobs, [])
+        self.assertIsNone(plugin.db.state["briefing"]["pending_delay_job"])
+
+    async def test_scheduled_qzone_wrapper_returns_before_background_task_finishes(
+        self,
+    ):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def execute_qzone_share(*args, **kwargs):
+            started.set()
+            await release.wait()
+
+        manager.qzone_share.execute_qzone_share = execute_qzone_share
+
+        await manager.schedule.triggers._execute_delayed_qzone_task()
+
+        await asyncio.wait_for(started.wait(), timeout=1)
+        self.assertEqual(plugin.db.state["qzone"]["pending_delay_job"], None)
+        self.assertTrue(plugin._bg_tasks)
+        self.assertTrue(plugin._lock.locked())
+
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*plugin._bg_tasks), timeout=1)
+        self.assertFalse(plugin._lock.locked())
+
+    async def test_overlapping_briefing_trigger_is_skipped_without_queue(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        started = asyncio.Event()
+        release = asyncio.Event()
+        call_count = 0
+
+        async def execute_briefing_share(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            started.set()
+            await release.wait()
+
+        manager.briefing.execute_briefing_share = execute_briefing_share
+
+        await manager.schedule.triggers._execute_delayed_briefing_task()
+        await asyncio.wait_for(started.wait(), timeout=1)
+        await manager.schedule.triggers._execute_delayed_briefing_task()
+
+        self.assertEqual(call_count, 1)
+        self.assertTrue(manager.state.briefing_share_lock.locked())
+        self.assertEqual(len(plugin._bg_tasks), 1)
+        self.assertIsNone(plugin.db.state["briefing"]["pending_delay_job"])
+
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*plugin._bg_tasks), timeout=1)
+        self.assertFalse(manager.state.briefing_share_lock.locked())
+
+    async def test_custom_target_cron_uses_global_random_delay(self):
+        mod = _load_tasks_module()
+        delay_mod = sys.modules[f"{TASKS_MODULE_NAME}.scheduler.delay"]
+        plugin = _Plugin()
+        plugin.basic_conf = {"cron_random_delay": 30}
+        plugin.receiver_conf = {
+            "groups": [f"{GROUP_TARGET_1}:08:30:心情"],
+            "users": [],
+        }
+        manager = _new_manager(mod, plugin)
+        called = asyncio.Event()
+
+        async def execute_share(*args, **kwargs):
+            called.set()
+
+        manager.share.execute_share = execute_share
+        manager.schedule.setup_custom_target_crons()
+
+        custom_job = next(
+            job
+            for job in plugin.scheduler.jobs
+            if job["kwargs"].get("id") == f"custom_share_{GROUP_TARGET_1}"
+        )
+        old_randint = delay_mod.random_module.randint
+        delay_mod.random_module.randint = lambda start, end: 120
+        try:
+            await custom_job["func"]()
+        finally:
+            delay_mod.random_module.randint = old_randint
+
+        job_ids = {job["kwargs"].get("id") for job in plugin.scheduler.jobs}
+        self.assertFalse(called.is_set())
+        self.assertIn(f"delayed_custom_share_{GROUP_TARGET_1}", job_ids)
+        self.assertGreater(
+            plugin.db.state[f"target_{GROUP_TARGET_1}"]["pending_delay_job"][
+                "target_time"
+            ],
+            datetime.now().timestamp(),
+        )
+
+    async def test_custom_target_cron_without_random_delay_runs_immediately(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.basic_conf = {"cron_random_delay": 0}
+        plugin.receiver_conf = {
+            "groups": [f"{GROUP_TARGET_1}:08:30:心情"],
+            "users": [],
+        }
+        manager = _new_manager(mod, plugin)
+        called = asyncio.Event()
+
+        async def execute_share(*args, **kwargs):
+            called.set()
+
+        manager.share.execute_share = execute_share
+        manager.schedule.setup_custom_target_crons()
+
+        custom_job = next(
+            job
+            for job in plugin.scheduler.jobs
+            if job["kwargs"].get("id") == f"custom_share_{GROUP_TARGET_1}"
+        )
+        await custom_job["func"]()
+        await asyncio.wait_for(called.wait(), timeout=1)
+
+        job_ids = {job["kwargs"].get("id") for job in plugin.scheduler.jobs}
+        self.assertNotIn(f"delayed_custom_share_{GROUP_TARGET_1}", job_ids)
+        self.assertIsNone(
+            plugin.db.state[f"target_{GROUP_TARGET_1}"]["pending_delay_job"]
+        )
+
+    async def test_llm_smart_schedule_registers_valid_today_jobs(self):
+        mod = _load_tasks_module()
+        smart_mod = sys.modules[f"{TASKS_MODULE_NAME}.scheduler.smart"]
+        plugin = _Plugin()
+        plugin.basic_conf = {
+            "share_type": "自动",
+            "smart_schedule_max_count": 2,
+            "smart_schedule_quiet_hours": ["23:30-07:30"],
+            "smart_schedule_prompt": "早上轻一点",
+        }
+        manager = _new_manager(mod, plugin)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 6, 14, 8, 0, 0)
+
+        captured_llm = {}
+
+        async def llm(**kwargs):
+            captured_llm.update(kwargs)
+            return (
+                '[{"run_at":"2026-06-14 08:30",'
+                '"share_type":"问候","reason":"早上适合轻量问候"}]'
+            )
+
+        old_datetime = smart_mod.datetime
+        old_randrange = smart_mod.random.randrange
+        plugin.call_llm = llm
+        smart_mod.datetime = FixedDateTime
+        smart_mod.random.randrange = lambda start, stop=None: 23
+        try:
+            await manager.schedule.smart._schedule_daily_smart_jobs()
+        finally:
+            smart_mod.datetime = old_datetime
+            smart_mod.random.randrange = old_randrange
+
+        self.assertEqual(len(plugin.scheduler.jobs), 1)
+        job = plugin.scheduler.jobs[0]
+        self.assertEqual(job["trigger"], "date")
+        self.assertEqual(job["kwargs"]["id"], "smart_share_0")
+        self.assertEqual(
+            job["kwargs"]["run_date"].strftime("%Y-%m-%d %H:%M"), "2026-06-14 08:30"
+        )
+        self.assertEqual(job["kwargs"]["run_date"].strftime("%S"), "23")
+        self.assertNotIn("08:30", job["kwargs"]["name"])
+        self.assertIn("问候", job["kwargs"]["name"])
+        schedule = plugin.db.state["global"]["smart_schedule"]
+        self.assertEqual(schedule["source"], "llm")
+        self.assertEqual(schedule["jobs"][0]["share_type"], "问候")
+        self.assertTrue(schedule["jobs"][0]["run_at"].endswith(":23"))
+        self.assertIn("YYYY-MM-DD HH:MM:SS", captured_llm["prompt"])
+        self.assertIn("05-55", captured_llm["prompt"])
+        self.assertIn("勿扰时间", captured_llm["prompt"])
+        self.assertIn("避开勿扰时间", captured_llm["system_prompt"])
+
+    async def test_llm_smart_schedule_records_empty_plan_without_fallback(self):
+        mod = _load_tasks_module()
+        smart_mod = sys.modules[f"{TASKS_MODULE_NAME}.scheduler.smart"]
+        plugin = _Plugin()
+        plugin.qzone_conf = {
+            "qzone_share_type": "心情",
+            "qzone_fixed_times": ["20:00"],
+            "qzone_smart_schedule_max_count": 1,
+            "qzone_smart_schedule_quiet_hours": ["23:30-07:30"],
+        }
+        manager = _new_manager(mod, plugin)
+
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 6, 14, 8, 0, 0)
+
+        async def llm(**kwargs):
+            return "[]"
+
+        old_datetime = smart_mod.datetime
+        plugin.call_llm = llm
+        smart_mod.datetime = FixedDateTime
+        try:
+            await manager.schedule.smart._schedule_daily_qzone_smart_jobs()
+        finally:
+            smart_mod.datetime = old_datetime
+
+        self.assertEqual(len(plugin.scheduler.jobs), 0)
+        schedule = plugin.db.state["qzone"]["smart_schedule"]
+        self.assertEqual(schedule["source"], "none")
+        self.assertEqual(schedule["jobs"], [])
+        self.assertIn("未返回可用计划", schedule["last_error"])
+
+    async def test_recover_pending_briefing_delay_job(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        target_time = datetime.now() + timedelta(minutes=3)
+        plugin.db.state["briefing"] = {
+            "pending_delay_job": {"target_time": target_time.timestamp()}
+        }
+        manager = _new_manager(mod, plugin)
+
+        await manager.schedule.recovery._recover_pending_jobs()
+
+        self.assertEqual(len(plugin.scheduler.jobs), 1)
+        job = plugin.scheduler.jobs[0]
+        self.assertEqual(job["trigger"], "date")
+        self.assertEqual(job["kwargs"]["id"], "resume_briefing_share")
+        self.assertEqual(
+            job["kwargs"]["run_date"].replace(microsecond=0),
+            target_time.replace(microsecond=0),
+        )
+
+    async def test_stale_random_schedule_build_cannot_register_jobs(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.basic_conf["random_periods"] = ["08:00-10:00"]
+        manager = _new_manager(mod, plugin)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def blocked_state(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return {}
+
+        plugin.db.get_share_state = blocked_state
+        generation = manager.schedule._build_generation
+        task = asyncio.create_task(
+            manager.schedule.random._schedule_daily_random_jobs(generation=generation)
+        )
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        manager.schedule.invalidate_builds()
+        release.set()
+        await task
+
+        self.assertEqual(plugin.scheduler.jobs, [])
+        self.assertNotIn("global", plugin.db.state)
+
+    async def test_random_period_rejects_cross_midnight_range(self):
+        mod = _load_tasks_module()
+        manager = _new_manager(mod, _Plugin())
+
+        with self.assertRaisesRegex(ValueError, "随机时段不支持跨天"):
+            manager.schedule.random._get_random_run_time(datetime.now(), "23:00-01:00")
+
+    async def test_stale_smart_schedule_build_cannot_store_or_register_jobs(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        plugin.basic_conf.update(
+            {
+                "share_type": "自动",
+                "smart_schedule_max_count": 1,
+                "smart_schedule_quiet_hours": [],
+            }
+        )
+        manager = _new_manager(mod, plugin)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def blocked_llm(**kwargs):
+            entered.set()
+            await release.wait()
+            tomorrow = datetime.now() + timedelta(days=1)
+            return (
+                '[{"run_at":"'
+                + tomorrow.strftime("%Y-%m-%d %H:%M:%S")
+                + '","share_type":"问候"}]'
+            )
+
+        plugin.call_llm = blocked_llm
+        generation = manager.schedule._build_generation
+        task = asyncio.create_task(
+            manager.schedule.smart._schedule_daily_smart_jobs(generation=generation)
+        )
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        manager.schedule.invalidate_builds()
+        release.set()
+        await task
+
+        self.assertEqual(plugin.scheduler.jobs, [])
+        self.assertNotIn("global", plugin.db.state)
+
+    async def test_stale_recovery_build_cannot_restore_pending_job(self):
+        mod = _load_tasks_module()
+        plugin = _Plugin()
+        manager = _new_manager(mod, plugin)
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        target_time = datetime.now() + timedelta(minutes=3)
+
+        async def blocked_state(key, default=None):
+            entered.set()
+            await release.wait()
+            if key == "global":
+                return {"pending_delay_job": {"target_time": target_time.timestamp()}}
+            return default if default is not None else {}
+
+        plugin.db.get_share_state = blocked_state
+        generation = manager.schedule._build_generation
+        task = asyncio.create_task(
+            manager.schedule.recovery._recover_pending_jobs(generation=generation)
+        )
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        manager.schedule.invalidate_builds()
+        release.set()
+        await task
+
+        self.assertEqual(plugin.scheduler.jobs, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
