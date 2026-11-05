@@ -36,7 +36,7 @@
 [![Yousa Ling](https://count.getloli.com/get/@DailyShare?theme=yousa-ling)](https://github.com/siciyuanweilai/astrbot_plugin_daily_share)
 
 > [!TIP]
-> **v1.3.0 版本更新**：自评按独立意愿和新增表达价值判断，续接分享承接最新对话并沿用自然语气与分段；优化新闻、记忆和上下文缓存，限制后台并发与等待，清理废弃发布链和重复代码。详见 [更新日志](./CHANGELOG.md) 。
+> **v1.3.0 版本更新**：自评按独立意愿和新增表达价值判断，续接分享承接最新对话并沿用自然语气与分段；优化新闻、记忆和上下文缓存，限制后台并发与等待。详见 [更新日志](./CHANGELOG.md) 。
 
 ---
 
